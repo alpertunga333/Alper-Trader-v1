@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -163,59 +164,48 @@ const formatTimestamp = (timestamp: number | string | undefined) => {
     return date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 };
 
-// Function to format numbers consistently
-// Ensures client-side rendering matches server-side for locale-specific formats
-const formatNumber = (value: number | undefined, options?: Intl.NumberFormatOptions) => {
-    const [formattedValue, setFormattedValue] = React.useState<string | null>(null);
-
-    React.useEffect(() => {
-        if (value === undefined || value === null || isNaN(value)) {
-            setFormattedValue('0,00'); // Set default for invalid values
-        } else {
-            const defaultOptions: Intl.NumberFormatOptions = {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 8,
-                ...options, // Merge user options
-            };
-            // Use 'en-US' initially for SSR consistency, then update to 'tr-TR' on client
-            // This avoids hydration mismatch
-            setFormattedValue(value.toLocaleString('tr-TR', defaultOptions));
-        }
-    }, [value, options]); // Rerun when value or options change
-
-    // Return the server-rendered value until client-side formatting is ready
-    // This avoids the initial mismatch but might cause a flicker
-    return formattedValue ?? (typeof value === 'number' ? value.toFixed(options?.minimumFractionDigits ?? 2) : '0.00');
+// Utility function for formatting numbers without hooks
+const formatNumberClientSide = (value: number | undefined, options?: Intl.NumberFormatOptions): string => {
+    if (value === undefined || value === null || isNaN(value)) {
+        return '0,00'; // Default for invalid values
+    }
+    const defaultOptions: Intl.NumberFormatOptions = {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 8,
+        ...options, // Merge user options
+    };
+    return value.toLocaleString('tr-TR', defaultOptions);
 };
 
+
 // Create a hook for consistent number formatting to avoid direct useState calls in render logic
+// This hook handles potential hydration mismatches by delaying client-side formatting.
 const useFormattedNumber = (value: number | undefined, options?: Intl.NumberFormatOptions) => {
     const [formatted, setFormatted] = React.useState<string | null>(null);
 
     React.useEffect(() => {
-        if (value === undefined || value === null || isNaN(value)) {
-            setFormatted('0,00');
-            return;
-        }
+        // This effect runs only on the client after hydration
+        const clientFormatted = formatNumberClientSide(value, options);
+        setFormatted(clientFormatted);
+    }, [value, options]); // Rerun when value or options change
 
-        const defaultOptions: Intl.NumberFormatOptions = {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 8,
-            ...options,
-        };
-        // Format with Turkish locale only on the client side after hydration
-        setFormatted(value.toLocaleString('tr-TR', defaultOptions));
-
-    }, [value, options]);
-
-     // Provide a stable server-rendered value (e.g., using toFixed)
-     // before the client-side effect runs
-     const serverValue = (typeof value === 'number')
+     // Provide a stable server-rendered value (e.g., using toFixed with a dot separator)
+     // This value might briefly show before the client-side effect updates it.
+     const serverValue = (typeof value === 'number' && !isNaN(value))
         ? value.toFixed(options?.minimumFractionDigits ?? 2)
         : '0.00';
 
+    // Return the client-formatted value once available, otherwise the server value
     return formatted ?? serverValue;
 }
+
+// Specific formatter for chart ticks that runs client-side directly
+const formatTickNumber = (value: number | undefined, options?: Intl.NumberFormatOptions): string => {
+    // This function will be called by Recharts on the client side during rendering.
+    // It's safe to use toLocaleString here because it won't cause hydration mismatch
+    // in the context of chart ticks rendered client-side by the library.
+    return formatNumberClientSide(value, options);
+};
 
 
 export default function Dashboard() {
@@ -409,6 +399,9 @@ export default function Dashboard() {
    const TradeHistoryRow = ({ trade }: { trade: typeof tradeHistoryData[0] }) => {
        const formattedPrice = useFormattedNumber(trade.price);
        const formattedAmount = useFormattedNumber(trade.amount, { maximumFractionDigits: 8 });
+       // Calculate total client-side to ensure consistency if needed, or use pre-calculated value
+       const formattedTotal = useFormattedNumber(trade.total);
+
 
        return (
            <TableRow key={trade.id}>
@@ -417,6 +410,8 @@ export default function Dashboard() {
                <TableCell className={trade.type === 'Alış' ? 'text-[hsl(var(--primary))]' : 'text-[hsl(var(--destructive))]'}>{trade.type}</TableCell>
                <TableCell className="text-right">{formattedPrice}</TableCell>
                <TableCell className="text-right">{formattedAmount}</TableCell>
+               {/* Optionally display total */}
+               {/* <TableCell className="text-right">{formattedTotal}</TableCell> */}
                <TableCell className="text-right">{trade.status}</TableCell>
            </TableRow>
        );
@@ -424,10 +419,11 @@ export default function Dashboard() {
 
    // Component for rendering candlestick chart tooltip
    const ChartTooltipContent = ({ active, payload, label }: any) => {
-        const formattedLabel = useFormattedNumber(label, { maximumFractionDigits: 4 }); // Reuse hook for consistency if label is numeric
+        // Use the direct client-side formatter for the tooltip content
+        const formattedLabel = formatNumberClientSide(label, { maximumFractionDigits: 4 });
 
         if (active && payload && payload.length) {
-           const formattedValue = useFormattedNumber(payload[0].value, { maximumFractionDigits: 4 });
+           const formattedValue = formatNumberClientSide(payload[0].value, { maximumFractionDigits: 4 });
            return (
              <div className="custom-tooltip p-2 bg-background border border-border rounded shadow-lg">
                <p className="label text-sm font-bold">{`Zaman: ${formatTimestamp(payload[0].payload.openTime)}`}</p>
@@ -623,7 +619,7 @@ export default function Dashboard() {
                      <LineChart data={candleData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                        <XAxis dataKey="openTime" tickFormatter={formatTimestamp} stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 10 }} interval="preserveStartEnd" minTickGap={50} />
-                       <YAxis stroke="hsl(var(--muted-foreground))" domain={['auto', 'auto']} tick={{ fontSize: 10 }} tickFormatter={(value) => useFormattedNumber(value, { maximumFractionDigits: 4 })} />
+                       <YAxis stroke="hsl(var(--muted-foreground))" domain={['auto', 'auto']} tick={{ fontSize: 10 }} tickFormatter={(value) => formatTickNumber(value, { maximumFractionDigits: 4 })} />
                        <ChartTooltip content={<ChartTooltipContent />} />
                        <Legend />
                        <Line type="monotone" dataKey="close" name="Kapanış" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
@@ -1039,6 +1035,3 @@ export default function Dashboard() {
     </SidebarProvider>
   );
 }
-
-// Note: Removed the local Checkbox component definition as it exists in ui/checkbox.tsx
-// Ensure `import { Checkbox } from '@/components/ui/checkbox';` is present at the top.
