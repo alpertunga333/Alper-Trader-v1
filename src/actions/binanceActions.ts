@@ -9,44 +9,37 @@ interface ActionResult {
     success: boolean;
     balances?: Balance[];
     error?: string;
-    environmentUsed?: 'spot' | 'testnetSpot' | 'futures' | 'testnetFutures'; // Indicate which env was used
 }
 
-type ApiEnvironment = 'spot' | 'futures' | 'testnetSpot' | 'testnetFutures';
-
 /**
- * Server Action to securely fetch account balances for a specified environment.
+ * Server Action to securely fetch account balances for the Spot environment.
  * Retrieves API keys securely from server-side configuration.
  *
  * @param apiKeyHint A non-sensitive hint (e.g., first 4 chars) to identify the key set - **optional**.
  * @param secretKeyHint A non-sensitive hint (e.g., '****') - **optional**.
- * @param isTestnet Flag indicating if the testnet environment should be used.
  * @returns An ActionResult object containing the success status, balances, or an error message.
  */
 export async function fetchAccountBalancesAction(
     apiKeyHint: string, // Use hints instead of actual keys passed from client
-    secretKeyHint: string, // Use hints instead of actual keys passed from client
-    isTestnet: boolean
+    secretKeyHint: string // Use hints instead of actual keys passed from client
 ): Promise<ActionResult> {
-    // Determine the target environment based on the testnet flag
-    // For now, assuming Spot environments. Adapt if Futures are needed.
-    const environment: ApiEnvironment = isTestnet ? 'testnetSpot' : 'spot';
+    const environment = 'spot'; // Always use spot environment
     console.log(`Server Action: Fetching account balances for ${environment} (Hint: ${apiKeyHint}).`);
 
     try {
-        // Securely retrieve keys based on the determined environment
+        // Securely retrieve keys for the spot environment
         const apiKey = await fetchSecureApiKey(environment);
         const secretKey = await fetchSecureSecretKey(environment);
 
         if (!apiKey || !secretKey) {
             console.error(`Server Action Error: Binance API keys not configured securely for environment: ${environment}.`);
-            return { success: false, error: `API anahtarları ${environment} için yapılandırılmamış.`, environmentUsed: environment };
+            return { success: false, error: `API anahtarları ${environment} için yapılandırılmamış.` };
         }
 
-        // Call the Binance service function with securely retrieved keys
-        const balances = await fetchBalancesFromBinance(apiKey, secretKey, isTestnet);
+        // Call the Binance service function with securely retrieved keys, always for spot (isTestnet=false)
+        const balances = await fetchBalancesFromBinance(apiKey, secretKey);
         console.log(`Server Action: Successfully fetched ${balances.length} balances for ${environment}.`);
-        return { success: true, balances, environmentUsed: environment };
+        return { success: true, balances };
 
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Bakiye alınırken bilinmeyen bir hata oluştu.';
@@ -60,6 +53,6 @@ export async function fetchAccountBalancesAction(
         } else if (errorMessage.includes('Network Error') || errorMessage.includes('fetch failed')) {
             userErrorMessage = `Binance API'sine ulaşılamadı. Ağ bağlantınızı kontrol edin (${environment}).`;
         }
-        return { success: false, error: userErrorMessage, environmentUsed: environment };
+        return { success: false, error: userErrorMessage };
     }
 }

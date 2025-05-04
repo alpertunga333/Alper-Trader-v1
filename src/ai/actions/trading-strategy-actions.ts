@@ -17,11 +17,11 @@ import { fetchSecureApiKey, fetchSecureSecretKey } from '@/lib/secure-api'; // P
 
 /**
  * Server Action to perform a backtest on a given strategy.
- * @param params Backtest parameters including strategy details, pair, interval, dates, and balance.
+ * @param params Backtest parameters including strategy details, pair, interval, dates, and balance. Always uses live 'spot' data.
  * @returns Promise resolving to BacktestResult.
  */
 export async function backtestStrategy(params: BacktestParams): Promise<BacktestResult> {
-    console.log(`Server Action: Starting backtest for ${params.strategy.name} on ${params.pair}`);
+    console.log(`Server Action: Starting backtest for ${params.strategy.name} on ${params.pair} (Spot Data)`);
 
     // Validate input using Zod schema before proceeding
     const validation = BacktestParamsSchema.safeParse(params);
@@ -33,11 +33,11 @@ export async function backtestStrategy(params: BacktestParams): Promise<Backtest
         };
     }
 
-    const { strategy, pair, interval, startDate, endDate, initialBalance, isTestnet } = validation.data;
+    const { strategy, pair, interval, startDate, endDate, initialBalance } = validation.data;
 
     // ** Placeholder Backtesting Logic **
     // In a real implementation:
-    // 1. Fetch historical data using getCandlestickData (potentially multiple calls for long ranges).
+    // 1. Fetch historical data using getCandlestickData (potentially multiple calls for long ranges). Always fetch from Spot (isTestnet=false).
     // 2. Simulate the strategy logic against the data.
     // 3. Calculate performance metrics.
 
@@ -57,11 +57,12 @@ export async function backtestStrategy(params: BacktestParams): Promise<Backtest
 
         const estimatedCandles = Math.ceil((end - start) / intervalMs);
         const limit = Math.min(Math.max(estimatedCandles, 100), 1000); // Fetch decent amount, max 1000
-        console.log(`Estimated candles: ${estimatedCandles}, Fetching limit: ${limit} for ${pair} (${interval}) Testnet: ${isTestnet}`);
+        console.log(`Estimated candles: ${estimatedCandles}, Fetching limit: ${limit} for ${pair} (${interval}) from Spot`);
 
         // NOTE: Real backtest needs ALL data. This is likely insufficient.
-        candles = await getCandlestickData(pair, interval, limit, isTestnet);
-        console.log(`Fetched ${candles.length} candles for backtest.`);
+        // Fetch Spot data (isTestnet = false implicitly by service)
+        candles = await getCandlestickData(pair, interval, limit);
+        console.log(`Fetched ${candles.length} candles for backtest from Spot.`);
 
         if (candles.length === 0) {
             throw new Error("No historical data fetched.");
@@ -103,13 +104,14 @@ export async function backtestStrategy(params: BacktestParams): Promise<Backtest
 // ----- Live Strategy Execution Action -----
 
 /**
- * Server Action to initiate live trading for a strategy.
+ * Server Action to initiate live trading for a strategy on the Spot market.
  * **PLACEHOLDER**: This should trigger a robust, persistent background execution mechanism.
- * @param params Parameters including the strategy, pair, interval, and environment info.
+ * @param params Parameters including the strategy, pair, interval, risk management.
  * @returns Promise resolving to RunResult indicating initial status.
  */
 export async function runStrategy(params: RunParams): Promise<RunResult> {
-    console.log(`Server Action: Initiating live strategy run for ${params.strategy.name} on ${params.pair} (${params.environment})`);
+    const environment = 'spot'; // Always run on spot
+    console.log(`Server Action: Initiating live strategy run for ${params.strategy.name} on ${params.pair} (${environment})`);
 
     // Validate input
     const validation = RunParamsSchema.safeParse(params);
@@ -118,19 +120,19 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
         return { status: 'Error', message: `Invalid input: ${validation.error.format()._errors?.join(', ') || 'Validation failed.'}` };
     }
 
-    const { strategy, pair, interval, environment, isTestnet, stopLossPercent, takeProfitPercent } = validation.data;
+    const { strategy, pair, interval, stopLossPercent, takeProfitPercent } = validation.data;
 
     // ** Placeholder Logic **
-    // 1. Securely retrieve API keys for the `environment`.
+    // 1. Securely retrieve API keys for the `spot` environment.
     // 2. Validate keys if not already confirmed.
     // 3. Initiate a background task/job/service to:
-    //    - Monitor market data (getCandlestickData, potentially WebSockets).
+    //    - Monitor market data (getCandlestickData, potentially WebSockets) from Spot.
     //    - Apply strategy logic (using strategy.prompt or defined rules).
-    //    - Place orders securely (placeOrder service action) with risk management (stopLoss, takeProfit).
+    //    - Place orders securely (placeOrder service action) with risk management (stopLoss, takeProfit) on Spot.
     //    - Log everything.
     //    - Handle errors and state management.
 
-    // Example secure key retrieval (replace with actual implementation)
+    // Example secure key retrieval
     try {
         const apiKey = await fetchSecureApiKey(environment);
         const secretKey = await fetchSecureSecretKey(environment);
@@ -139,7 +141,7 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
         }
         // Keys are available here, pass them securely to the background task runner
         console.log(`Server Action (runStrategy): API keys retrieved for ${environment} (placeholder). Starting background process...`);
-        // backgroundTaskRunner.start(strategy, pair, interval, apiKey, secretKey, isTestnet, stopLossPercent, takeProfitPercent);
+        // backgroundTaskRunner.start(strategy, pair, interval, apiKey, secretKey, false, stopLossPercent, takeProfitPercent); // isTestnet is false
 
     } catch (error) {
          const message = error instanceof Error ? error.message : String(error);

@@ -145,17 +145,15 @@ export interface ExchangeInfo {
 
 // --- Configuration ---
 const BINANCE_SPOT_API_URL = 'https://api.binance.com';
-const BINANCE_TESTNET_SPOT_API_URL = 'https://testnet.binance.vision';
-// Add Futures URLs if needed
+// Removed Testnet URL
 
-// Helper function to determine API URL based on testnet flag
-const getApiUrl = (isTestnet: boolean = false) => {
-    // TODO: Add logic for Futures URLs if needed
-    return isTestnet ? BINANCE_TESTNET_SPOT_API_URL : BINANCE_SPOT_API_URL;
+// Helper function to get API URL (always returns Spot URL now)
+const getApiUrl = () => {
+    return BINANCE_SPOT_API_URL;
 }
 
 /**
- * Asynchronously places an order on Binance.
+ * Asynchronously places an order on Binance Spot.
  *
  * **THIS IS A PLACEHOLDER FUNCTION.**
  * Actual implementation requires secure handling of API keys and request signing (HMAC SHA256)
@@ -165,17 +163,15 @@ const getApiUrl = (isTestnet: boolean = false) => {
  * @param orderParams The parameters for the order.
  * @param apiKey The Binance API key. **Should NOT be passed from client in production.**
  * @param secretKey The Binance API secret key. **Should NOT be passed from client in production.**
- * @param isTestnet Flag for testnet environment.
  * @returns A promise that resolves to an OrderResponse object.
  * @throws Error if the API call simulation fails.
  */
 export async function placeOrder(
   orderParams: OrderParams,
   apiKey: string,
-  secretKey: string,
-  isTestnet: boolean = false
+  secretKey: string
 ): Promise<OrderResponse> {
-  console.warn('Placing Order (Placeholder - Not Production Ready):', orderParams, `Testnet: ${isTestnet}`);
+  console.warn('Placing Order on Spot (Placeholder - Not Production Ready):', orderParams);
   // **SECURITY WARNING:** Do not implement actual API call here with keys from client.
   // Use Server Actions or API routes for secure key management and signing.
 
@@ -191,7 +187,7 @@ export async function placeOrder(
 }
 
 /**
- * Asynchronously retrieves account balances from Binance.
+ * Asynchronously retrieves account balances from Binance Spot.
  *
  * **THIS IS A PLACEHOLDER FUNCTION.**
  * Actual implementation requires secure handling of API keys and request signing (HMAC SHA256)
@@ -200,16 +196,14 @@ export async function placeOrder(
  *
  * @param apiKey The Binance API key. **Should NOT be passed from client in production.**
  * @param secretKey The Binance API secret key. **Should NOT be passed from client in production.**
- * @param isTestnet Optional flag for testnet environments. Defaults to false.
  * @returns A promise that resolves to an array of Balance objects.
  * @throws Error if the API call simulation fails (e.g., invalid keys).
  */
 export async function getAccountBalances(
   apiKey: string,
-  secretKey: string,
-  isTestnet: boolean = false
+  secretKey: string
 ): Promise<Balance[]> {
-   console.warn(`Getting Account Balances (Placeholder - Not Production Ready, Testnet: ${isTestnet})`);
+   console.warn(`Getting Account Balances from Spot (Placeholder - Not Production Ready)`);
    // **SECURITY WARNING:** Do not implement actual API call here with keys from client.
    // Endpoint: /api/v3/account (requires signing)
 
@@ -255,7 +249,7 @@ export async function getAccountBalances(
   return [
       { asset: 'BTC', free: generateBalance(1, 0.1), locked: generateLocked(0.05) },
       { asset: 'ETH', free: generateBalance(12, 1), locked: generateLocked(0.5) },
-      { asset: isTestnet ? 'TEST_USDT' : 'USDT', free: generateBalance(5500, 500), locked: generateLocked(100) },
+      { asset: 'USDT', free: generateBalance(5500, 500), locked: generateLocked(100) }, // Always real USDT
       { asset: 'SOL', free: generateBalance(18, 2), locked: "0.00000000" },
       { asset: 'BNB', free: generateBalance(30, 5), locked: generateLocked(0.2) },
       { asset: 'ADA', free: generateBalance(1000, 100), locked: generateLocked(50) },
@@ -264,55 +258,51 @@ export async function getAccountBalances(
 }
 
 /**
- * Validates Binance API keys by attempting to fetch account balances (using the placeholder function).
+ * Validates Binance Spot API keys by attempting to fetch account balances (using the placeholder function).
  * Note: In a real application, this should call a secure server-side endpoint for validation.
  * @param apiKey The API Key.
  * @param secretKey The Secret Key.
- * @param isTestnet Optional flag for testnet environments. Defaults to false.
  * @returns True if the keys are considered valid by the placeholder logic, false otherwise.
  */
 export async function validateApiKey(
     apiKey: string,
-    secretKey: string,
-    isTestnet: boolean = false
+    secretKey: string
 ): Promise<boolean> {
-    console.log(`Validating API Keys (Placeholder, Testnet: ${isTestnet})...`);
+    console.log(`Validating Spot API Keys (Placeholder)...`);
     try {
         // Attempt to get balances using the placeholder function.
         // In a real app, this would trigger a call to a secure backend validation route.
-        await getAccountBalances(apiKey, secretKey, isTestnet);
-        console.log(`API Key validation successful (Placeholder, Testnet: ${isTestnet}).`);
+        await getAccountBalances(apiKey, secretKey);
+        console.log(`Spot API Key validation successful (Placeholder).`);
         return true;
     } catch (error) {
-         console.warn(`API Key validation failed (Placeholder, Testnet: ${isTestnet}):`, error instanceof Error ? error.message : error);
+         console.warn(`Spot API Key validation failed (Placeholder):`, error instanceof Error ? error.message : error);
         return false;
     }
 }
 
 
 /**
- * Asynchronously retrieves candlestick data from Binance using the public API.
+ * Asynchronously retrieves candlestick data from Binance Spot using the public API.
  *
  * @param symbol The trading symbol (e.g., BTCUSDT).
  * @param interval The candlestick interval (e.g., '1m', '5m', '1h', '1d').
  * @param limit The number of candlesticks to retrieve (max 1000).
- * @param isTestnet Optional flag for testnet environments. Defaults to false.
  * @returns A promise that resolves to an array of Candle objects.
  * @throws Error if the API call fails or the symbol is invalid.
  */
 export async function getCandlestickData(
   symbol: string,
   interval: string,
-  limit: number = 100, // Default limit
-  isTestnet: boolean = false
+  limit: number = 100 // Default limit
 ): Promise<Candle[]> {
-  console.log(`Getting Candlestick Data: ${symbol}, ${interval}, Limit: ${limit}, Testnet: ${isTestnet}`);
+  console.log(`Getting Candlestick Data from Spot: ${symbol}, ${interval}, Limit: ${limit}`);
   if (!symbol) {
     console.warn("getCandlestickData called without a symbol.");
     return []; // Return empty array if no symbol is provided
   }
 
-  const apiUrl = getApiUrl(isTestnet);
+  const apiUrl = getApiUrl(); // Always gets Spot URL
   const endpoint = `${apiUrl}/api/v3/klines`;
   const params = new URLSearchParams({
     symbol: symbol.toUpperCase(), // Ensure symbol is uppercase
@@ -375,16 +365,15 @@ export async function getCandlestickData(
 
 
 /**
- * Asynchronously retrieves exchange information, including all symbols, from Binance using the public API.
+ * Asynchronously retrieves exchange information, including all symbols, from Binance Spot using the public API.
  *
- * @param isTestnet Optional flag for testnet environments. Defaults to false.
  * @returns A promise that resolves to an ExchangeInfo object.
  * @throws Error if the API call fails.
  */
-export async function getExchangeInfo(isTestnet: boolean = false): Promise<ExchangeInfo> {
-  console.log(`Getting Exchange Info (Testnet: ${isTestnet})`);
+export async function getExchangeInfo(): Promise<ExchangeInfo> {
+  console.log(`Getting Exchange Info from Spot`);
 
-  const apiUrl = getApiUrl(isTestnet);
+  const apiUrl = getApiUrl(); // Always gets Spot URL
   const endpoint = `${apiUrl}/api/v3/exchangeInfo`;
 
   try {
@@ -424,8 +413,7 @@ export async function getExchangeInfo(isTestnet: boolean = false): Promise<Excha
     };
 
   } catch (error) {
-    console.error(`Error fetching exchange info (Testnet: ${isTestnet}):`, error);
+    console.error(`Error fetching exchange info from Spot:`, error);
     throw new Error(`Failed to get exchange info: ${error instanceof Error ? error.message : error}`);
   }
 }
-```
