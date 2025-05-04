@@ -119,6 +119,29 @@ export interface Candle {
 }
 
 /**
+ * Represents a single trading pair symbol information from Binance.
+ */
+export interface SymbolInfo {
+  symbol: string;
+  status: string; // e.g., TRADING
+  baseAsset: string;
+  quoteAsset: string;
+  isSpotTradingAllowed: boolean;
+  // Add other relevant fields from the API response if needed
+}
+
+/**
+ * Represents the overall exchange information from Binance.
+ */
+export interface ExchangeInfo {
+  timezone: string;
+  serverTime: number;
+  symbols: SymbolInfo[];
+  // Add other relevant fields like rateLimits if needed
+}
+
+
+/**
  * Asynchronously places an order on Binance.
  *
  * **This is a placeholder function.** You need to implement the actual Binance API call.
@@ -229,13 +252,13 @@ export async function getAccountBalances(
 /**
  * Asynchronously retrieves candlestick data from Binance.
  *
- * **This is a placeholder function.** You need to implement the actual Binance API call.
+ * **This is a placeholder function.** Needs implementation for actual API call.
  *
  * @param symbol The trading symbol (e.g., BTCUSDT).
  * @param interval The candlestick interval (e.g., '1m', '5m', '1h', '1d').
  * @param limit The number of candlesticks to retrieve (max 1000).
  * @returns A promise that resolves to an array of Candle objects.
- * @throws Error if the API call fails.
+ * @throws Error if the API call fails or the symbol is invalid.
  */
 export async function getCandlestickData(
   symbol: string,
@@ -243,13 +266,27 @@ export async function getCandlestickData(
   limit: number = 100 // Default limit
 ): Promise<Candle[]> {
   console.log(`Getting Candlestick Data (Placeholder): ${symbol}, ${interval}, Limit: ${limit}`);
-  // TODO: Implement actual Binance API call here.
-  // Example (Conceptual - requires 'binance-api-node'):
+  if (!symbol) {
+    console.warn("getCandlestickData called without a symbol.");
+    return []; // Return empty array if no symbol is provided
+  }
+  // Basic validation for symbol format (optional, API will likely handle errors too)
+  // if (!/^[A-Z0-9]+$/.test(symbol)) {
+  //   throw new Error(`Invalid symbol format: ${symbol}`);
+  // }
+
+  // TODO: Implement actual Binance API call here using a library or fetch.
+  // Endpoint: /api/v3/klines
+  // Parameters: symbol, interval, limit
   /*
   const Binance = require('binance-api-node').default;
-  const client = Binance(); // No API key needed for public data usually
+  const client = Binance(); // Public data doesn't usually need API keys
   try {
       const candles = await client.candles({ symbol, interval, limit });
+      if (!Array.isArray(candles)) {
+           console.error("Unexpected response format from Binance candles API:", candles);
+           throw new Error("Invalid data received from Binance API.");
+      }
       return candles.map(c => ({
           openTime: c.openTime,
           open: parseFloat(c.open),
@@ -259,39 +296,56 @@ export async function getCandlestickData(
           volume: parseFloat(c.volume),
           closeTime: c.closeTime,
           quoteAssetVolume: parseFloat(c.quoteAssetVolume),
-          numberOfTrades: c.trades,
+          numberOfTrades: c.trades, // Ensure 'trades' field exists or handle potential undefined
           takerBuyBaseAssetVolume: parseFloat(c.takerBuyBaseAssetVolume),
           takerBuyQuoteAssetVolume: parseFloat(c.takerBuyQuoteAssetVolume),
           ignore: 0, // Or parse c.ignore if needed
       }));
   } catch (error) {
-      console.error("Binance API Error (getCandlestickData):", error);
-      throw new Error(`Failed to get candlestick data: ${error.message || error}`);
+      // Handle specific errors like "Invalid symbol" differently if needed
+      if (error.code === -1121) { // Example error code for Invalid symbol
+           console.warn(`Binance API Error: Invalid symbol ${symbol}.`);
+           return []; // Return empty for invalid symbol
+      }
+      console.error(`Binance API Error (getCandlestickData for ${symbol}):`, error);
+      throw new Error(`Failed to get candlestick data for ${symbol}: ${error.message || error}`);
   }
   */
 
   // Placeholder response generation:
-  await new Promise(resolve => setTimeout(resolve, 400));
+  await new Promise(resolve => setTimeout(resolve, 400)); // Simulate network delay
+
+  // Simple way to make placeholder data slightly different per symbol
+  const symbolSeed = symbol.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const basePrice = 100 + (symbolSeed % 10000); // Base price based on symbol name
+
   const generatePlaceholderCandles = (num: number): Candle[] => {
     const candles: Candle[] = [];
-    let lastClose = 34000 + Math.random() * 1000;
-    let currentTime = Date.now() - num * 60 * 60 * 1000; // Simulate data for '1h' interval
+    let lastClose = basePrice + Math.random() * (basePrice * 0.1); // Start with some variation
+    // Calculate interval duration in milliseconds (crude approximation)
+    let intervalMs = 60 * 60 * 1000; // Default to 1h
+    if (interval.endsWith('m')) intervalMs = parseInt(interval) * 60 * 1000;
+    else if (interval.endsWith('h')) intervalMs = parseInt(interval) * 60 * 60 * 1000;
+    else if (interval.endsWith('d')) intervalMs = parseInt(interval) * 24 * 60 * 60 * 1000;
+
+    let currentTime = Date.now() - num * intervalMs;
 
     for (let i = 0; i < num; i++) {
       const open = lastClose;
-      const high = open + Math.random() * 100;
-      const low = open - Math.random() * 100;
+      const priceFluctuation = lastClose * 0.02; // Fluctuate by ~2%
+      const high = open + Math.random() * priceFluctuation;
+      const low = open - Math.random() * priceFluctuation;
       const close = low + Math.random() * (high - low);
       const volume = 50 + Math.random() * 100;
       const openTime = currentTime;
-      const closeTime = currentTime + 60 * 60 * 1000 - 1; // 1 hour interval
+      const closeTime = currentTime + intervalMs - 1;
 
       candles.push({
         openTime: openTime,
-        open: parseFloat(open.toFixed(2)),
-        high: parseFloat(high.toFixed(2)),
-        low: parseFloat(low.toFixed(2)),
-        close: parseFloat(close.toFixed(2)),
+        open: parseFloat(open.toFixed(Math.max(2, 8 - Math.floor(Math.log10(basePrice))))), // Dynamic precision
+        high: parseFloat(high.toFixed(Math.max(2, 8 - Math.floor(Math.log10(basePrice))))),
+        low: parseFloat(low.toFixed(Math.max(2, 8 - Math.floor(Math.log10(basePrice))))),
+        close: parseFloat(close.toFixed(Math.max(2, 8 - Math.floor(Math.log10(basePrice))))),
         volume: parseFloat(volume.toFixed(2)),
         closeTime: closeTime,
         quoteAssetVolume: parseFloat((volume * close).toFixed(2)),
@@ -301,10 +355,89 @@ export async function getCandlestickData(
         ignore: 0,
       });
       lastClose = close;
-      currentTime += 60 * 60 * 1000;
+      currentTime += intervalMs;
     }
     return candles;
   };
 
   return generatePlaceholderCandles(limit);
+}
+
+
+/**
+ * Asynchronously retrieves exchange information, including all symbols, from Binance.
+ *
+ * **This is a placeholder function.** Needs implementation for actual API call.
+ *
+ * @returns A promise that resolves to an ExchangeInfo object.
+ * @throws Error if the API call fails.
+ */
+export async function getExchangeInfo(): Promise<ExchangeInfo> {
+  console.log('Getting Exchange Info (Placeholder)');
+  // TODO: Implement actual Binance API call here.
+  // Endpoint: /api/v3/exchangeInfo
+  /*
+  const Binance = require('binance-api-node').default;
+  const client = Binance(); // Public data doesn't usually need API keys
+  try {
+      const info = await client.exchangeInfo();
+      // Basic check to ensure symbols array exists
+      if (!info || !Array.isArray(info.symbols)) {
+         console.error("Unexpected response format from Binance exchangeInfo API:", info);
+         throw new Error("Invalid data received from Binance API for exchange info.");
+      }
+      return {
+          timezone: info.timezone,
+          serverTime: info.serverTime,
+          symbols: info.symbols.map(s => ({
+              symbol: s.symbol,
+              status: s.status,
+              baseAsset: s.baseAsset,
+              quoteAsset: s.quoteAsset,
+              isSpotTradingAllowed: s.isSpotTradingAllowed,
+              // map other needed fields
+          })),
+          // map other needed fields like rateLimits
+      };
+  } catch (error) {
+      console.error("Binance API Error (getExchangeInfo):", error);
+      throw new Error(`Failed to get exchange info: ${error.message || error}`);
+  }
+  */
+
+  // Placeholder response:
+  await new Promise(resolve => setTimeout(resolve, 600)); // Simulate network delay
+  if (Math.random() < 0.02) { // Simulate rare error
+      throw new Error("Simulated API Error: Could not reach Binance servers.");
+  }
+
+  // Generate a list of common placeholder symbols
+  const placeholderSymbols: SymbolInfo[] = [
+    { symbol: 'BTCUSDT', status: 'TRADING', baseAsset: 'BTC', quoteAsset: 'USDT', isSpotTradingAllowed: true },
+    { symbol: 'ETHUSDT', status: 'TRADING', baseAsset: 'ETH', quoteAsset: 'USDT', isSpotTradingAllowed: true },
+    { symbol: 'BNBBTC', status: 'TRADING', baseAsset: 'BNB', quoteAsset: 'BTC', isSpotTradingAllowed: true },
+    { symbol: 'SOLUSDT', status: 'TRADING', baseAsset: 'SOL', quoteAsset: 'USDT', isSpotTradingAllowed: true },
+    { symbol: 'XRPUSDT', status: 'TRADING', baseAsset: 'XRP', quoteAsset: 'USDT', isSpotTradingAllowed: true },
+    { symbol: 'ADAUSDT', status: 'TRADING', baseAsset: 'ADA', quoteAsset: 'USDT', isSpotTradingAllowed: true },
+    { symbol: 'DOGEUSDT', status: 'TRADING', baseAsset: 'DOGE', quoteAsset: 'USDT', isSpotTradingAllowed: true },
+    { symbol: 'LTCBTC', status: 'TRADING', baseAsset: 'LTC', quoteAsset: 'BTC', isSpotTradingAllowed: true },
+    { symbol: 'MATICUSDT', status: 'TRADING', baseAsset: 'MATIC', quoteAsset: 'USDT', isSpotTradingAllowed: true },
+    { symbol: 'DOTUSDT', status: 'TRADING', baseAsset: 'DOT', quoteAsset: 'USDT', isSpotTradingAllowed: true },
+    { symbol: 'LINKUSDT', status: 'TRADING', baseAsset: 'LINK', quoteAsset: 'USDT', isSpotTradingAllowed: true },
+    { symbol: 'SHIBUSDT', status: 'BREAK', baseAsset: 'SHIB', quoteAsset: 'USDT', isSpotTradingAllowed: false }, // Example non-trading
+  ];
+
+   // Add some more generic placeholders to simulate a larger list
+   const moreAssets = ['AVAX', 'TRX', 'UNI', 'ATOM', 'ETC', 'XLM', 'FIL', 'ICP', 'HBAR', 'VET'];
+   moreAssets.forEach(asset => {
+       placeholderSymbols.push({ symbol: `${asset}USDT`, status: 'TRADING', baseAsset: asset, quoteAsset: 'USDT', isSpotTradingAllowed: true });
+       placeholderSymbols.push({ symbol: `${asset}BTC`, status: 'TRADING', baseAsset: asset, quoteAsset: 'BTC', isSpotTradingAllowed: true });
+   });
+
+
+  return {
+    timezone: 'UTC',
+    serverTime: Date.now(),
+    symbols: placeholderSymbols,
+  };
 }

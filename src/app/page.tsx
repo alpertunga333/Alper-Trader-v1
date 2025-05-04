@@ -82,23 +82,23 @@ import {
   List,
   PlusCircle,
   ArrowRightLeft,
+  X as CloseIcon, // Renamed X to avoid conflict
+  Check as CheckIcon,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
-import { Balance, Candle } from '@/services/binance';
+import { Balance, Candle, SymbolInfo, getAccountBalances, getCandlestickData, getExchangeInfo, placeOrder } from '@/services/binance';
 import { toast } from '@/hooks/use-toast';
+import { Checkbox } from '@/components/ui/checkbox';
+import { cn } from '@/lib/utils';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
-// Placeholder data
-const candleData: Candle[] = [
-  { openTime: 1672531200000, open: 16600, high: 16700, low: 16500, close: 16650, volume: 100, closeTime: 1672531260000, quoteAssetVolume: 1665000, numberOfTrades: 100, takerBuyBaseAssetVolume: 50, takerBuyQuoteAssetVolume: 832500, ignore: 0 },
-  { openTime: 1672531260000, open: 16650, high: 16750, low: 16600, close: 16720, volume: 120, closeTime: 1672531320000, quoteAssetVolume: 2006400, numberOfTrades: 120, takerBuyBaseAssetVolume: 60, takerBuyQuoteAssetVolume: 1003200, ignore: 0 },
-  { openTime: 1672531320000, open: 16720, high: 16800, low: 16700, close: 16780, volume: 90, closeTime: 1672531380000, quoteAssetVolume: 1510200, numberOfTrades: 90, takerBuyBaseAssetVolume: 45, takerBuyQuoteAssetVolume: 755100, ignore: 0 },
-  { openTime: 1672531380000, open: 16780, high: 16850, low: 16750, close: 16820, volume: 110, closeTime: 1672531440000, quoteAssetVolume: 1850200, numberOfTrades: 110, takerBuyBaseAssetVolume: 55, takerBuyQuoteAssetVolume: 925100, ignore: 0 },
-  { openTime: 1672531440000, open: 16820, high: 16900, low: 16800, close: 16880, volume: 130, closeTime: 1672531500000, quoteAssetVolume: 2194400, numberOfTrades: 130, takerBuyBaseAssetVolume: 65, takerBuyQuoteAssetVolume: 1097200, ignore: 0 },
-];
+// Initial empty data for charts before loading
+const initialCandleData: Candle[] = [];
 
-const portfolioData: Balance[] = [
-  { asset: 'BTC', free: 0.5, locked: 0.1 },
-  { asset: 'ETH', free: 10, locked: 2 },
-  { asset: 'USDT', free: 5000, locked: 1000 },
+// Initial placeholder data (will be replaced by API calls)
+const initialPortfolioData: Balance[] = [
+  { asset: '...', free: 0, locked: 0 },
 ];
 
 const tradeHistoryData = [
@@ -113,6 +113,9 @@ const logData = [
   { timestamp: '2023-10-27 14:05:10', type: 'TELEGRAM', message: 'İşlem bildirimi gönderildi: BTC/USDT Alış' },
   { timestamp: '2023-10-27 14:10:00', type: 'ERROR', message: 'Binance API bağlantı hatası: Zaman aşımı.' },
 ];
+
+// Will be populated by API
+let allAvailablePairs: SymbolInfo[] = [];
 
 const availableStrategies = [
   { id: 'fibonacci', name: 'Fibonacci Geri Çekilme' },
@@ -147,20 +150,124 @@ const availableStrategies = [
   { id: 'long_short_ratio', name: 'Uzun/Kısa Oran Analizi' },
 ];
 
-const formatTimestamp = (timestamp: number) => {
-  const date = new Date(timestamp);
-  return date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+const formatTimestamp = (timestamp: number | string | undefined) => {
+    if (timestamp === undefined || timestamp === null) return '';
+    // Attempt to convert to number if it's a string timestamp
+    const numericTimestamp = typeof timestamp === 'string' ? parseInt(timestamp, 10) : timestamp;
+    if (isNaN(numericTimestamp)) return ''; // Handle invalid conversion
+
+    const date = new Date(numericTimestamp);
+    // Check if the date is valid
+    if (isNaN(date.getTime())) return '';
+
+    return date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 };
 
 export default function Dashboard() {
   const [activeUser, setActiveUser] = React.useState<string | null>(null);
-  const [selectedPair, setSelectedPair] = React.useState<string>('BTC/USDT');
+  const [selectedPair, setSelectedPair] = React.useState<string>(''); // Start empty
   const [selectedInterval, setSelectedInterval] = React.useState<string>('1h');
   const [selectedStrategy, setSelectedStrategy] = React.useState<string>(availableStrategies[0].id);
   const [botStatus, setBotStatus] = React.useState<'running' | 'stopped'>('stopped');
   const [activeStrategies, setActiveStrategies] = React.useState<string[]>([]);
   const [stopLoss, setStopLoss] = React.useState<string>('');
   const [takeProfit, setTakeProfit] = React.useState<string>('');
+  const [availablePairs, setAvailablePairs] = React.useState<SymbolInfo[]>([]);
+  const [candleData, setCandleData] = React.useState<Candle[]>(initialCandleData);
+  const [portfolioData, setPortfolioData] = React.useState<Balance[]>(initialPortfolioData);
+  const [loadingPairs, setLoadingPairs] = React.useState(true);
+  const [loadingCandles, setLoadingCandles] = React.useState(false);
+  const [loadingPortfolio, setLoadingPortfolio] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [selectedPairsForBot, setSelectedPairsForBot] = React.useState<string[]>([]);
+
+
+  // Fetch available pairs on component mount
+  React.useEffect(() => {
+    const fetchPairs = async () => {
+      setLoadingPairs(true);
+      setError(null);
+      try {
+        const info = await getExchangeInfo();
+        const tradingPairs = info.symbols
+          .filter(s => s.status === 'TRADING' && s.isSpotTradingAllowed) // Filter for active spot pairs
+          .sort((a, b) => a.symbol.localeCompare(b.symbol)); // Sort alphabetically
+        allAvailablePairs = tradingPairs; // Store globally if needed elsewhere
+        setAvailablePairs(tradingPairs);
+        if (tradingPairs.length > 0 && !selectedPair) {
+           setSelectedPair(tradingPairs[0].symbol); // Set default selected pair
+        }
+      } catch (err) {
+        console.error("Failed to fetch exchange info:", err);
+        setError("Piyasa verileri yüklenemedi. Lütfen daha sonra tekrar deneyin.");
+        toast({
+          title: "Hata",
+          description: "Binance pariteleri alınamadı.",
+          variant: "destructive",
+        });
+      } finally {
+        setLoadingPairs(false);
+      }
+    };
+    fetchPairs();
+  }, []); // Empty dependency array ensures this runs only once on mount
+
+
+  // Fetch candlestick data when selectedPair or selectedInterval changes
+  React.useEffect(() => {
+    const fetchCandleData = async () => {
+      if (!selectedPair) return; // Don't fetch if no pair is selected
+
+      setLoadingCandles(true);
+      setError(null); // Clear previous errors specific to candle loading
+      try {
+        const data = await getCandlestickData(selectedPair, selectedInterval, 100); // Fetch last 100 candles
+        setCandleData(data);
+      } catch (err) {
+        console.error(`Failed to fetch candlestick data for ${selectedPair}:`, err);
+         // Don't set a general error, let the chart show 'no data' or a message
+         setCandleData([]); // Clear data on error
+         toast({
+           title: "Grafik Hatası",
+           description: `${selectedPair} için grafik verisi yüklenemedi.`,
+           variant: "destructive",
+         });
+      } finally {
+        setLoadingCandles(false);
+      }
+    };
+
+    fetchCandleData();
+  }, [selectedPair, selectedInterval]); // Re-run when pair or interval changes
+
+
+  // Fetch portfolio data (example: fetch when user logs in)
+   React.useEffect(() => {
+     const fetchPortfolio = async () => {
+       if (!activeUser) return; // Only fetch if logged in
+       setLoadingPortfolio(true);
+       try {
+         // Assuming you have stored API keys securely associated with the user
+         const apiKey = "YOUR_USER_SPECIFIC_API_KEY"; // Replace with actual key retrieval
+         const secretKey = "YOUR_USER_SPECIFIC_SECRET_KEY"; // Replace with actual secret retrieval
+         const balances = await getAccountBalances(apiKey, secretKey);
+         setPortfolioData(balances);
+       } catch (err) {
+         console.error("Failed to fetch portfolio:", err);
+         toast({
+           title: "Portföy Hatası",
+           description: "Hesap bakiyeleri yüklenemedi.",
+           variant: "destructive",
+         });
+         setPortfolioData(initialPortfolioData); // Reset to initial on error
+       } finally {
+         setLoadingPortfolio(false);
+       }
+     };
+
+     fetchPortfolio();
+   }, [activeUser]); // Re-run when user changes
+
 
   const handleLogin = (username: string) => {
     setActiveUser(username);
@@ -169,12 +276,40 @@ export default function Dashboard() {
 
   const handleLogout = () => {
     setActiveUser(null);
+    setPortfolioData(initialPortfolioData); // Clear portfolio on logout
     toast({ title: 'Çıkış yapıldı.' });
   };
 
   const toggleBotStatus = () => {
+     if (botStatus === 'stopped' && selectedPairsForBot.length === 0) {
+        toast({
+            title: "Başlatma Hatası",
+            description: "Lütfen botun çalışacağı en az bir parite seçin.",
+            variant: "destructive",
+        });
+        return;
+    }
+    if (botStatus === 'stopped' && activeStrategies.length === 0) {
+        toast({
+            title: "Başlatma Hatası",
+            description: "Lütfen en az bir aktif strateji seçin.",
+            variant: "destructive",
+        });
+        return;
+    }
+
     setBotStatus((prev) => (prev === 'running' ? 'stopped' : 'running'));
-    toast({ title: `Bot ${botStatus === 'running' ? 'durduruldu' : 'başlatıldı'}.` });
+     const statusMessage = botStatus === 'running' ? 'durduruldu' : 'başlatıldı';
+     const pairsMessage = botStatus === 'stopped' ? ` (${selectedPairsForBot.join(', ')})` : '';
+    toast({ title: `Bot ${statusMessage}${pairsMessage}.` });
+
+    if (botStatus === 'stopped') {
+        // TODO: Start the bot logic for selectedPairsForBot and activeStrategies
+        console.log("Starting bot for pairs:", selectedPairsForBot, "with strategies:", activeStrategies);
+    } else {
+        // TODO: Stop the bot logic
+        console.log("Stopping bot...");
+    }
   };
 
    const handleStrategyToggle = (strategyId: string) => {
@@ -183,6 +318,14 @@ export default function Dashboard() {
         ? prev.filter((id) => id !== strategyId)
         : [...prev, strategyId]
     );
+  };
+
+  const handleBotPairToggle = (pairSymbol: string) => {
+      setSelectedPairsForBot((prev) =>
+          prev.includes(pairSymbol)
+              ? prev.filter((symbol) => symbol !== pairSymbol)
+              : [...prev, pairSymbol]
+      );
   };
 
 
@@ -274,6 +417,12 @@ export default function Dashboard() {
                  Log Kayıtları
                </SidebarMenuButton>
              </SidebarMenuItem>
+              <SidebarMenuItem>
+                 <SidebarMenuButton href="#bot-pairs" tooltip="Bot Pariteleri" isActive={false}>
+                     <ArrowRightLeft />
+                     Bot Pariteleri
+                 </SidebarMenuButton>
+              </SidebarMenuItem>
           </SidebarMenu>
         </SidebarContent>
         <SidebarSeparator />
@@ -294,14 +443,22 @@ export default function Dashboard() {
               <h1 className="text-xl font-semibold">KriptoPilot Kontrol Paneli</h1>
            </div>
            <div className="flex items-center gap-4">
-             <Select value={selectedPair} onValueChange={setSelectedPair}>
-               <SelectTrigger className="w-[150px]">
-                 <SelectValue placeholder="Parite Seçin" />
+             <Select value={selectedPair} onValueChange={setSelectedPair} disabled={loadingPairs}>
+               <SelectTrigger className="w-[180px]">
+                 <SelectValue placeholder={loadingPairs ? "Pariteler yükleniyor..." : "Parite Seçin"} />
                </SelectTrigger>
                <SelectContent>
-                 <SelectItem value="BTC/USDT">BTC/USDT</SelectItem>
-                 <SelectItem value="ETH/USDT">ETH/USDT</SelectItem>
-                 <SelectItem value="SOL/USDT">SOL/USDT</SelectItem>
+                {loadingPairs ? (
+                    <SelectItem value="loading" disabled>Yükleniyor...</SelectItem>
+                ) : availablePairs.length > 0 ? (
+                    availablePairs.map((pair) => (
+                        <SelectItem key={pair.symbol} value={pair.symbol}>
+                            {pair.baseAsset}/{pair.quoteAsset}
+                        </SelectItem>
+                    ))
+                ) : (
+                     <SelectItem value="no-pairs" disabled>Parite bulunamadı.</SelectItem>
+                )}
                </SelectContent>
              </Select>
              <Select value={selectedInterval} onValueChange={setSelectedInterval}>
@@ -320,32 +477,56 @@ export default function Dashboard() {
            </div>
         </header>
         <main className="flex-1 p-4 overflow-auto">
+
+         {error && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Hata</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
             {/* Main Chart Area */}
             <Card className="lg:col-span-2 h-[500px]">
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
-                  <span>{selectedPair} - {selectedInterval} Grafik</span>
+                   <div className="flex items-center gap-2">
+                        {selectedPair ? `${selectedPair} - ${selectedInterval} Grafik` : "Grafik (Parite Seçin)"}
+                        {loadingCandles && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
+                    </div>
                   <CandlestickChart className="text-primary" />
                 </CardTitle>
               </CardHeader>
               <CardContent className="h-[calc(100%-4rem)]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={candleData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="openTime" tickFormatter={formatTimestamp} stroke="hsl(var(--muted-foreground))" />
-                    <YAxis stroke="hsl(var(--muted-foreground))" domain={['auto', 'auto']} />
-                    <ChartTooltip
-                       contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))' }}
-                       itemStyle={{ color: 'hsl(var(--foreground))' }}
-                       labelStyle={{ color: 'hsl(var(--foreground))' }}
-                    />
-                    <Legend />
-                    <Line type="monotone" dataKey="close" name="Kapanış" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
-                    {/* TODO: Add buy/sell markers */}
-                  </LineChart>
-                </ResponsiveContainer>
+                {loadingCandles ? (
+                     <div className="flex items-center justify-center h-full text-muted-foreground">
+                         <Loader2 className="h-8 w-8 animate-spin mr-2" /> Yükleniyor...
+                     </div>
+                ) : candleData.length > 0 ? (
+                   <ResponsiveContainer width="100%" height="100%">
+                     <LineChart data={candleData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                       <XAxis dataKey="openTime" tickFormatter={formatTimestamp} stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 10 }} interval="preserveStartEnd" minTickGap={50} />
+                       <YAxis stroke="hsl(var(--muted-foreground))" domain={['auto', 'auto']} tick={{ fontSize: 10 }} tickFormatter={(value) => value.toLocaleString(undefined, { maximumFractionDigits: 4 })} />
+                       <ChartTooltip
+                         contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)' }}
+                         itemStyle={{ color: 'hsl(var(--foreground))' }}
+                         labelStyle={{ color: 'hsl(var(--foreground))', fontWeight: 'bold', marginBottom: '4px' }}
+                         formatter={(value: number, name: string) => [value.toLocaleString(undefined, { maximumFractionDigits: 4 }), name]}
+                         labelFormatter={(label) => `Zaman: ${formatTimestamp(label)}`}
+                         />
+                       <Legend />
+                       <Line type="monotone" dataKey="close" name="Kapanış" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+                       {/* TODO: Add buy/sell markers based on tradeHistoryData or bot signals */}
+                     </LineChart>
+                   </ResponsiveContainer>
+                ) : (
+                   <div className="flex items-center justify-center h-full text-muted-foreground">
+                      {selectedPair ? `${selectedPair} için veri bulunamadı.` : "Lütfen bir parite seçin."}
+                   </div>
+                )}
               </CardContent>
             </Card>
 
@@ -359,7 +540,10 @@ export default function Dashboard() {
                 </TabsList>
                  <ScrollArea className="flex-1">
                   <TabsContent value="portfolio" className="p-4">
-                    <h3 className="text-lg font-semibold mb-2">Anlık Portföy</h3>
+                    <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
+                        Anlık Portföy
+                        {loadingPortfolio && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                    </h3>
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -369,13 +553,27 @@ export default function Dashboard() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {portfolioData.map((balance) => (
-                          <TableRow key={balance.asset}>
-                            <TableCell className="font-medium">{balance.asset}</TableCell>
-                            <TableCell className="text-right">{balance.free.toFixed(4)}</TableCell>
-                            <TableCell className="text-right">{balance.locked.toFixed(4)}</TableCell>
-                          </TableRow>
-                        ))}
+                        {loadingPortfolio ? (
+                            <TableRow>
+                                <TableCell colSpan={3} className="text-center h-24">
+                                    <Loader2 className="inline-block h-6 w-6 animate-spin text-muted-foreground" />
+                                </TableCell>
+                            </TableRow>
+                        ) : portfolioData.length > 0 ? (
+                           portfolioData.map((balance) => (
+                             <TableRow key={balance.asset}>
+                               <TableCell className="font-medium">{balance.asset}</TableCell>
+                               <TableCell className="text-right">{balance.free.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 8 })}</TableCell>
+                               <TableCell className="text-right">{balance.locked.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 8 })}</TableCell>
+                             </TableRow>
+                           ))
+                       ) : (
+                            <TableRow>
+                                <TableCell colSpan={3} className="text-center text-muted-foreground h-24">
+                                    Portföy verisi yok veya yüklenemedi.
+                                </TableCell>
+                            </TableRow>
+                       )}
                       </TableBody>
                     </Table>
                   </TabsContent>
@@ -395,10 +593,10 @@ export default function Dashboard() {
                       <TableBody>
                         {tradeHistoryData.map((trade) => (
                           <TableRow key={trade.id}>
-                            <TableCell className="text-xs">{trade.timestamp}</TableCell>
-                            <TableCell>{trade.pair}</TableCell>
+                            <TableCell className="text-xs whitespace-nowrap">{trade.timestamp}</TableCell>
+                            <TableCell>{trade.pair.replace('/', '')}</TableCell> {/* Display as BTCUSDT */}
                             <TableCell className={trade.type === 'Alış' ? 'text-green-600' : 'text-red-600'}>{trade.type}</TableCell>
-                            <TableCell className="text-right">{trade.price}</TableCell>
+                            <TableCell className="text-right">{trade.price.toLocaleString()}</TableCell>
                             <TableCell className="text-right">{trade.amount}</TableCell>
                             <TableCell className="text-right">{trade.status}</TableCell>
                           </TableRow>
@@ -419,8 +617,16 @@ export default function Dashboard() {
                         <TableBody>
                           {logData.map((log, index) => (
                              <TableRow key={index}>
-                               <TableCell className="text-xs">{log.timestamp}</TableCell>
-                               <TableCell><span className={`px-2 py-1 rounded text-xs ${log.type === 'ERROR' ? 'bg-red-100 text-red-800' : log.type === 'TRADE' ? 'bg-blue-100 text-blue-800' : log.type === 'TELEGRAM' ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-800'}`}>{log.type}</span></TableCell>
+                               <TableCell className="text-xs whitespace-nowrap">{log.timestamp}</TableCell>
+                               <TableCell>
+                                   <span className={cn("px-2 py-0.5 rounded text-xs font-medium",
+                                        log.type === 'ERROR' ? 'bg-destructive/10 text-destructive' :
+                                        log.type === 'TRADE' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' :
+                                        log.type === 'TELEGRAM' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300' :
+                                        'bg-secondary text-secondary-foreground')}>
+                                        {log.type}
+                                   </span>
+                               </TableCell>
                                <TableCell className="text-xs">{log.message}</TableCell>
                              </TableRow>
                            ))}
@@ -439,7 +645,7 @@ export default function Dashboard() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <Accordion type="single" collapsible className="w-full">
+                <Accordion type="single" collapsible className="w-full" defaultValue="api-spot">
                   <AccordionItem value="api-spot" id="api-spot">
                     <AccordionTrigger>Binance Spot API</AccordionTrigger>
                     <AccordionContent className="space-y-4 p-4">
@@ -523,23 +729,23 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent>
                  <h4 className="font-semibold mb-2">Aktif Stratejiler</h4>
-                 <div className="flex flex-wrap gap-2 mb-4">
-                    {activeStrategies.length === 0 && <span className="text-muted-foreground text-sm">Aktif strateji yok.</span>}
+                 <div className="flex flex-wrap gap-2 mb-4 min-h-[32px]"> {/* Added min-height */}
+                    {activeStrategies.length === 0 && <span className="text-muted-foreground text-sm italic">Aktif strateji yok.</span>}
                     {activeStrategies.map((stratId) => {
                         const strategy = availableStrategies.find(s => s.id === stratId);
                         return (
                              <Button key={stratId} variant="secondary" size="sm" onClick={() => handleStrategyToggle(stratId)}>
-                                {strategy?.name} <X className="ml-2 h-4 w-4" />
+                                {strategy?.name} <CloseIcon className="ml-2 h-4 w-4" />
                              </Button>
                         )
                     })}
                  </div>
                 <h4 className="font-semibold mb-2">Mevcut Stratejiler</h4>
                  <ScrollArea className="h-[200px] border rounded-md p-2">
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                        {availableStrategies.map((strategy) => (
-                        <div key={strategy.id} className="flex items-center justify-between p-2 hover:bg-accent rounded-md">
-                          <Label htmlFor={`strat-${strategy.id}`} className="flex items-center gap-2 cursor-pointer">
+                        <div key={strategy.id} className="flex items-center justify-between p-1.5 hover:bg-accent rounded-md">
+                          <Label htmlFor={`strat-${strategy.id}`} className="flex items-center gap-2 cursor-pointer text-sm flex-1">
                             <Checkbox
                               id={`strat-${strategy.id}`}
                               checked={activeStrategies.includes(strategy.id)}
@@ -563,9 +769,56 @@ export default function Dashboard() {
                       ))}
                     </div>
                  </ScrollArea>
-                 <Button size="sm" className="mt-4"><PlusCircle className="mr-2 h-4 w-4"/> Yeni Strateji Ekle (Yapılandırma)</Button>
+                 <Button size="sm" className="mt-4" disabled><PlusCircle className="mr-2 h-4 w-4"/> Yeni Strateji Ekle (Yapılandırılmadı)</Button>
               </CardContent>
             </Card>
+
+            {/* Bot Pair Selection */}
+             <Card id="bot-pairs" className="lg:col-span-3">
+               <CardHeader>
+                 <CardTitle className="flex items-center">
+                   <ArrowRightLeft className="mr-2 text-primary" /> Bot İçin Parite Seçimi
+                 </CardTitle>
+               </CardHeader>
+               <CardContent>
+                  <h4 className="font-semibold mb-2">Seçili Pariteler</h4>
+                  <div className="flex flex-wrap gap-2 mb-4 min-h-[32px]">
+                      {selectedPairsForBot.length === 0 && <span className="text-muted-foreground text-sm italic">Bot için parite seçilmedi.</span>}
+                      {selectedPairsForBot.map((pairSymbol) => (
+                         <Button key={pairSymbol} variant="secondary" size="sm" onClick={() => handleBotPairToggle(pairSymbol)}>
+                              {pairSymbol} <CloseIcon className="ml-2 h-4 w-4" />
+                         </Button>
+                      ))}
+                  </div>
+
+                 <h4 className="font-semibold mb-2">Mevcut Pariteler</h4>
+                  {loadingPairs ? (
+                      <div className="flex items-center justify-center h-[200px] text-muted-foreground">
+                          <Loader2 className="h-6 w-6 animate-spin mr-2" /> Pariteler yükleniyor...
+                      </div>
+                  ) : availablePairs.length > 0 ? (
+                      <ScrollArea className="h-[200px] border rounded-md p-2">
+                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1">
+                            {availablePairs.map((pair) => (
+                               <Label key={pair.symbol} htmlFor={`pair-${pair.symbol}`} className="flex items-center gap-1.5 cursor-pointer text-xs p-1.5 hover:bg-accent rounded-md">
+                                 <Checkbox
+                                   id={`pair-${pair.symbol}`}
+                                   checked={selectedPairsForBot.includes(pair.symbol)}
+                                   onCheckedChange={() => handleBotPairToggle(pair.symbol)}
+                                 />
+                                 {pair.symbol}
+                               </Label>
+                             ))}
+                         </div>
+                      </ScrollArea>
+                  ) : (
+                      <div className="flex items-center justify-center h-[200px] text-muted-foreground">
+                           Parite bulunamadı veya yüklenemedi.
+                      </div>
+                  )}
+               </CardContent>
+             </Card>
+
 
             {/* Risk Management */}
             <Card id="risk-management" className="lg:col-span-3">
@@ -616,14 +869,22 @@ export default function Dashboard() {
                      </div>
                      <div>
                           <Label htmlFor="backtest-pair">Parite</Label>
-                          <Select defaultValue="BTC/USDT">
+                         <Select disabled={loadingPairs}>
                             <SelectTrigger id="backtest-pair">
-                               <SelectValue placeholder="Parite Seçin" />
+                                <SelectValue placeholder={loadingPairs ? "Yükleniyor..." : "Parite Seçin"} />
                             </SelectTrigger>
                             <SelectContent>
-                               <SelectItem value="BTC/USDT">BTC/USDT</SelectItem>
-                               <SelectItem value="ETH/USDT">ETH/USDT</SelectItem>
-                               <SelectItem value="SOL/USDT">SOL/USDT</SelectItem>
+                               {loadingPairs ? (
+                                    <SelectItem value="loading" disabled>Yükleniyor...</SelectItem>
+                                ) : availablePairs.length > 0 ? (
+                                    availablePairs.map((pair) => (
+                                        <SelectItem key={pair.symbol} value={pair.symbol}>
+                                            {pair.symbol}
+                                        </SelectItem>
+                                    ))
+                                ) : (
+                                     <SelectItem value="no-pairs" disabled>Parite bulunamadı.</SelectItem>
+                                )}
                             </SelectContent>
                           </Select>
                       </div>
@@ -656,7 +917,7 @@ export default function Dashboard() {
                           <Input id="initial-balance" type="number" placeholder="1000" />
                       </div>
                  </div>
-                <Button><FlaskConical className="mr-2 h-4 w-4"/> Testi Başlat</Button>
+                <Button disabled><FlaskConical className="mr-2 h-4 w-4"/> Testi Başlat (Yapılandırılmadı)</Button>
                 <div className="mt-4 border p-4 rounded-md bg-muted/50">
                     <h4 className="font-semibold mb-2">Test Sonuçları</h4>
                     <p className="text-sm text-muted-foreground">Test sonuçları burada gösterilecek...</p>
@@ -672,28 +933,5 @@ export default function Dashboard() {
   );
 }
 
-// Add Checkbox component temporarily until ShadCN is updated
-const Checkbox = React.forwardRef<
-  React.ElementRef<typeof CheckboxPrimitive.Root>,
-  React.ComponentPropsWithoutRef<typeof CheckboxPrimitive.Root>
->(({ className, ...props }, ref) => (
-  <CheckboxPrimitive.Root
-    ref={ref}
-    className={cn(
-      "peer h-4 w-4 shrink-0 rounded-sm border border-primary ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground",
-      className
-    )}
-    {...props}
-  >
-    <CheckboxPrimitive.Indicator
-      className={cn("flex items-center justify-center text-current")}
-    >
-      <CheckIcon className="h-4 w-4" />
-    </CheckboxPrimitive.Indicator>
-  </CheckboxPrimitive.Root>
-));
-Checkbox.displayName = CheckboxPrimitive.Root.displayName;
-
-import * as CheckboxPrimitive from "@radix-ui/react-checkbox";
-import { CheckIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
+// Note: Removed the local Checkbox component definition as it exists in ui/checkbox.tsx
+// Ensure `import { Checkbox } from '@/components/ui/checkbox';` is present at the top.
