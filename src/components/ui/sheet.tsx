@@ -1,3 +1,4 @@
+// Sheet component (src/components/ui/sheet.tsx)
 "use client"
 
 import * as React from "react"
@@ -135,6 +136,6 @@ export {
   SheetContent,
   SheetHeader,
   SheetFooter,
-  SheetTitle,
+  SheetTitle, // Ensure SheetTitle is exported
   SheetDescription,
 }

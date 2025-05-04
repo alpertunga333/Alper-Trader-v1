@@ -1,3 +1,4 @@
+// Sidebar component (src/components/ui/sidebar.tsx)
 "use client"
 
 import * as React from "react"
@@ -10,7 +11,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
-import { Sheet, SheetContent } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet" // Added SheetTitle
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Tooltip,
@@ -206,6 +207,8 @@ const Sidebar = React.forwardRef<
             }
             side={side}
           >
+            {/* Add a visually hidden title for accessibility */}
+            <SheetTitle className="sr-only">Ana Menü</SheetTitle>
             <div className="flex h-full w-full flex-col">{children}</div>
           </SheetContent>
         </Sheet>
@@ -760,4 +763,29 @@ export {
   SidebarSeparator,
   SidebarTrigger,
   useSidebar,
+}
+
+// Add this class to visually hide elements while keeping them accessible
+// Used for the SheetTitle in mobile sidebar.
+// You might want to move this to your globals.css or a utility CSS file.
+const visuallyHiddenClass = `
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+`;
+
+// Inject the class if it doesn't exist (simple approach)
+if (typeof window !== 'undefined' && !document.getElementById('sr-only-style')) {
+  const style = document.createElement('style');
+  style.id = 'sr-only-style';
+  style.textContent = visuallyHiddenClass;
+  document.head.appendChild(style);
 }
