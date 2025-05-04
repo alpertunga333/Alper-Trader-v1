@@ -163,6 +163,61 @@ const formatTimestamp = (timestamp: number | string | undefined) => {
     return date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 };
 
+// Function to format numbers consistently
+// Ensures client-side rendering matches server-side for locale-specific formats
+const formatNumber = (value: number | undefined, options?: Intl.NumberFormatOptions) => {
+    const [formattedValue, setFormattedValue] = React.useState<string | null>(null);
+
+    React.useEffect(() => {
+        if (value === undefined || value === null || isNaN(value)) {
+            setFormattedValue('0,00'); // Set default for invalid values
+        } else {
+            const defaultOptions: Intl.NumberFormatOptions = {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 8,
+                ...options, // Merge user options
+            };
+            // Use 'en-US' initially for SSR consistency, then update to 'tr-TR' on client
+            // This avoids hydration mismatch
+            setFormattedValue(value.toLocaleString('tr-TR', defaultOptions));
+        }
+    }, [value, options]); // Rerun when value or options change
+
+    // Return the server-rendered value until client-side formatting is ready
+    // This avoids the initial mismatch but might cause a flicker
+    return formattedValue ?? (typeof value === 'number' ? value.toFixed(options?.minimumFractionDigits ?? 2) : '0.00');
+};
+
+// Create a hook for consistent number formatting to avoid direct useState calls in render logic
+const useFormattedNumber = (value: number | undefined, options?: Intl.NumberFormatOptions) => {
+    const [formatted, setFormatted] = React.useState<string | null>(null);
+
+    React.useEffect(() => {
+        if (value === undefined || value === null || isNaN(value)) {
+            setFormatted('0,00');
+            return;
+        }
+
+        const defaultOptions: Intl.NumberFormatOptions = {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 8,
+            ...options,
+        };
+        // Format with Turkish locale only on the client side after hydration
+        setFormatted(value.toLocaleString('tr-TR', defaultOptions));
+
+    }, [value, options]);
+
+     // Provide a stable server-rendered value (e.g., using toFixed)
+     // before the client-side effect runs
+     const serverValue = (typeof value === 'number')
+        ? value.toFixed(options?.minimumFractionDigits ?? 2)
+        : '0.00';
+
+    return formatted ?? serverValue;
+}
+
+
 export default function Dashboard() {
   const [activeUser, setActiveUser] = React.useState<string | null>(null);
   const [selectedPair, setSelectedPair] = React.useState<string>(''); // Start empty
@@ -244,13 +299,20 @@ export default function Dashboard() {
   // Fetch portfolio data (example: fetch when user logs in)
    React.useEffect(() => {
      const fetchPortfolio = async () => {
-       if (!activeUser) return; // Only fetch if logged in
+       // Simulate fetching based on activeUser, but use placeholder data
+       if (!activeUser) {
+           setPortfolioData(initialPortfolioData); // Reset if logged out
+           return;
+       };
        setLoadingPortfolio(true);
        try {
-         // Assuming you have stored API keys securely associated with the user
-         const apiKey = "YOUR_USER_SPECIFIC_API_KEY"; // Replace with actual key retrieval
-         const secretKey = "YOUR_USER_SPECIFIC_SECRET_KEY"; // Replace with actual secret retrieval
-         const balances = await getAccountBalances(apiKey, secretKey);
+         // In a real app, you'd use activeUser to fetch specific keys/data
+         // const apiKey = getUserApiKey(activeUser);
+         // const secretKey = getUserSecretKey(activeUser);
+         // const balances = await getAccountBalances(apiKey, secretKey);
+
+         // Using placeholder from service for now
+         const balances = await getAccountBalances("dummyKey", "dummySecret");
          setPortfolioData(balances);
        } catch (err) {
          console.error("Failed to fetch portfolio:", err);
@@ -276,7 +338,7 @@ export default function Dashboard() {
 
   const handleLogout = () => {
     setActiveUser(null);
-    setPortfolioData(initialPortfolioData); // Clear portfolio on logout
+    // setPortfolioData(initialPortfolioData); // Clear portfolio on logout - Handled by useEffect
     toast({ title: 'Çıkış yapıldı.' });
   };
 
@@ -327,6 +389,56 @@ export default function Dashboard() {
               : [...prev, pairSymbol]
       );
   };
+
+
+  // Component for rendering portfolio row to use the hook
+  const PortfolioRow = ({ balance }: { balance: Balance }) => {
+      const formattedFree = useFormattedNumber(balance.free);
+      const formattedLocked = useFormattedNumber(balance.locked);
+
+      return (
+          <TableRow key={balance.asset}>
+              <TableCell className="font-medium">{balance.asset}</TableCell>
+              <TableCell className="text-right">{formattedFree}</TableCell>
+              <TableCell className="text-right">{formattedLocked}</TableCell>
+          </TableRow>
+      );
+  };
+
+  // Component for rendering trade history row
+   const TradeHistoryRow = ({ trade }: { trade: typeof tradeHistoryData[0] }) => {
+       const formattedPrice = useFormattedNumber(trade.price);
+       const formattedAmount = useFormattedNumber(trade.amount, { maximumFractionDigits: 8 });
+
+       return (
+           <TableRow key={trade.id}>
+               <TableCell className="text-xs whitespace-nowrap">{trade.timestamp}</TableCell>
+               <TableCell>{trade.pair.replace('/', '')}</TableCell>
+               <TableCell className={trade.type === 'Alış' ? 'text-[hsl(var(--primary))]' : 'text-[hsl(var(--destructive))]'}>{trade.type}</TableCell>
+               <TableCell className="text-right">{formattedPrice}</TableCell>
+               <TableCell className="text-right">{formattedAmount}</TableCell>
+               <TableCell className="text-right">{trade.status}</TableCell>
+           </TableRow>
+       );
+   };
+
+   // Component for rendering candlestick chart tooltip
+   const ChartTooltipContent = ({ active, payload, label }: any) => {
+        const formattedLabel = useFormattedNumber(label, { maximumFractionDigits: 4 }); // Reuse hook for consistency if label is numeric
+
+        if (active && payload && payload.length) {
+           const formattedValue = useFormattedNumber(payload[0].value, { maximumFractionDigits: 4 });
+           return (
+             <div className="custom-tooltip p-2 bg-background border border-border rounded shadow-lg">
+               <p className="label text-sm font-bold">{`Zaman: ${formatTimestamp(payload[0].payload.openTime)}`}</p>
+               <p className="intro text-sm">{`${payload[0].name}: ${formattedValue}`}</p>
+               {/* Add more data points if needed */}
+             </div>
+           );
+         }
+
+       return null;
+     };
 
 
   return (
@@ -448,17 +560,19 @@ export default function Dashboard() {
                  <SelectValue placeholder={loadingPairs ? "Pariteler yükleniyor..." : "Parite Seçin"} />
                </SelectTrigger>
                <SelectContent>
-                {loadingPairs ? (
-                    <SelectItem value="loading" disabled>Yükleniyor...</SelectItem>
-                ) : availablePairs.length > 0 ? (
-                    availablePairs.map((pair) => (
-                        <SelectItem key={pair.symbol} value={pair.symbol}>
-                            {pair.baseAsset}/{pair.quoteAsset}
-                        </SelectItem>
-                    ))
-                ) : (
-                     <SelectItem value="no-pairs" disabled>Parite bulunamadı.</SelectItem>
-                )}
+                 <ScrollArea className="h-[300px]"> {/* Add ScrollArea for long list */}
+                    {loadingPairs ? (
+                        <SelectItem value="loading" disabled>Yükleniyor...</SelectItem>
+                    ) : availablePairs.length > 0 ? (
+                        availablePairs.map((pair) => (
+                            <SelectItem key={pair.symbol} value={pair.symbol}>
+                                {pair.baseAsset}/{pair.quoteAsset}
+                            </SelectItem>
+                        ))
+                    ) : (
+                         <SelectItem value="no-pairs" disabled>Parite bulunamadı.</SelectItem>
+                    )}
+                 </ScrollArea>
                </SelectContent>
              </Select>
              <Select value={selectedInterval} onValueChange={setSelectedInterval}>
@@ -509,14 +623,8 @@ export default function Dashboard() {
                      <LineChart data={candleData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                        <XAxis dataKey="openTime" tickFormatter={formatTimestamp} stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 10 }} interval="preserveStartEnd" minTickGap={50} />
-                       <YAxis stroke="hsl(var(--muted-foreground))" domain={['auto', 'auto']} tick={{ fontSize: 10 }} tickFormatter={(value) => value.toLocaleString(undefined, { maximumFractionDigits: 4 })} />
-                       <ChartTooltip
-                         contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)' }}
-                         itemStyle={{ color: 'hsl(var(--foreground))' }}
-                         labelStyle={{ color: 'hsl(var(--foreground))', fontWeight: 'bold', marginBottom: '4px' }}
-                         formatter={(value: number, name: string) => [value.toLocaleString(undefined, { maximumFractionDigits: 4 }), name]}
-                         labelFormatter={(label) => `Zaman: ${formatTimestamp(label)}`}
-                         />
+                       <YAxis stroke="hsl(var(--muted-foreground))" domain={['auto', 'auto']} tick={{ fontSize: 10 }} tickFormatter={(value) => useFormattedNumber(value, { maximumFractionDigits: 4 })} />
+                       <ChartTooltip content={<ChartTooltipContent />} />
                        <Legend />
                        <Line type="monotone" dataKey="close" name="Kapanış" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
                        {/* TODO: Add buy/sell markers based on tradeHistoryData or bot signals */}
@@ -559,18 +667,14 @@ export default function Dashboard() {
                                     <Loader2 className="inline-block h-6 w-6 animate-spin text-muted-foreground" />
                                 </TableCell>
                             </TableRow>
-                        ) : portfolioData.length > 0 ? (
+                        ) : portfolioData.length > 0 && portfolioData[0].asset !== '...' ? ( // Check if not initial placeholder
                            portfolioData.map((balance) => (
-                             <TableRow key={balance.asset}>
-                               <TableCell className="font-medium">{balance.asset}</TableCell>
-                               <TableCell className="text-right">{balance.free.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 8 })}</TableCell>
-                               <TableCell className="text-right">{balance.locked.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 8 })}</TableCell>
-                             </TableRow>
+                              <PortfolioRow key={balance.asset} balance={balance} />
                            ))
                        ) : (
                             <TableRow>
                                 <TableCell colSpan={3} className="text-center text-muted-foreground h-24">
-                                    Portföy verisi yok veya yüklenemedi.
+                                    {activeUser ? "Portföy verisi yok veya yüklenemedi." : "Giriş yapınız."}
                                 </TableCell>
                             </TableRow>
                        )}
@@ -592,14 +696,7 @@ export default function Dashboard() {
                       </TableHeader>
                       <TableBody>
                         {tradeHistoryData.map((trade) => (
-                          <TableRow key={trade.id}>
-                            <TableCell className="text-xs whitespace-nowrap">{trade.timestamp}</TableCell>
-                            <TableCell>{trade.pair.replace('/', '')}</TableCell> {/* Display as BTCUSDT */}
-                            <TableCell className={trade.type === 'Alış' ? 'text-green-600' : 'text-red-600'}>{trade.type}</TableCell>
-                            <TableCell className="text-right">{trade.price.toLocaleString()}</TableCell>
-                            <TableCell className="text-right">{trade.amount}</TableCell>
-                            <TableCell className="text-right">{trade.status}</TableCell>
-                          </TableRow>
+                           <TradeHistoryRow key={trade.id} trade={trade} />
                         ))}
                       </TableBody>
                     </Table>
@@ -781,7 +878,7 @@ export default function Dashboard() {
                  </CardTitle>
                </CardHeader>
                <CardContent>
-                  <h4 className="font-semibold mb-2">Seçili Pariteler</h4>
+                  <h4 className="font-semibold mb-2">Seçili Pariteler ({selectedPairsForBot.length})</h4>
                   <div className="flex flex-wrap gap-2 mb-4 min-h-[32px]">
                       {selectedPairsForBot.length === 0 && <span className="text-muted-foreground text-sm italic">Bot için parite seçilmedi.</span>}
                       {selectedPairsForBot.map((pairSymbol) => (
@@ -791,7 +888,7 @@ export default function Dashboard() {
                       ))}
                   </div>
 
-                 <h4 className="font-semibold mb-2">Mevcut Pariteler</h4>
+                 <h4 className="font-semibold mb-2">Mevcut Pariteler ({availablePairs.length})</h4>
                   {loadingPairs ? (
                       <div className="flex items-center justify-center h-[200px] text-muted-foreground">
                           <Loader2 className="h-6 w-6 animate-spin mr-2" /> Pariteler yükleniyor...
@@ -816,6 +913,14 @@ export default function Dashboard() {
                            Parite bulunamadı veya yüklenemedi.
                       </div>
                   )}
+                   <div className="mt-4 flex gap-2">
+                       <Button size="sm" variant="outline" onClick={() => setSelectedPairsForBot(availablePairs.map(p => p.symbol))} disabled={loadingPairs}>
+                           Tümünü Seç
+                       </Button>
+                       <Button size="sm" variant="outline" onClick={() => setSelectedPairsForBot([])}>
+                           Seçimi Temizle
+                       </Button>
+                   </div>
                </CardContent>
              </Card>
 
@@ -873,19 +978,21 @@ export default function Dashboard() {
                             <SelectTrigger id="backtest-pair">
                                 <SelectValue placeholder={loadingPairs ? "Yükleniyor..." : "Parite Seçin"} />
                             </SelectTrigger>
-                            <SelectContent>
-                               {loadingPairs ? (
-                                    <SelectItem value="loading" disabled>Yükleniyor...</SelectItem>
-                                ) : availablePairs.length > 0 ? (
-                                    availablePairs.map((pair) => (
-                                        <SelectItem key={pair.symbol} value={pair.symbol}>
-                                            {pair.symbol}
-                                        </SelectItem>
-                                    ))
-                                ) : (
-                                     <SelectItem value="no-pairs" disabled>Parite bulunamadı.</SelectItem>
-                                )}
-                            </SelectContent>
+                           <SelectContent>
+                              <ScrollArea className="h-[300px]"> {/* Add ScrollArea */}
+                                  {loadingPairs ? (
+                                       <SelectItem value="loading" disabled>Yükleniyor...</SelectItem>
+                                   ) : availablePairs.length > 0 ? (
+                                       availablePairs.map((pair) => (
+                                           <SelectItem key={pair.symbol} value={pair.symbol}>
+                                               {pair.symbol}
+                                           </SelectItem>
+                                       ))
+                                   ) : (
+                                        <SelectItem value="no-pairs" disabled>Parite bulunamadı.</SelectItem>
+                                   )}
+                              </ScrollArea>
+                           </SelectContent>
                           </Select>
                       </div>
                        <div>
