@@ -21,6 +21,16 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+  DialogClose,
+} from '@/components/ui/dialog';
+import {
   Sidebar,
   SidebarProvider,
   SidebarTrigger,
@@ -151,68 +161,133 @@ const availableStrategies = [
   { id: 'long_short_ratio', name: 'Uzun/Kısa Oran Analizi' },
 ];
 
-const formatTimestamp = (timestamp: number | string | undefined) => {
+// ----- Helper Functions -----
+
+const formatTimestamp = (timestamp: number | string | undefined): string => {
     if (timestamp === undefined || timestamp === null) return '';
-    // Attempt to convert to number if it's a string timestamp
     const numericTimestamp = typeof timestamp === 'string' ? parseInt(timestamp, 10) : timestamp;
-    if (isNaN(numericTimestamp)) return ''; // Handle invalid conversion
+    if (isNaN(numericTimestamp)) return '';
 
     const date = new Date(numericTimestamp);
-    // Check if the date is valid
     if (isNaN(date.getTime())) return '';
 
     return date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 };
 
-// Utility function for formatting numbers without hooks
-const formatNumberClientSide = (value: number | undefined, options?: Intl.NumberFormatOptions): string => {
-    if (value === undefined || value === null || isNaN(value)) {
-        return '0,00'; // Default for invalid values
+const formatNumberClientSide = (value: number | string | undefined, options?: Intl.NumberFormatOptions): string => {
+    const numValue = typeof value === 'string' ? parseFloat(value.replace(',', '.')) : value; // Handle potential comma decimal separator input
+
+    if (numValue === undefined || numValue === null || isNaN(numValue)) {
+        return 'N/A'; // Return Not Available for invalid numbers
     }
     const defaultOptions: Intl.NumberFormatOptions = {
         minimumFractionDigits: 2,
-        maximumFractionDigits: 8,
-        ...options, // Merge user options
+        maximumFractionDigits: 2, // Default to 2 for consistency unless overridden
+        ...options,
     };
-    return value.toLocaleString('tr-TR', defaultOptions);
+    return numValue.toLocaleString('tr-TR', defaultOptions);
 };
 
-
-// Create a hook for consistent number formatting to avoid direct useState calls in render logic
-// This hook handles potential hydration mismatches by delaying client-side formatting.
-const useFormattedNumber = (value: number | undefined, options?: Intl.NumberFormatOptions) => {
+// Hook to handle client-side formatting and prevent hydration errors
+const useFormattedNumber = (value: number | string | undefined, options?: Intl.NumberFormatOptions) => {
     const [formatted, setFormatted] = React.useState<string | null>(null);
 
     React.useEffect(() => {
-        // This effect runs only on the client after hydration
         const clientFormatted = formatNumberClientSide(value, options);
         setFormatted(clientFormatted);
-    }, [value, options]); // Rerun when value or options change
+    }, [value, JSON.stringify(options)]); // Stringify options to capture changes
 
-     // Provide a stable server-rendered value (e.g., using toFixed with a dot separator)
-     // This value might briefly show before the client-side effect updates it.
-     const serverValue = (typeof value === 'number' && !isNaN(value))
-        ? value.toFixed(options?.minimumFractionDigits ?? 2)
-        : '0.00';
+     const numValue = typeof value === 'string' ? parseFloat(value.replace(',', '.')) : value;
+     const serverValue = (typeof numValue === 'number' && !isNaN(numValue))
+        ? numValue.toFixed(options?.minimumFractionDigits ?? 2)
+        : 'N/A';
 
-    // Return the client-formatted value once available, otherwise the server value
     return formatted ?? serverValue;
-}
+};
 
-// Specific formatter for chart ticks that runs client-side directly
+// Specific formatter for chart ticks (runs client-side)
 const formatTickNumber = (value: number | undefined, options?: Intl.NumberFormatOptions): string => {
-    // This function will be called by Recharts on the client side during rendering.
-    // It's safe to use toLocaleString here because it won't cause hydration mismatch
-    // in the context of chart ticks rendered client-side by the library.
     return formatNumberClientSide(value, options);
 };
 
 
+// ----- Backtesting Placeholder Logic -----
+interface BacktestParams {
+  strategyId: string;
+  pair: string;
+  interval: string;
+  startDate: string; // YYYY-MM-DD
+  endDate: string;   // YYYY-MM-DD
+  initialBalance: number;
+}
+
+interface BacktestResult {
+  totalTrades: number;
+  winningTrades: number;
+  losingTrades: number;
+  winRate: number; // Percentage
+  totalPnl: number; // Profit/Loss amount
+  totalPnlPercent: number; // Profit/Loss percentage
+  maxDrawdown: number; // Percentage
+  sharpeRatio?: number; // Optional
+  errorMessage?: string; // To indicate errors during backtest
+}
+
+// Placeholder simulation function
+async function simulateBacktest(params: BacktestParams): Promise<BacktestResult> {
+  console.log("Simulating Backtest with params:", params);
+  await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate processing time
+
+  // ** IMPORTANT LIMITATION **
+  // The current getCandlestickData only fetches the last X candles, not by date range.
+  // Real backtesting requires fetching historical data between startDate and endDate.
+  // This simulation uses random data as a placeholder.
+
+  // Basic validation (real implementation needs more robust checks)
+  if (!params.strategyId || !params.pair || !params.startDate || !params.endDate || !params.initialBalance) {
+    return { errorMessage: "Lütfen tüm alanları doldurun.", totalTrades: 0, winningTrades: 0, losingTrades: 0, winRate: 0, totalPnl: 0, totalPnlPercent: 0, maxDrawdown: 0 };
+  }
+  if (new Date(params.startDate) >= new Date(params.endDate)) {
+      return { errorMessage: "Başlangıç tarihi bitiş tarihinden önce olmalıdır.", totalTrades: 0, winningTrades: 0, losingTrades: 0, winRate: 0, totalPnl: 0, totalPnlPercent: 0, maxDrawdown: 0 };
+  }
+   if (params.initialBalance <= 0) {
+       return { errorMessage: "Başlangıç bakiyesi pozitif olmalıdır.", totalTrades: 0, winningTrades: 0, losingTrades: 0, winRate: 0, totalPnl: 0, totalPnlPercent: 0, maxDrawdown: 0 };
+   }
+
+
+  // --- Placeholder Results Generation ---
+  const totalTrades = Math.floor(50 + Math.random() * 150); // Random trades between 50-200
+  const winRate = 0.3 + Math.random() * 0.4; // Random win rate between 30%-70%
+  const winningTrades = Math.floor(totalTrades * winRate);
+  const losingTrades = totalTrades - winningTrades;
+
+  // Simulate PnL based on win rate and initial balance
+  // This is highly simplified and not realistic
+  const avgWinPercent = 0.01 + Math.random() * 0.04; // Avg win 1-5%
+  const avgLossPercent = 0.005 + Math.random() * 0.02; // Avg loss 0.5-2.5%
+  const totalPnlPercent = (winningTrades * avgWinPercent - losingTrades * avgLossPercent) * 10; // Amplified for effect
+  const totalPnl = params.initialBalance * (totalPnlPercent / 100);
+
+  const maxDrawdown = 5 + Math.random() * 25; // Random drawdown 5-30%
+
+  return {
+    totalTrades,
+    winningTrades,
+    losingTrades,
+    winRate: parseFloat((winRate * 100).toFixed(2)),
+    totalPnl: parseFloat(totalPnl.toFixed(2)),
+    totalPnlPercent: parseFloat(totalPnlPercent.toFixed(2)),
+    maxDrawdown: parseFloat(maxDrawdown.toFixed(2)),
+  };
+}
+
+
+// ----- Main Dashboard Component -----
 export default function Dashboard() {
+  // Existing State...
   const [activeUser, setActiveUser] = React.useState<string | null>(null);
-  const [selectedPair, setSelectedPair] = React.useState<string>(''); // Start empty
+  const [selectedPair, setSelectedPair] = React.useState<string>('');
   const [selectedInterval, setSelectedInterval] = React.useState<string>('1h');
-  const [selectedStrategy, setSelectedStrategy] = React.useState<string>(availableStrategies[0].id);
   const [botStatus, setBotStatus] = React.useState<'running' | 'stopped'>('stopped');
   const [activeStrategies, setActiveStrategies] = React.useState<string[]>([]);
   const [stopLoss, setStopLoss] = React.useState<string>('');
@@ -225,9 +300,25 @@ export default function Dashboard() {
   const [loadingPortfolio, setLoadingPortfolio] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [selectedPairsForBot, setSelectedPairsForBot] = React.useState<string[]>([]);
+  const [newStrategyName, setNewStrategyName] = React.useState('');
+  const [newStrategyDescription, setNewStrategyDescription] = React.useState('');
+
+  // Backtesting State
+  const [backtestParams, setBacktestParams] = React.useState<BacktestParams>({
+    strategyId: '',
+    pair: '',
+    interval: '1h',
+    startDate: '',
+    endDate: '',
+    initialBalance: 1000,
+  });
+  const [backtestResult, setBacktestResult] = React.useState<BacktestResult | null>(null);
+  const [isBacktesting, setIsBacktesting] = React.useState(false);
 
 
-  // Fetch available pairs on component mount
+  // --- Effects ---
+
+  // Fetch available pairs on mount
   React.useEffect(() => {
     const fetchPairs = async () => {
       setLoadingPairs(true);
@@ -235,91 +326,68 @@ export default function Dashboard() {
       try {
         const info = await getExchangeInfo();
         const tradingPairs = info.symbols
-          .filter(s => s.status === 'TRADING' && s.isSpotTradingAllowed) // Filter for active spot pairs
-          .sort((a, b) => a.symbol.localeCompare(b.symbol)); // Sort alphabetically
-        allAvailablePairs = tradingPairs; // Store globally if needed elsewhere
+          .filter(s => s.status === 'TRADING' && s.isSpotTradingAllowed)
+          .sort((a, b) => a.symbol.localeCompare(b.symbol));
+        allAvailablePairs = tradingPairs;
         setAvailablePairs(tradingPairs);
         if (tradingPairs.length > 0 && !selectedPair) {
            setSelectedPair(tradingPairs[0].symbol); // Set default selected pair
+           setBacktestParams(prev => ({ ...prev, pair: tradingPairs[0].symbol })); // Also default backtest pair
         }
       } catch (err) {
         console.error("Failed to fetch exchange info:", err);
         setError("Piyasa verileri yüklenemedi. Lütfen daha sonra tekrar deneyin.");
-        toast({
-          title: "Hata",
-          description: "Binance pariteleri alınamadı.",
-          variant: "destructive",
-        });
+        toast({ title: "Hata", description: "Binance pariteleri alınamadı.", variant: "destructive" });
       } finally {
         setLoadingPairs(false);
       }
     };
     fetchPairs();
-  }, []); // Empty dependency array ensures this runs only once on mount
+  }, []);
 
-
-  // Fetch candlestick data when selectedPair or selectedInterval changes
+  // Fetch candlestick data
   React.useEffect(() => {
     const fetchCandleData = async () => {
-      if (!selectedPair) return; // Don't fetch if no pair is selected
-
+      if (!selectedPair) return;
       setLoadingCandles(true);
-      setError(null); // Clear previous errors specific to candle loading
+      setError(null);
       try {
-        const data = await getCandlestickData(selectedPair, selectedInterval, 100); // Fetch last 100 candles
+        const data = await getCandlestickData(selectedPair, selectedInterval, 100);
         setCandleData(data);
       } catch (err) {
         console.error(`Failed to fetch candlestick data for ${selectedPair}:`, err);
-         // Don't set a general error, let the chart show 'no data' or a message
-         setCandleData([]); // Clear data on error
-         toast({
-           title: "Grafik Hatası",
-           description: `${selectedPair} için grafik verisi yüklenemedi.`,
-           variant: "destructive",
-         });
+        setCandleData([]);
+        toast({ title: "Grafik Hatası", description: `${selectedPair} için grafik verisi yüklenemedi.`, variant: "destructive" });
       } finally {
         setLoadingCandles(false);
       }
     };
-
     fetchCandleData();
-  }, [selectedPair, selectedInterval]); // Re-run when pair or interval changes
+  }, [selectedPair, selectedInterval]);
 
+  // Fetch portfolio data
+  React.useEffect(() => {
+    const fetchPortfolio = async () => {
+      if (!activeUser) {
+        setPortfolioData(initialPortfolioData);
+        return;
+      }
+      setLoadingPortfolio(true);
+      try {
+        const balances = await getAccountBalances("dummyKey", "dummySecret");
+        setPortfolioData(balances);
+      } catch (err) {
+        console.error("Failed to fetch portfolio:", err);
+        toast({ title: "Portföy Hatası", description: "Hesap bakiyeleri yüklenemedi.", variant: "destructive" });
+        setPortfolioData(initialPortfolioData);
+      } finally {
+        setLoadingPortfolio(false);
+      }
+    };
+    fetchPortfolio();
+  }, [activeUser]);
 
-  // Fetch portfolio data (example: fetch when user logs in)
-   React.useEffect(() => {
-     const fetchPortfolio = async () => {
-       // Simulate fetching based on activeUser, but use placeholder data
-       if (!activeUser) {
-           setPortfolioData(initialPortfolioData); // Reset if logged out
-           return;
-       };
-       setLoadingPortfolio(true);
-       try {
-         // In a real app, you'd use activeUser to fetch specific keys/data
-         // const apiKey = getUserApiKey(activeUser);
-         // const secretKey = getUserSecretKey(activeUser);
-         // const balances = await getAccountBalances(apiKey, secretKey);
-
-         // Using placeholder from service for now
-         const balances = await getAccountBalances("dummyKey", "dummySecret");
-         setPortfolioData(balances);
-       } catch (err) {
-         console.error("Failed to fetch portfolio:", err);
-         toast({
-           title: "Portföy Hatası",
-           description: "Hesap bakiyeleri yüklenemedi.",
-           variant: "destructive",
-         });
-         setPortfolioData(initialPortfolioData); // Reset to initial on error
-       } finally {
-         setLoadingPortfolio(false);
-       }
-     };
-
-     fetchPortfolio();
-   }, [activeUser]); // Re-run when user changes
-
+  // --- Handlers ---
 
   const handleLogin = (username: string) => {
     setActiveUser(username);
@@ -328,25 +396,16 @@ export default function Dashboard() {
 
   const handleLogout = () => {
     setActiveUser(null);
-    // setPortfolioData(initialPortfolioData); // Clear portfolio on logout - Handled by useEffect
     toast({ title: 'Çıkış yapıldı.' });
   };
 
   const toggleBotStatus = () => {
      if (botStatus === 'stopped' && selectedPairsForBot.length === 0) {
-        toast({
-            title: "Başlatma Hatası",
-            description: "Lütfen botun çalışacağı en az bir parite seçin.",
-            variant: "destructive",
-        });
+        toast({ title: "Başlatma Hatası", description: "Lütfen botun çalışacağı en az bir parite seçin.", variant: "destructive" });
         return;
     }
     if (botStatus === 'stopped' && activeStrategies.length === 0) {
-        toast({
-            title: "Başlatma Hatası",
-            description: "Lütfen en az bir aktif strateji seçin.",
-            variant: "destructive",
-        });
+        toast({ title: "Başlatma Hatası", description: "Lütfen en az bir aktif strateji seçin.", variant: "destructive" });
         return;
     }
 
@@ -356,11 +415,11 @@ export default function Dashboard() {
     toast({ title: `Bot ${statusMessage}${pairsMessage}.` });
 
     if (botStatus === 'stopped') {
-        // TODO: Start the bot logic for selectedPairsForBot and activeStrategies
         console.log("Starting bot for pairs:", selectedPairsForBot, "with strategies:", activeStrategies);
+        // TODO: Implement actual bot start logic
     } else {
-        // TODO: Stop the bot logic
         console.log("Stopping bot...");
+        // TODO: Implement actual bot stop logic
     }
   };
 
@@ -380,11 +439,61 @@ export default function Dashboard() {
       );
   };
 
+  const handleAddNewStrategy = () => {
+      // Placeholder: In a real app, this would involve more complex logic,
+      // potentially saving the strategy configuration to a backend or state management.
+      if (!newStrategyName.trim()) {
+          toast({ title: "Hata", description: "Strateji adı boş olamaz.", variant: "destructive"});
+          return;
+      }
+      console.log("Adding new strategy (Placeholder):", { name: newStrategyName, description: newStrategyDescription });
+      toast({ title: "Strateji Eklendi (Simülasyon)", description: `${newStrategyName} başarıyla eklendi.` });
+      // Reset form and potentially close dialog (DialogClose handles closing)
+      setNewStrategyName('');
+      setNewStrategyDescription('');
+  }
 
-  // Component for rendering portfolio row to use the hook
+  // Backtesting Handlers
+  const handleBacktestParamChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | string, field: keyof BacktestParams) => {
+      const value = typeof e === 'string' ? e : e.target.value;
+      setBacktestParams(prev => ({
+          ...prev,
+          [field]: field === 'initialBalance' ? (value ? parseFloat(value) : 0) : value // Ensure balance is number
+      }));
+  };
+
+   const handleBacktestSelectChange = (value: string, field: keyof BacktestParams) => {
+       setBacktestParams(prev => ({ ...prev, [field]: value }));
+   };
+
+
+  const runBacktest = async () => {
+    setIsBacktesting(true);
+    setBacktestResult(null); // Clear previous results
+    try {
+      const result = await simulateBacktest(backtestParams);
+      setBacktestResult(result);
+       if (result.errorMessage) {
+          toast({ title: "Backtest Hatası", description: result.errorMessage, variant: "destructive" });
+       } else {
+          toast({ title: "Backtest Tamamlandı", description: `${backtestParams.strategyId} stratejisi ${backtestParams.pair} üzerinde test edildi.` });
+       }
+    } catch (error) {
+      console.error("Backtest simulation error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Bilinmeyen bir hata oluştu.";
+      setBacktestResult({ errorMessage, totalTrades: 0, winningTrades: 0, losingTrades: 0, winRate: 0, totalPnl: 0, totalPnlPercent: 0, maxDrawdown: 0 });
+      toast({ title: "Backtest Başarısız", description: errorMessage, variant: "destructive" });
+    } finally {
+      setIsBacktesting(false);
+    }
+  };
+
+
+  // --- Sub-Components for Rendering ---
+
   const PortfolioRow = ({ balance }: { balance: Balance }) => {
-      const formattedFree = useFormattedNumber(balance.free);
-      const formattedLocked = useFormattedNumber(balance.locked);
+      const formattedFree = useFormattedNumber(balance.free, { maximumFractionDigits: 8 });
+      const formattedLocked = useFormattedNumber(balance.locked, { maximumFractionDigits: 8 });
 
       return (
           <TableRow key={balance.asset}>
@@ -395,13 +504,10 @@ export default function Dashboard() {
       );
   };
 
-  // Component for rendering trade history row
    const TradeHistoryRow = ({ trade }: { trade: typeof tradeHistoryData[0] }) => {
        const formattedPrice = useFormattedNumber(trade.price);
        const formattedAmount = useFormattedNumber(trade.amount, { maximumFractionDigits: 8 });
-       // Calculate total client-side to ensure consistency if needed, or use pre-calculated value
        const formattedTotal = useFormattedNumber(trade.total);
-
 
        return (
            <TableRow key={trade.id}>
@@ -410,33 +516,27 @@ export default function Dashboard() {
                <TableCell className={trade.type === 'Alış' ? 'text-[hsl(var(--primary))]' : 'text-[hsl(var(--destructive))]'}>{trade.type}</TableCell>
                <TableCell className="text-right">{formattedPrice}</TableCell>
                <TableCell className="text-right">{formattedAmount}</TableCell>
-               {/* Optionally display total */}
-               {/* <TableCell className="text-right">{formattedTotal}</TableCell> */}
                <TableCell className="text-right">{trade.status}</TableCell>
            </TableRow>
        );
    };
 
-   // Component for rendering candlestick chart tooltip
    const ChartTooltipContent = ({ active, payload, label }: any) => {
-        // Use the direct client-side formatter for the tooltip content
-        const formattedLabel = formatNumberClientSide(label, { maximumFractionDigits: 4 });
-
         if (active && payload && payload.length) {
            const formattedValue = formatNumberClientSide(payload[0].value, { maximumFractionDigits: 4 });
+           const timeLabel = formatTimestamp(payload[0].payload.openTime);
            return (
-             <div className="custom-tooltip p-2 bg-background border border-border rounded shadow-lg">
-               <p className="label text-sm font-bold">{`Zaman: ${formatTimestamp(payload[0].payload.openTime)}`}</p>
+             <div className="custom-tooltip p-2 bg-card border border-border rounded shadow-lg text-card-foreground">
+               <p className="label text-sm font-bold">{`Zaman: ${timeLabel}`}</p>
                <p className="intro text-sm">{`${payload[0].name}: ${formattedValue}`}</p>
-               {/* Add more data points if needed */}
              </div>
            );
          }
-
        return null;
      };
 
 
+  // --- JSX ---
   return (
     <SidebarProvider>
       <Sidebar side="left" collapsible="icon" variant="sidebar">
@@ -544,6 +644,7 @@ export default function Dashboard() {
             </div>
         </SidebarFooter>
       </Sidebar>
+
       <SidebarInset>
         <header className="flex items-center justify-between p-4 border-b bg-card">
            <div className="flex items-center gap-4">
@@ -556,7 +657,7 @@ export default function Dashboard() {
                  <SelectValue placeholder={loadingPairs ? "Pariteler yükleniyor..." : "Parite Seçin"} />
                </SelectTrigger>
                <SelectContent>
-                 <ScrollArea className="h-[300px]"> {/* Add ScrollArea for long list */}
+                 <ScrollArea className="h-[300px]">
                     {loadingPairs ? (
                         <SelectItem value="loading" disabled>Yükleniyor...</SelectItem>
                     ) : availablePairs.length > 0 ? (
@@ -586,6 +687,7 @@ export default function Dashboard() {
              </Select>
            </div>
         </header>
+
         <main className="flex-1 p-4 overflow-auto">
 
          {error && (
@@ -620,7 +722,7 @@ export default function Dashboard() {
                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                        <XAxis dataKey="openTime" tickFormatter={formatTimestamp} stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 10 }} interval="preserveStartEnd" minTickGap={50} />
                        <YAxis stroke="hsl(var(--muted-foreground))" domain={['auto', 'auto']} tick={{ fontSize: 10 }} tickFormatter={(value) => formatTickNumber(value, { maximumFractionDigits: 4 })} />
-                       <ChartTooltip content={<ChartTooltipContent />} />
+                       <ChartTooltip content={<ChartTooltipContent />} cursor={{ stroke: 'hsl(var(--accent))', strokeWidth: 1 }}/>
                        <Legend />
                        <Line type="monotone" dataKey="close" name="Kapanış" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
                        {/* TODO: Add buy/sell markers based on tradeHistoryData or bot signals */}
@@ -663,7 +765,7 @@ export default function Dashboard() {
                                     <Loader2 className="inline-block h-6 w-6 animate-spin text-muted-foreground" />
                                 </TableCell>
                             </TableRow>
-                        ) : portfolioData.length > 0 && portfolioData[0].asset !== '...' ? ( // Check if not initial placeholder
+                        ) : portfolioData.length > 0 && portfolioData[0].asset !== '...' ? (
                            portfolioData.map((balance) => (
                               <PortfolioRow key={balance.asset} balance={balance} />
                            ))
@@ -739,73 +841,44 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent>
                 <Accordion type="single" collapsible className="w-full" defaultValue="api-spot">
-                  <AccordionItem value="api-spot" id="api-spot">
+                  {/* Accordion Items for API keys */}
+                   <AccordionItem value="api-spot" id="api-spot">
                     <AccordionTrigger>Binance Spot API</AccordionTrigger>
                     <AccordionContent className="space-y-4 p-4">
-                      <div>
-                        <Label htmlFor="spot-api-key">API Key</Label>
-                        <Input id="spot-api-key" placeholder="Spot API Key Girin" />
-                      </div>
-                      <div>
-                        <Label htmlFor="spot-secret-key">Secret Key</Label>
-                        <Input id="spot-secret-key" type="password" placeholder="Spot Secret Key Girin" />
-                      </div>
+                      <div><Label htmlFor="spot-api-key">API Key</Label><Input id="spot-api-key" placeholder="Spot API Key Girin" /></div>
+                      <div><Label htmlFor="spot-secret-key">Secret Key</Label><Input id="spot-secret-key" type="password" placeholder="Spot Secret Key Girin" /></div>
                       <Button size="sm">Kaydet</Button>
                     </AccordionContent>
                   </AccordionItem>
                   <AccordionItem value="api-futures" id="api-futures">
                     <AccordionTrigger>Binance Futures API</AccordionTrigger>
                     <AccordionContent className="space-y-4 p-4">
-                       <div>
-                        <Label htmlFor="futures-api-key">API Key</Label>
-                        <Input id="futures-api-key" placeholder="Futures API Key Girin" />
-                      </div>
-                      <div>
-                        <Label htmlFor="futures-secret-key">Secret Key</Label>
-                        <Input id="futures-secret-key" type="password" placeholder="Futures Secret Key Girin" />
-                      </div>
-                      <Button size="sm">Kaydet</Button>
+                       <div><Label htmlFor="futures-api-key">API Key</Label><Input id="futures-api-key" placeholder="Futures API Key Girin" /></div>
+                       <div><Label htmlFor="futures-secret-key">Secret Key</Label><Input id="futures-secret-key" type="password" placeholder="Futures Secret Key Girin" /></div>
+                       <Button size="sm">Kaydet</Button>
                     </AccordionContent>
                   </AccordionItem>
                   <AccordionItem value="api-testnet-spot" id="api-testnet-spot">
                     <AccordionTrigger>Binance Testnet Spot API</AccordionTrigger>
                      <AccordionContent className="space-y-4 p-4">
-                       <div>
-                        <Label htmlFor="testnet-spot-api-key">API Key</Label>
-                        <Input id="testnet-spot-api-key" placeholder="Testnet Spot API Key Girin" />
-                      </div>
-                      <div>
-                        <Label htmlFor="testnet-spot-secret-key">Secret Key</Label>
-                        <Input id="testnet-spot-secret-key" type="password" placeholder="Testnet Spot Secret Key Girin" />
-                      </div>
-                      <Button size="sm">Kaydet</Button>
+                       <div><Label htmlFor="testnet-spot-api-key">API Key</Label><Input id="testnet-spot-api-key" placeholder="Testnet Spot API Key Girin" /></div>
+                       <div><Label htmlFor="testnet-spot-secret-key">Secret Key</Label><Input id="testnet-spot-secret-key" type="password" placeholder="Testnet Spot Secret Key Girin" /></div>
+                       <Button size="sm">Kaydet</Button>
                     </AccordionContent>
                   </AccordionItem>
                   <AccordionItem value="api-testnet-futures" id="api-testnet-futures">
                     <AccordionTrigger>Binance Testnet Futures API</AccordionTrigger>
                      <AccordionContent className="space-y-4 p-4">
-                       <div>
-                        <Label htmlFor="testnet-futures-api-key">API Key</Label>
-                        <Input id="testnet-futures-api-key" placeholder="Testnet Futures API Key Girin" />
-                      </div>
-                      <div>
-                        <Label htmlFor="testnet-futures-secret-key">Secret Key</Label>
-                        <Input id="testnet-futures-secret-key" type="password" placeholder="Testnet Futures Secret Key Girin" />
-                      </div>
-                      <Button size="sm">Kaydet</Button>
+                       <div><Label htmlFor="testnet-futures-api-key">API Key</Label><Input id="testnet-futures-api-key" placeholder="Testnet Futures API Key Girin" /></div>
+                       <div><Label htmlFor="testnet-futures-secret-key">Secret Key</Label><Input id="testnet-futures-secret-key" type="password" placeholder="Testnet Futures Secret Key Girin" /></div>
+                       <Button size="sm">Kaydet</Button>
                     </AccordionContent>
                   </AccordionItem>
                   <AccordionItem value="telegram" id="telegram">
                      <AccordionTrigger>Telegram Bot Entegrasyonu</AccordionTrigger>
                      <AccordionContent className="space-y-4 p-4">
-                       <div>
-                         <Label htmlFor="telegram-token">Bot Token</Label>
-                         <Input id="telegram-token" placeholder="Telegram Bot Token Girin" />
-                       </div>
-                       <div>
-                         <Label htmlFor="telegram-chat-id">Chat ID</Label>
-                         <Input id="telegram-chat-id" placeholder="Telegram Grup/Kullanıcı ID Girin" />
-                       </div>
+                       <div><Label htmlFor="telegram-token">Bot Token</Label><Input id="telegram-token" placeholder="Telegram Bot Token Girin" /></div>
+                       <div><Label htmlFor="telegram-chat-id">Chat ID</Label><Input id="telegram-chat-id" placeholder="Telegram Grup/Kullanıcı ID Girin" /></div>
                        <Button size="sm">Kaydet</Button>
                      </AccordionContent>
                    </AccordionItem>
@@ -822,7 +895,7 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent>
                  <h4 className="font-semibold mb-2">Aktif Stratejiler</h4>
-                 <div className="flex flex-wrap gap-2 mb-4 min-h-[32px]"> {/* Added min-height */}
+                 <div className="flex flex-wrap gap-2 mb-4 min-h-[32px]">
                     {activeStrategies.length === 0 && <span className="text-muted-foreground text-sm italic">Aktif strateji yok.</span>}
                     {activeStrategies.map((stratId) => {
                         const strategy = availableStrategies.find(s => s.id === stratId);
@@ -862,7 +935,56 @@ export default function Dashboard() {
                       ))}
                     </div>
                  </ScrollArea>
-                 <Button size="sm" className="mt-4" disabled><PlusCircle className="mr-2 h-4 w-4"/> Yeni Strateji Ekle (Yapılandırılmadı)</Button>
+                  {/* Dialog for Adding New Strategy */}
+                  <Dialog>
+                       <DialogTrigger asChild>
+                           <Button size="sm" className="mt-4"><PlusCircle className="mr-2 h-4 w-4"/> Yeni Strateji Ekle</Button>
+                       </DialogTrigger>
+                       <DialogContent className="sm:max-w-[425px]">
+                           <DialogHeader>
+                           <DialogTitle>Yeni Strateji Ekle</DialogTitle>
+                           <DialogDescription>
+                               Yeni bir ticaret stratejisi tanımlayın. (Bu özellik henüz tam olarak çalışmamaktadır.)
+                           </DialogDescription>
+                           </DialogHeader>
+                           <div className="grid gap-4 py-4">
+                           <div className="grid grid-cols-4 items-center gap-4">
+                               <Label htmlFor="new-strategy-name" className="text-right">
+                               Ad
+                               </Label>
+                               <Input
+                                   id="new-strategy-name"
+                                   value={newStrategyName}
+                                   onChange={(e) => setNewStrategyName(e.target.value)}
+                                   className="col-span-3"
+                                   placeholder="Örn: Süper Trend Takipçisi"
+                               />
+                           </div>
+                           <div className="grid grid-cols-4 items-center gap-4">
+                               <Label htmlFor="new-strategy-desc" className="text-right">
+                               Açıklama
+                               </Label>
+                               <Textarea
+                                    id="new-strategy-desc"
+                                    value={newStrategyDescription}
+                                    onChange={(e) => setNewStrategyDescription(e.target.value)}
+                                    className="col-span-3"
+                                    placeholder="Stratejinin nasıl çalıştığını kısaca açıklayın..."
+                                />
+                           </div>
+                           {/* Add more fields for strategy parameters if needed */}
+                           </div>
+                           <DialogFooter>
+                               <DialogClose asChild>
+                                   <Button type="button" variant="secondary">İptal</Button>
+                               </DialogClose>
+                               {/* Combine Add and Close */}
+                               <DialogClose asChild>
+                                   <Button type="button" onClick={handleAddNewStrategy}>Ekle</Button>
+                               </DialogClose>
+                           </DialogFooter>
+                       </DialogContent>
+                  </Dialog>
               </CardContent>
             </Card>
 
@@ -910,7 +1032,7 @@ export default function Dashboard() {
                       </div>
                   )}
                    <div className="mt-4 flex gap-2">
-                       <Button size="sm" variant="outline" onClick={() => setSelectedPairsForBot(availablePairs.map(p => p.symbol))} disabled={loadingPairs}>
+                       <Button size="sm" variant="outline" onClick={() => setSelectedPairsForBot(availablePairs.map(p => p.symbol))} disabled={loadingPairs || availablePairs.length === 0}>
                            Tümünü Seç
                        </Button>
                        <Button size="sm" variant="outline" onClick={() => setSelectedPairsForBot([])}>
@@ -919,7 +1041,6 @@ export default function Dashboard() {
                    </div>
                </CardContent>
              </Card>
-
 
             {/* Risk Management */}
             <Card id="risk-management" className="lg:col-span-3">
@@ -945,7 +1066,6 @@ export default function Dashboard() {
                </CardContent>
             </Card>
 
-
             {/* Backtesting */}
             <Card id="strategy-backtest" className="lg:col-span-3">
               <CardHeader>
@@ -957,7 +1077,7 @@ export default function Dashboard() {
                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                      <div>
                          <Label htmlFor="backtest-strategy">Test Edilecek Strateji</Label>
-                         <Select>
+                         <Select value={backtestParams.strategyId} onValueChange={(value) => handleBacktestSelectChange(value, 'strategyId')}>
                             <SelectTrigger id="backtest-strategy">
                                 <SelectValue placeholder="Strateji Seçin" />
                             </SelectTrigger>
@@ -970,12 +1090,12 @@ export default function Dashboard() {
                      </div>
                      <div>
                           <Label htmlFor="backtest-pair">Parite</Label>
-                         <Select disabled={loadingPairs}>
+                         <Select value={backtestParams.pair} onValueChange={(value) => handleBacktestSelectChange(value, 'pair')} disabled={loadingPairs}>
                             <SelectTrigger id="backtest-pair">
                                 <SelectValue placeholder={loadingPairs ? "Yükleniyor..." : "Parite Seçin"} />
                             </SelectTrigger>
                            <SelectContent>
-                              <ScrollArea className="h-[300px]"> {/* Add ScrollArea */}
+                              <ScrollArea className="h-[300px]">
                                   {loadingPairs ? (
                                        <SelectItem value="loading" disabled>Yükleniyor...</SelectItem>
                                    ) : availablePairs.length > 0 ? (
@@ -993,7 +1113,7 @@ export default function Dashboard() {
                       </div>
                        <div>
                           <Label htmlFor="backtest-interval">Zaman Aralığı</Label>
-                          <Select defaultValue="1h">
+                          <Select value={backtestParams.interval} onValueChange={(value) => handleBacktestSelectChange(value, 'interval')}>
                             <SelectTrigger id="backtest-interval">
                                <SelectValue placeholder="Aralık Seçin" />
                             </SelectTrigger>
@@ -1009,22 +1129,54 @@ export default function Dashboard() {
                        </div>
                       <div>
                          <Label htmlFor="backtest-start-date">Başlangıç Tarihi</Label>
-                         <Input id="backtest-start-date" type="date" />
+                         <Input id="backtest-start-date" type="date" value={backtestParams.startDate} onChange={(e) => handleBacktestParamChange(e, 'startDate')} />
                       </div>
                       <div>
                          <Label htmlFor="backtest-end-date">Bitiş Tarihi</Label>
-                         <Input id="backtest-end-date" type="date" />
+                         <Input id="backtest-end-date" type="date" value={backtestParams.endDate} onChange={(e) => handleBacktestParamChange(e, 'endDate')} />
                       </div>
                       <div>
                           <Label htmlFor="initial-balance">Başlangıç Bakiyesi (USDT)</Label>
-                          <Input id="initial-balance" type="number" placeholder="1000" />
+                          <Input id="initial-balance" type="number" placeholder="1000" value={backtestParams.initialBalance} onChange={(e) => handleBacktestParamChange(e, 'initialBalance')} />
                       </div>
                  </div>
-                <Button disabled><FlaskConical className="mr-2 h-4 w-4"/> Testi Başlat (Yapılandırılmadı)</Button>
-                <div className="mt-4 border p-4 rounded-md bg-muted/50">
+                 <Button onClick={runBacktest} disabled={isBacktesting}>
+                    {isBacktesting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FlaskConical className="mr-2 h-4 w-4"/>}
+                    {isBacktesting ? 'Test Çalışıyor...' : 'Testi Başlat'}
+                </Button>
+
+                {/* Backtest Results Area */}
+                <div className="mt-4 border p-4 rounded-md bg-muted/50 min-h-[100px]">
                     <h4 className="font-semibold mb-2">Test Sonuçları</h4>
-                    <p className="text-sm text-muted-foreground">Test sonuçları burada gösterilecek...</p>
-                    {/* Placeholder for results like PnL, Win Rate, Max Drawdown etc. */}
+                    {isBacktesting && (
+                         <div className="flex items-center justify-center h-full text-muted-foreground">
+                             <Loader2 className="h-6 w-6 animate-spin mr-2" /> Test ediliyor...
+                         </div>
+                    )}
+                    {!isBacktesting && backtestResult && !backtestResult.errorMessage && (
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 text-sm">
+                            <div><span className="font-medium">Toplam İşlem:</span> {backtestResult.totalTrades}</div>
+                            <div><span className="font-medium">Kazanan İşlem:</span> {backtestResult.winningTrades}</div>
+                            <div><span className="font-medium">Kaybeden İşlem:</span> {backtestResult.losingTrades}</div>
+                            <div><span className="font-medium">Kazanma Oranı:</span> {formatNumberClientSide(backtestResult.winRate)}%</div>
+                            <div><span className="font-medium">Maks. Kayıp:</span> {formatNumberClientSide(backtestResult.maxDrawdown)}%</div>
+                             <div className={cn("font-semibold", backtestResult.totalPnl >= 0 ? "text-[hsl(var(--primary))]" : "text-[hsl(var(--destructive))]")}>
+                                <span className="font-medium text-foreground">Net Kar/Zarar:</span> {formatNumberClientSide(backtestResult.totalPnl, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 })} ({formatNumberClientSide(backtestResult.totalPnlPercent)}%)
+                            </div>
+                            {/* Add Sharpe Ratio if calculated */}
+                            {/* <div><span className="font-medium">Sharpe Oranı:</span> {backtestResult.sharpeRatio ? formatNumberClientSide(backtestResult.sharpeRatio) : 'N/A'}</div> */}
+                        </div>
+                    )}
+                    {!isBacktesting && backtestResult && backtestResult.errorMessage && (
+                         <Alert variant="destructive" className="mt-2">
+                             <AlertCircle className="h-4 w-4" />
+                             <AlertTitle>Backtest Hatası</AlertTitle>
+                             <AlertDescription>{backtestResult.errorMessage}</AlertDescription>
+                         </Alert>
+                    )}
+                    {!isBacktesting && !backtestResult && (
+                        <p className="text-sm text-muted-foreground italic">Test sonuçları burada gösterilecek...</p>
+                    )}
                  </div>
               </CardContent>
             </Card>
@@ -1035,3 +1187,4 @@ export default function Dashboard() {
     </SidebarProvider>
   );
 }
+

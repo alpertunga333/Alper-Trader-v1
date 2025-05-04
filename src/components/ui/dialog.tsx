@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -12,7 +13,7 @@ const DialogTrigger = DialogPrimitive.Trigger
 
 const DialogPortal = DialogPrimitive.Portal
 
-const DialogClose = DialogPrimitive.Close
+const DialogClose = DialogPrimitive.Close // Export DialogClose
 
 const DialogOverlay = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Overlay>,
@@ -112,7 +113,7 @@ export {
   Dialog,
   DialogPortal,
   DialogOverlay,
-  DialogClose,
+  DialogClose, // Exported here
   DialogTrigger,
   DialogContent,
   DialogHeader,
