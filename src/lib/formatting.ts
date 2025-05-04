@@ -2,12 +2,16 @@ import * as React from 'react';
 import { useState, useEffect } from 'react';
 
 /**
- * Formats a timestamp (number or string) into a localized time string (HH:MM).
+ * Formats a timestamp (number or string) into a localized time string.
  * Returns an empty string if the timestamp is invalid.
  * @param timestamp The timestamp in milliseconds (number or numeric string).
+ * @param format 'full' (default) for HH:MM:SS, 'short' for HH:MM.
  * @returns Formatted time string or empty string.
  */
-export const formatTimestamp = (timestamp: number | string | undefined): string => {
+export const formatTimestamp = (
+    timestamp: number | string | undefined,
+    format: 'full' | 'short' = 'full' // Default to full format
+): string => {
     if (timestamp === undefined || timestamp === null) return '';
     const numericTimestamp = typeof timestamp === 'string' ? parseInt(timestamp, 10) : timestamp;
     if (isNaN(numericTimestamp)) return '';
@@ -17,13 +21,17 @@ export const formatTimestamp = (timestamp: number | string | undefined): string 
 
     // Use try-catch for safety, though modern browsers support these options widely
     try {
-        return date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+        const options: Intl.DateTimeFormatOptions = format === 'short'
+            ? { hour: '2-digit', minute: '2-digit' } // HH:MM for short
+            : { hour: '2-digit', minute: '2-digit', second: '2-digit' }; // HH:MM:SS for full
+        return date.toLocaleTimeString('tr-TR', options);
     } catch (error) {
         console.error("Error formatting timestamp:", error);
         // Fallback to a basic format if locale options fail
         const hours = date.getHours().toString().padStart(2, '0');
         const minutes = date.getMinutes().toString().padStart(2, '0');
-        return `${hours}:${minutes}`;
+        const seconds = date.getSeconds().toString().padStart(2, '0');
+        return format === 'short' ? `${hours}:${minutes}` : `${hours}:${minutes}:${seconds}`;
     }
 };
 
@@ -32,6 +40,11 @@ export const formatTimestamp = (timestamp: number | string | undefined): string 
  * Formats a number or numeric string into a localized string representation,
  * handling potential comma decimal separators and ensuring client-side execution.
  * Returns 'N/A' for invalid inputs. Clamps fraction digits to prevent RangeError.
+ *
+ * IMPORTANT: This function should primarily be used on the client-side or within
+ * `useEffect` hooks to prevent hydration mismatches. For direct rendering in SSR/SSG,
+ * use `useFormattedNumber` hook or ensure consistent server/client formatting.
+ *
  * @param value The number or string to format.
  * @param options Intl.NumberFormat options.
  * @returns Formatted number string or 'N/A'.
@@ -54,8 +67,23 @@ export const formatNumberClientSide = (value: number | string | undefined, optio
     }
 
     // --- Start: Clamp fraction digits ---
-    let minDigits = options?.minimumFractionDigits ?? (options?.style === 'currency' ? 2 : undefined); // Sensible default for currency, else undefined
-    let maxDigits = options?.maximumFractionDigits ?? (options?.style === 'currency' ? 8 : 3); // Default max for currency, else 3
+    // Set sensible defaults based on style
+    let defaultMinDigits: number | undefined;
+    let defaultMaxDigits: number | undefined;
+    if (options?.style === 'currency') {
+        defaultMinDigits = 2;
+        defaultMaxDigits = 8; // Allow more precision for crypto
+    } else if (options?.style === 'percent') {
+        defaultMinDigits = 0;
+        defaultMaxDigits = 2;
+    } else {
+        // Default for plain numbers or other styles
+        defaultMinDigits = undefined; // Let it infer usually
+        defaultMaxDigits = 3;
+    }
+
+    let minDigits = options?.minimumFractionDigits ?? defaultMinDigits;
+    let maxDigits = options?.maximumFractionDigits ?? defaultMaxDigits;
 
     // Clamp values to the typical valid range [0, 20]
     minDigits = minDigits !== undefined ? Math.max(0, Math.min(20, minDigits)) : undefined;
@@ -67,15 +95,16 @@ export const formatNumberClientSide = (value: number | string | undefined, optio
     }
     // --- End: Clamp fraction digits ---
 
+    // Construct safe options, only applying clamped values if they were initially defined or had defaults
     const safeOptions: Intl.NumberFormatOptions = {
         ...options, // Apply original options first
-        // Apply potentially clamped values, only if they were defined initially or had defaults
         ...(minDigits !== undefined && { minimumFractionDigits: minDigits }),
         ...(maxDigits !== undefined && { maximumFractionDigits: maxDigits }),
     };
 
-    // Special handling for compact notation: Let it infer digits if not explicitly set
-    if (options?.notation === 'compact') {
+
+     // Special handling for compact notation: Let it infer digits if not explicitly set
+     if (options?.notation === 'compact') {
          // If fraction digits were NOT explicitly provided in the original options, remove them for compact
          if (options.minimumFractionDigits === undefined && options.maximumFractionDigits === undefined) {
              delete safeOptions.minimumFractionDigits;
@@ -98,14 +127,15 @@ export const formatNumberClientSide = (value: number | string | undefined, optio
 
 /**
  * Hook to format a number client-side, preventing hydration mismatches.
+ * Returns the client-formatted value once available, otherwise a server-safe placeholder.
  * @param value The number or string to format.
  * @param options Intl.NumberFormat options.
  * @returns Formatted number string or a placeholder/server value initially.
  */
-export const useFormattedNumber = (value: number | string | undefined, options?: Intl.NumberFormatOptions) => {
+export const useFormattedNumber = (value: number | string | undefined, options?: Intl.NumberFormatOptions): string => {
     const [formatted, setFormatted] = useState<string | null>(null);
 
-    // Calculate server value based on clamped digits
+    // Calculate server value based on clamped digits (simple toFixed)
     const serverValue = React.useMemo(() => {
         const numValue = typeof value === 'string' ? parseFloat(value.replace(',', '.')) : value;
         if (typeof numValue !== 'number' || isNaN(numValue)) return 'N/A';
@@ -123,7 +153,7 @@ export const useFormattedNumber = (value: number | string | undefined, options?:
 
 
     useEffect(() => {
-        // Only run formatting on the client after mount
+        // Only run full client-side formatting after mount
         const clientFormatted = formatNumberClientSide(value, options);
         setFormatted(clientFormatted);
         // eslint-disable-next-line react-hooks/exhaustive-deps

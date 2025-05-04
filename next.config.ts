@@ -3,10 +3,12 @@ import type {NextConfig} from 'next';
 const nextConfig: NextConfig = {
   /* config options here */
   typescript: {
-    ignoreBuildErrors: true,
+    // Recommended: Remove or set to false for production builds
+    // ignoreBuildErrors: true,
   },
   eslint: {
-    ignoreDuringBuilds: true,
+    // Recommended: Remove or set to false for production builds
+    // ignoreDuringBuilds: true,
   },
   images: {
     remotePatterns: [
@@ -18,6 +20,10 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // Ensure experimental features if any are compatible with deployment target
+  // experimental: {
+  //   serverActions: true, // Example if using server actions explicitly
+  // },
 };
 
 export default nextConfig;
