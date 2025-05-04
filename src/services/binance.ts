@@ -411,33 +411,63 @@ export async function getExchangeInfo(): Promise<ExchangeInfo> {
       throw new Error("Simulated API Error: Could not reach Binance servers.");
   }
 
-  // Generate a list of common placeholder symbols
-  const placeholderSymbols: SymbolInfo[] = [
-    { symbol: 'BTCUSDT', status: 'TRADING', baseAsset: 'BTC', quoteAsset: 'USDT', isSpotTradingAllowed: true },
-    { symbol: 'ETHUSDT', status: 'TRADING', baseAsset: 'ETH', quoteAsset: 'USDT', isSpotTradingAllowed: true },
-    { symbol: 'BNBBTC', status: 'TRADING', baseAsset: 'BNB', quoteAsset: 'BTC', isSpotTradingAllowed: true },
-    { symbol: 'SOLUSDT', status: 'TRADING', baseAsset: 'SOL', quoteAsset: 'USDT', isSpotTradingAllowed: true },
-    { symbol: 'XRPUSDT', status: 'TRADING', baseAsset: 'XRP', quoteAsset: 'USDT', isSpotTradingAllowed: true },
-    { symbol: 'ADAUSDT', status: 'TRADING', baseAsset: 'ADA', quoteAsset: 'USDT', isSpotTradingAllowed: true },
-    { symbol: 'DOGEUSDT', status: 'TRADING', baseAsset: 'DOGE', quoteAsset: 'USDT', isSpotTradingAllowed: true },
-    { symbol: 'LTCBTC', status: 'TRADING', baseAsset: 'LTC', quoteAsset: 'BTC', isSpotTradingAllowed: true },
-    { symbol: 'MATICUSDT', status: 'TRADING', baseAsset: 'MATIC', quoteAsset: 'USDT', isSpotTradingAllowed: true },
-    { symbol: 'DOTUSDT', status: 'TRADING', baseAsset: 'DOT', quoteAsset: 'USDT', isSpotTradingAllowed: true },
-    { symbol: 'LINKUSDT', status: 'TRADING', baseAsset: 'LINK', quoteAsset: 'USDT', isSpotTradingAllowed: true },
-    { symbol: 'SHIBUSDT', status: 'BREAK', baseAsset: 'SHIB', quoteAsset: 'USDT', isSpotTradingAllowed: false }, // Example non-trading
+  // Generate a list of approximately 100 popular placeholder symbols
+  const baseAssets = [
+      'BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE', 'LTC', 'MATIC', 'DOT',
+      'LINK', 'SHIB', 'AVAX', 'TRX', 'UNI', 'ATOM', 'ETC', 'XLM', 'FIL', 'ICP',
+      'HBAR', 'VET', 'APE', 'NEAR', 'ALGO', 'FTM', 'MANA', 'SAND', 'AXS', 'EGLD',
+      'THETA', 'XTZ', 'FLOW', 'AAVE', 'GRT', 'MKR', 'ZEC', 'EOS', 'NEO', 'WAVES',
+      'KSM', 'SNX', 'CHZ', 'ENJ', 'CRV', 'BAT', 'SUSHI', 'YFI', 'COMP', '1INCH',
+      'GALA', 'ANKR', 'IOTX', 'CELO', 'GMT', 'RUNE', 'AUDIO', 'MASK', 'SKL', 'IMX',
+      'DYDX', 'ENS', 'LRC', 'REN', 'KNC', 'ZRX', 'STORJ', 'RLC', 'OGN', 'BAND',
+      'UMA', 'API3', 'TRB', 'PERP', 'LPT', 'NMR', 'RAD', 'BADGER', 'COTI', 'ARPA',
+      'CTSI', 'DUSK', 'KEEP', 'NKN', 'ORN', 'PNT', 'POLY', 'POWR', 'QKC', 'RIF',
+      'STMX', 'TFUEL', 'TKO', 'TLM', 'UTK', 'VTHO', 'WRX', 'XVS', 'YGG', 'ZIL'
   ];
+  const quoteAssets = ['USDT', 'BUSD', 'BTC', 'ETH', 'TRY']; // Include TRY
 
-   // Add some more generic placeholders to simulate a larger list
-   const moreAssets = ['AVAX', 'TRX', 'UNI', 'ATOM', 'ETC', 'XLM', 'FIL', 'ICP', 'HBAR', 'VET'];
-   moreAssets.forEach(asset => {
-       placeholderSymbols.push({ symbol: `${asset}USDT`, status: 'TRADING', baseAsset: asset, quoteAsset: 'USDT', isSpotTradingAllowed: true });
-       placeholderSymbols.push({ symbol: `${asset}BTC`, status: 'TRADING', baseAsset: asset, quoteAsset: 'BTC', isSpotTradingAllowed: true });
-   });
+  const placeholderSymbols: SymbolInfo[] = [];
+  let symbolCount = 0;
+
+  for (const base of baseAssets) {
+      if (symbolCount >= 100) break;
+      // Prioritize USDT pairs
+      if (base !== 'USDT') {
+          placeholderSymbols.push({ symbol: `${base}USDT`, status: 'TRADING', baseAsset: base, quoteAsset: 'USDT', isSpotTradingAllowed: true });
+          symbolCount++;
+      }
+      // Add some BUSD pairs
+      if (base !== 'BUSD' && Math.random() < 0.5 && symbolCount < 100) {
+           placeholderSymbols.push({ symbol: `${base}BUSD`, status: 'TRADING', baseAsset: base, quoteAsset: 'BUSD', isSpotTradingAllowed: true });
+           symbolCount++;
+      }
+        // Add some TRY pairs
+      if (base !== 'TRY' && ['BTC', 'ETH', 'XRP', 'DOGE', 'SHIB'].includes(base) && symbolCount < 100) { // Only popular ones vs TRY
+           placeholderSymbols.push({ symbol: `${base}TRY`, status: 'TRADING', baseAsset: base, quoteAsset: 'TRY', isSpotTradingAllowed: true });
+           symbolCount++;
+      }
+      // Add some BTC pairs (except for BTC itself)
+      if (base !== 'BTC' && Math.random() < 0.3 && symbolCount < 100) {
+          placeholderSymbols.push({ symbol: `${base}BTC`, status: 'TRADING', baseAsset: base, quoteAsset: 'BTC', isSpotTradingAllowed: true });
+          symbolCount++;
+      }
+       // Add some ETH pairs (except for ETH itself)
+       if (base !== 'ETH' && Math.random() < 0.2 && symbolCount < 100) {
+           placeholderSymbols.push({ symbol: `${base}ETH`, status: 'TRADING', baseAsset: base, quoteAsset: 'ETH', isSpotTradingAllowed: true });
+           symbolCount++;
+       }
+  }
+
+    // Add a non-trading pair example
+   if (!placeholderSymbols.find(p => p.symbol === 'SHIBUSDT')) {
+        placeholderSymbols.push({ symbol: 'SHIBUSDT', status: 'BREAK', baseAsset: 'SHIB', quoteAsset: 'USDT', isSpotTradingAllowed: false });
+   }
 
 
   return {
     timezone: 'UTC',
     serverTime: Date.now(),
-    symbols: placeholderSymbols,
+    // Sort symbols alphabetically for consistency
+    symbols: placeholderSymbols.sort((a, b) => a.symbol.localeCompare(b.symbol)),
   };
 }
