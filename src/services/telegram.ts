@@ -12,16 +12,19 @@ async function makeTelegramRequest(botToken: string, method: string, params: Rec
 
         const data = await response.json();
 
+        // Log the error but return the data containing 'ok: false' and 'description'
+        // Let the calling function decide how to handle the specific error.
         if (!response.ok || !data.ok) {
             console.error(`Telegram API Error (${method}, Status: ${response.status}): ${data.description || 'Unknown error'}`);
-            // Throw a specific error or return data with ok: false
-            throw new Error(`Telegram API Error: ${data.description || `HTTP ${response.status}`}`);
+            // Return the error response instead of throwing immediately
+            // This allows the caller (e.g., validateChatId) to check the specific error message.
+             return data; // e.g., { ok: false, error_code: 400, description: "Bad Request: chat not found" }
         }
 
         return data; // Contains { ok: true, result: ... }
     } catch (error) {
         console.error(`Error during Telegram request (${method}):`, error);
-        // Rethrow a generic error or the specific one from above
+        // Rethrow a generic error for network/parsing issues
         throw new Error(`Failed to execute Telegram API method ${method}: ${error instanceof Error ? error.message : error}`);
     }
 }
@@ -38,7 +41,7 @@ async function makeTelegramRequest(botToken: string, method: string, params: Rec
  * @param chatId The Telegram chat ID (can be a user ID or a group/channel ID).
  * @param parseMode Optional parse mode ('MarkdownV2' or 'HTML'). Defaults to undefined (plain text).
  * @returns A promise that resolves when the message is attempted to be sent. It might not guarantee delivery success on Telegram's side, but confirms the API call was made.
- * @throws Error if the API call fails significantly (e.g., network error, invalid token).
+ * @throws Error if the API call fails significantly (e.g., network error, invalid token, or specific Telegram error).
  */
 export async function sendMessage(
   message: string,
@@ -63,7 +66,13 @@ export async function sendMessage(
            params.parse_mode = parseMode;
        }
 
-       await makeTelegramRequest(botToken, 'sendMessage', params);
+       const response = await makeTelegramRequest(botToken, 'sendMessage', params);
+
+       // Check if the API call itself reported an error (e.g., chat not found)
+       if (!response.ok) {
+            throw new Error(`Telegram API Error (sendMessage): ${response.description || `Error code ${response.error_code}`}`);
+        }
+
        console.log("Telegram sendMessage: API request successful.");
 
    } catch (error) {
@@ -83,12 +92,13 @@ export async function validateBotToken(botToken: string): Promise<boolean> {
     console.log("Validating Telegram Bot Token...");
     try {
         const response = await makeTelegramRequest(botToken, 'getMe');
-        const isValid = response && response.ok;
+        // Check the 'ok' field in the response
+        const isValid = response && response.ok === true;
         console.log("Telegram Bot Token validation result:", isValid);
         return isValid;
     } catch (error) {
-         // Log the error but return false for validation purposes
-        console.warn("Telegram Bot Token validation failed:", error);
+         // Log the error but return false for validation purposes (covers network errors etc.)
+        console.warn("Telegram Bot Token validation failed (request error):", error);
         return false;
     }
 }
@@ -99,6 +109,7 @@ export async function validateBotToken(botToken: string): Promise<boolean> {
  * @param botToken A *valid* Telegram bot token.
  * @param chatId The Chat ID to validate.
  * @returns True if the chat ID is valid and the bot has access, false otherwise.
+ * @throws Error specifically if the error indicates 'chat not found' to allow specific handling.
  */
 export async function validateChatId(botToken: string, chatId: string): Promise<boolean> {
      if (!botToken || !chatId) return false;
@@ -109,14 +120,24 @@ export async function validateChatId(botToken: string, chatId: string): Promise<
             chat_id: chatId,
             action: 'typing',
         });
-         const isValid = response && response.ok;
+         // Check the 'ok' field in the response
+         const isValid = response && response.ok === true;
          console.log(`Telegram Chat ID ${chatId} validation result:`, isValid);
-         return isValid;
+
+          // If not valid, check for specific 'chat not found' error and throw it
+         if (!isValid && response.description && response.description.toLowerCase().includes('chat not found')) {
+            throw new Error(`Telegram API Error: chat not found`); // Throw specific error
+         }
+
+         return isValid; // Return true if ok, false for other errors
     } catch (error) {
-        // Log the error but return false for validation purposes
+        // Log the error but return false for validation purposes, unless it's the specific "chat not found" error which is re-thrown
         console.warn(`Telegram Chat ID ${chatId} validation failed:`, error);
-        // Specific error check (example): 'Bad Request: chat not found'
-        // if (error instanceof Error && error.message.includes('chat not found')) { ... }
+        // If the error is the specific one we threw, re-throw it
+        if (error instanceof Error && error.message.includes('chat not found')) {
+             throw error;
+         }
+        // For other errors (network, parsing, different Telegram errors), return false
         return false;
     }
 }

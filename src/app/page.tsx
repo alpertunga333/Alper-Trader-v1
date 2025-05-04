@@ -109,7 +109,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useFormattedNumber, formatNumberClientSide, formatTimestamp } from '@/lib/formatting';
-import { Strategy, backtestStrategy, runStrategy } from '@/ai/flows/trading-strategy-flow'; // Import Strategy type and flows
+import { BacktestParams, BacktestResult, DefineStrategyParams, DefineStrategyResult, RunParams, RunResult, Strategy, backtestStrategy, runStrategy, defineNewStrategy } from '@/ai/flows/trading-strategy-flow'; // Import all exported members
 
 
 // Initial empty data for charts before loading
@@ -154,26 +154,8 @@ const availableStrategies: Strategy[] = [
 
 
 // ----- Backtesting Placeholder Logic -----
-interface BacktestParams {
-  strategyId: string;
-  pair: string;
-  interval: string;
-  startDate: string; // YYYY-MM-DD
-  endDate: string;   // YYYY-MM-DD
-  initialBalance: number;
-}
+// BacktestParams and BacktestResult types are now imported from the flow file
 
-export interface BacktestResult {
-  totalTrades: number;
-  winningTrades: number;
-  losingTrades: number;
-  winRate: number; // Percentage
-  totalPnl: number; // Profit/Loss amount
-  totalPnlPercent: number; // Profit/Loss percentage
-  maxDrawdown: number; // Percentage
-  sharpeRatio?: number; // Optional
-  errorMessage?: string; // To indicate errors during backtest
-}
 
 // ----- API Validation Types -----
 type ValidationStatus = 'pending' | 'valid' | 'invalid' | 'not_checked';
@@ -197,19 +179,27 @@ export default function Dashboard() {
   const [loadingPortfolio, setLoadingPortfolio] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [selectedPairsForBot, setSelectedPairsForBot] = React.useState<string[]>([]);
-  const [newStrategyName, setNewStrategyName] = React.useState('');
-  const [newStrategyDescription, setNewStrategyDescription] = React.useState('');
-  const [newStrategyPrompt, setNewStrategyPrompt] = React.useState(''); // For AI-generated strategy
+
+  // New Strategy Dialog State
+  const [isDefineStrategyDialogOpen, setIsDefineStrategyDialogOpen] = React.useState(false);
+  const [defineStrategyParams, setDefineStrategyParams] = React.useState<DefineStrategyParams>({
+      name: '',
+      description: '',
+      prompt: '',
+  });
+  const [isDefiningStrategy, setIsDefiningStrategy] = React.useState(false);
+
 
   // Backtesting State
-  const [backtestParams, setBacktestParams] = React.useState<BacktestParams>({
-    strategyId: '',
+  const [backtestParams, setBacktestParams] = React.useState<Omit<BacktestParams, 'strategy'>>({ // Omit strategy object here
+    //strategyId: '', // Use strategyId here
     pair: '',
     interval: '1h',
     startDate: '',
     endDate: '',
     initialBalance: 1000,
   });
+   const [selectedBacktestStrategyId, setSelectedBacktestStrategyId] = React.useState<string>(''); // Store selected strategy ID for backtest form
   const [backtestResult, setBacktestResult] = React.useState<BacktestResult | null>(null);
   const [isBacktesting, setIsBacktesting] = React.useState(false);
 
@@ -267,20 +257,21 @@ export default function Dashboard() {
       }
     };
     fetchPairs();
-  }, []);
+  }, []); // Removed selectedPair from dependencies as it caused re-fetch on selection
 
-  // Fetch candlestick data
+  // Fetch candlestick data when selected pair or interval changes
   React.useEffect(() => {
     const fetchCandleData = async () => {
       if (!selectedPair) return;
       setLoadingCandles(true);
       setError(null);
+      setCandleData([]); // Clear previous data immediately
       try {
-        const data = await getCandlestickData(selectedPair, selectedInterval, 100);
+        const data = await getCandlestickData(selectedPair, selectedInterval, 100); // Fetch 100 candles
         setCandleData(data);
       } catch (err) {
         console.error(`Failed to fetch candlestick data for ${selectedPair}:`, err);
-        setCandleData([]); // Clear data on error
+        setCandleData([]); // Ensure data is cleared on error
         toast({ title: "Grafik Hatası", description: `${selectedPair} için grafik verisi yüklenemedi.`, variant: "destructive" });
       } finally {
         setLoadingCandles(false);
@@ -289,20 +280,26 @@ export default function Dashboard() {
     fetchCandleData();
   }, [selectedPair, selectedInterval]);
 
+
   // Fetch portfolio data (Only if API keys are validated for the active environment)
   React.useEffect(() => {
     const fetchPortfolio = async () => {
         // Determine active environment based on future UI element or default (e.g., Spot)
         const activeEnv = 'spot'; // Example: Assuming Spot is the default/active
         if (!activeUser || validationStatus[activeEnv] !== 'valid') {
-            setPortfolioData(initialPortfolioData);
+            // Don't fetch if not logged in or API keys not valid
+            setPortfolioData(initialPortfolioData); // Show placeholder
             return;
         }
+
+        // Proceed only if logged in AND spot keys are validated
         setLoadingPortfolio(true);
         try {
             // Use the validated keys for the active environment
             const balances = await getAccountBalances(apiKeys[activeEnv].key, apiKeys[activeEnv].secret);
-            setPortfolioData(balances);
+             // Filter out zero balances for a cleaner view
+             const filteredBalances = balances.filter(b => parseFloat(b.free.toString()) > 0 || parseFloat(b.locked.toString()) > 0);
+             setPortfolioData(filteredBalances.length > 0 ? filteredBalances : []); // Set empty if all are zero, else set filtered
         } catch (err) {
             console.error("Failed to fetch portfolio:", err);
             toast({ title: "Portföy Hatası", description: "Hesap bakiyeleri yüklenemedi.", variant: "destructive" });
@@ -311,7 +308,13 @@ export default function Dashboard() {
             setLoadingPortfolio(false);
         }
     };
-    fetchPortfolio();
+    // Check if activeUser exists before calling fetchPortfolio
+     if (activeUser) {
+        fetchPortfolio();
+     } else {
+       setPortfolioData(initialPortfolioData); // Reset portfolio if logged out
+       setLoadingPortfolio(false);
+     }
      // Re-fetch if active user changes OR if the validation status of the active environment changes to 'valid'
   }, [activeUser, validationStatus.spot, apiKeys.spot.key, apiKeys.spot.secret]); // Adjust dependencies based on how you manage active environment
 
@@ -325,6 +328,17 @@ export default function Dashboard() {
 
   const handleLogout = () => {
     setActiveUser(null);
+     // Reset validation statuses on logout
+    setValidationStatus({
+        spot: 'not_checked',
+        futures: 'not_checked',
+        testnetSpot: 'not_checked',
+        testnetFutures: 'not_checked',
+        telegramToken: 'not_checked',
+        telegramChatId: 'not_checked',
+    });
+     // Optionally clear API keys as well, though they might be persisted elsewhere
+     // setApiKeys({ spot: { key: '', secret: '' }, ... });
     toast({ title: 'Çıkış yapıldı.' });
   };
 
@@ -353,42 +367,55 @@ export default function Dashboard() {
     setBotStatus(newStatus);
     const statusMessage = newStatus === 'running' ? 'başlatıldı' : 'durduruldu';
     const pairsMessage = newStatus === 'running' ? ` (${selectedPairsForBot.join(', ')})` : '';
-    toast({ title: `Bot ${statusMessage}${pairsMessage}.` });
+    const strategiesMessage = newStatus === 'running' ? `Stratejiler: ${activeStrategies.map(id => availableStrategies.find(s=>s.id===id)?.name).join(', ')}` : '';
+    toast({ title: `Bot ${statusMessage}${pairsMessage}.`, description: strategiesMessage });
+
 
     if (newStatus === 'running') {
         console.log("Starting bot for pairs:", selectedPairsForBot, "with strategies:", activeStrategies);
-        // TODO: Implement actual bot start logic
-        // This might involve looping through selected pairs and strategies,
-        // potentially using setInterval or a more robust job scheduler.
-        // For each pair/strategy, call runStrategy from the AI flow.
-        try {
-            // Example: Triggering strategy execution (needs proper looping/scheduling)
-            const strategyId = activeStrategies[0]; // Just an example, handle multiple
-            const strategy = availableStrategies.find(s => s.id === strategyId);
-            const pair = selectedPairsForBot[0]; // Just an example
-
-            if (strategy) {
-                logData.push({ timestamp: new Date().toISOString(), type: 'INFO', message: `Bot ${pair} üzerinde ${strategy.name} stratejisi ile başlatıldı.` });
-                // Potential: await runStrategy({ strategy, pair, interval: selectedInterval });
-                 // Handle potential background execution and state management
-            } else {
-                 logData.push({ timestamp: new Date().toISOString(), type: 'ERROR', message: `Strateji bulunamadı: ${strategyId}` });
-            }
-              // Send Telegram notification
-            await sendMessage(`🤖 KriptoPilot bot ${selectedPairsForBot.join(', ')} paritelerinde ${activeStrategies.map(id => availableStrategies.find(s=>s.id===id)?.name).join(', ')} stratejileri ile başlatıldı.`, apiKeys.telegram.token, apiKeys.telegram.chatId);
+        logData.push({ timestamp: new Date().toISOString(), type: 'INFO', message: `Bot ${selectedPairsForBot.join(', ')} paritelerinde başlatıldı. Stratejiler: ${activeStrategies.map(id => availableStrategies.find(s=>s.id===id)?.name).join(', ')}` });
 
 
-        } catch (error) {
-             console.error("Error starting bot strategy:", error);
-             const message = error instanceof Error ? error.message : "Bilinmeyen hata";
-             toast({ title: "Bot Strateji Hatası", description: `Strateji başlatılamadı: ${message}`, variant: "destructive" });
-             logData.push({ timestamp: new Date().toISOString(), type: 'ERROR', message: `Bot stratejisi başlatma hatası: ${message}` });
-             setBotStatus('stopped'); // Revert status on error
+        // Placeholder: Iterate and attempt to start each strategy on each pair
+        for (const pair of selectedPairsForBot) {
+            for (const strategyId of activeStrategies) {
+                const strategy = availableStrategies.find(s => s.id === strategyId);
+                 if (strategy) {
+                     try {
+                         console.log(`Attempting to run strategy ${strategy.name} on ${pair}`);
+                         // Call the AI flow to run the strategy
+                         // Note: Real implementation needs robust background execution/monitoring
+                         const runParams: RunParams = { strategy, pair, interval: selectedInterval /* Use the globally selected interval or strategy-specific one */};
+                         const result: RunResult = await runStrategy(runParams); // Assuming runStrategy is async
+                         logData.push({ timestamp: new Date().toISOString(), type: 'STRATEGY_START', message: `Strateji '${strategy.name}' ${pair} üzerinde başlatıldı: ${result.message || result.status}` });
+                         // Consider sending Telegram notification per strategy/pair start
+                         // await sendMessage(`📈 Strategy ${strategy.name} started on ${pair}. Status: ${result.status}`, apiKeys.telegram.token, apiKeys.telegram.chatId);
+                    } catch (error) {
+                         console.error(`Error starting strategy ${strategy.name} on ${pair}:`, error);
+                         const message = error instanceof Error ? error.message : "Bilinmeyen hata";
+                         toast({ title: "Bot Strateji Hatası", description: `${strategy.name} - ${pair}: Başlatılamadı: ${message}`, variant: "destructive" });
+                         logData.push({ timestamp: new Date().toISOString(), type: 'ERROR', message: `Strateji '${strategy.name}' başlatma hatası (${pair}): ${message}` });
+                         // Optionally stop the entire bot if one strategy fails to start? Or just log?
+                         // setBotStatus('stopped');
+                         // return; // Stop trying to start more strategies
+                     }
+                 } else {
+                     logData.push({ timestamp: new Date().toISOString(), type: 'ERROR', message: `Strateji bulunamadı: ${strategyId} (Parite: ${pair})` });
+                 }
+             }
         }
+
+         // Send a single summary Telegram notification after attempting all starts
+         try {
+             await sendMessage(`🤖 KriptoPilot bot ${selectedPairsForBot.join(', ')} paritelerinde ${activeStrategies.length} strateji ile aktif.`, apiKeys.telegram.token, apiKeys.telegram.chatId);
+         } catch (error) {
+              console.error("Error sending Telegram start message:", error);
+             logData.push({ timestamp: new Date().toISOString(), type: 'TELEGRAM_ERROR', message: `Başlatma bildirimi gönderilemedi.` });
+         }
 
     } else {
         console.log("Stopping bot...");
-        // TODO: Implement actual bot stop logic (e.g., clear intervals, cancel jobs)
+        // TODO: Implement actual bot stop logic (e.g., clear intervals, cancel jobs, potentially notify strategies)
          logData.push({ timestamp: new Date().toISOString(), type: 'INFO', message: `Bot durduruldu.` });
         // Send Telegram notification
          try {
@@ -433,14 +460,19 @@ export default function Dashboard() {
         } else if (field === 'token') {
             setValidationStatus(prev => ({ ...prev, telegramToken: 'not_checked' }));
         } else if (field === 'chatId') {
-            setValidationStatus(prev => ({ ...prev, telegramChatId: 'not_checked' }));
+            // Only reset chat ID status if token is already valid, otherwise it needs token validation first anyway
+             if (validationStatus.telegramToken === 'valid') {
+                 setValidationStatus(prev => ({ ...prev, telegramChatId: 'not_checked' }));
+             }
         }
     };
 
    const handleValidateApiKey = async (env: 'spot' | 'futures' | 'testnetSpot' | 'testnetFutures') => {
       setValidationStatus(prev => ({ ...prev, [env]: 'pending' }));
+      // Determine if the environment is testnet
+      const isTestnetEnv = env === 'testnetSpot' || env === 'testnetFutures';
       try {
-          const isValid = await validateBinanceApiKeys(apiKeys[env].key, apiKeys[env].secret); // Add isTestnet flag if needed
+          const isValid = await validateBinanceApiKeys(apiKeys[env].key, apiKeys[env].secret, isTestnetEnv);
           setValidationStatus(prev => ({ ...prev, [env]: isValid ? 'valid' : 'invalid' }));
           toast({
               title: isValid ? "API Anahtarı Doğrulandı" : "API Anahtarı Geçersiz",
@@ -468,9 +500,13 @@ export default function Dashboard() {
               description: isValid ? "Bot token geçerli." : "Bot token geçersiz veya Telegram API'ye ulaşılamadı.",
               variant: isValid ? "default" : "destructive",
           });
+           // If token becomes invalid, also reset chat ID validation
+           if (!isValid) {
+              setValidationStatus(prev => ({ ...prev, telegramChatId: 'not_checked' }));
+           }
       } catch (error) {
            console.error("Error validating Telegram token:", error);
-          setValidationStatus(prev => ({ ...prev, telegramToken: 'invalid' }));
+          setValidationStatus(prev => ({ ...prev, telegramToken: 'invalid', telegramChatId: 'not_checked' }));
           toast({ title: "Doğrulama Hatası", description: "Telegram token doğrulanırken bir hata oluştu.", variant: "destructive" });
       }
   };
@@ -503,50 +539,67 @@ export default function Dashboard() {
       } catch (error) {
           console.error("Error validating/sending test message to Telegram chat ID:", error);
           setValidationStatus(prev => ({ ...prev, telegramChatId: 'invalid' }));
-          toast({ title: "Doğrulama Hatası", description: "Telegram Chat ID doğrulanırken/test mesajı gönderilirken hata.", variant: "destructive" });
+           // Check if the error message indicates "chat not found"
+           const errorMessage = error instanceof Error ? error.message : "Bilinmeyen Telegram Hatası";
+            if (errorMessage.toLowerCase().includes('chat not found')) {
+                 toast({ title: "Doğrulama Hatası", description: `Chat ID (${apiKeys.telegram.chatId}) bulunamadı. Lütfen ID'yi kontrol edin ve botun sohbete eklendiğinden emin olun.`, variant: "destructive" });
+             } else {
+                  toast({ title: "Doğrulama Hatası", description: `Telegram Chat ID doğrulanırken/test mesajı gönderilirken hata: ${errorMessage}`, variant: "destructive" });
+            }
       }
   };
 
 
-    const handleAddNewStrategy = async () => {
-        if (!newStrategyName.trim() || !newStrategyDescription.trim() || !newStrategyPrompt.trim()) {
-            toast({ title: "Hata", description: "Strateji adı, açıklaması ve istemi boş olamaz.", variant: "destructive"});
-            return;
-        }
+   const handleDefineStrategyParamChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>, field: keyof DefineStrategyParams) => {
+       setDefineStrategyParams(prev => ({ ...prev, [field]: e.target.value }));
+   };
 
-        const newStrategy: Strategy = {
-            id: `custom_${Date.now()}`, // Simple unique ID
-            name: newStrategyName,
-            description: newStrategyDescription,
-            // In a real scenario, you might want to save the prompt itself or a reference
-            // to how the AI should generate/execute this strategy.
-            // For this example, we'll just add it to the available strategies list.
-            // prompt: newStrategyPrompt // Potentially add prompt to Strategy type if needed by backend
-        };
+   const handleDefineNewStrategy = async () => {
+       if (!defineStrategyParams.name.trim() || !defineStrategyParams.description.trim() || !defineStrategyParams.prompt.trim()) {
+           toast({ title: "Hata", description: "Strateji adı, açıklaması ve istemi boş olamaz.", variant: "destructive" });
+           return;
+       }
 
-        availableStrategies.push(newStrategy); // Add to the list in memory (won't persist)
+       setIsDefiningStrategy(true);
+       try {
+           const result: DefineStrategyResult = await defineNewStrategy(defineStrategyParams);
 
-        console.log("Adding new strategy:", newStrategy);
-        toast({ title: "Yeni Strateji Eklendi", description: `${newStrategy.name} başarıyla eklendi (oturum için).` });
+           if (result.success && result.strategy) {
+               // Add the newly defined strategy to the available list
+               availableStrategies.push(result.strategy);
+               toast({ title: "Strateji Tanımlandı", description: result.message || `"${result.strategy.name}" başarıyla tanımlandı.` });
+                setIsDefineStrategyDialogOpen(false); // Close dialog on success
+                // Reset form
+               setDefineStrategyParams({ name: '', description: '', prompt: '' });
+           } else {
+               toast({ title: "Strateji Tanımlama Başarısız", description: result.message || "AI stratejiyi tanımlayamadı.", variant: "destructive" });
+           }
+       } catch (error) {
+           console.error("Error defining new strategy:", error);
+           const message = error instanceof Error ? error.message : "Bilinmeyen bir AI hatası oluştu.";
+           toast({ title: "AI Hatası", description: `Strateji tanımlanırken hata: ${message}`, variant: "destructive" });
+       } finally {
+           setIsDefiningStrategy(false);
+       }
+   };
 
-        // Reset form and close dialog
-        setNewStrategyName('');
-        setNewStrategyDescription('');
-        setNewStrategyPrompt('');
-        // DialogClose should handle closing via its `asChild` prop on the button
-    };
 
   // Backtesting Handlers
-  const handleBacktestParamChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | string, field: keyof BacktestParams) => {
-      const value = typeof e === 'string' ? e : e.target.value;
-      setBacktestParams(prev => ({
-          ...prev,
-          [field]: field === 'initialBalance' ? (value ? parseFloat(value) : 0) : value // Ensure balance is number
-      }));
+  const handleBacktestParamChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>, field: keyof Omit<BacktestParams, 'strategy'>) => {
+      const value = e.target.value;
+       setBacktestParams(prev => ({
+           ...prev,
+           [field]: field === 'initialBalance' ? (value ? parseFloat(value) : 0) : value // Ensure balance is number
+       }));
   };
 
-   const handleBacktestSelectChange = (value: string, field: keyof BacktestParams) => {
-       setBacktestParams(prev => ({ ...prev, [field]: value }));
+   // Handles Select changes for backtesting (Pair, Interval, Strategy ID)
+   const handleBacktestSelectChange = (value: string, field: 'pair' | 'interval' | 'strategyId') => {
+       if (field === 'strategyId') {
+           setSelectedBacktestStrategyId(value);
+       } else {
+           setBacktestParams(prev => ({ ...prev, [field]: value }));
+       }
    };
 
 
@@ -554,13 +607,16 @@ export default function Dashboard() {
     setIsBacktesting(true);
     setBacktestResult(null); // Clear previous results
 
-    const strategy = availableStrategies.find(s => s.id === backtestParams.strategyId);
+    // Find the selected strategy object using the selectedBacktestStrategyId
+    const strategy = availableStrategies.find(s => s.id === selectedBacktestStrategyId);
+
     if (!strategy) {
          toast({ title: "Backtest Hatası", description: "Geçerli bir strateji seçilmedi.", variant: "destructive" });
          setIsBacktesting(false);
          return;
     }
 
+     // Validate other backtest parameters
     if (!backtestParams.pair || !backtestParams.startDate || !backtestParams.endDate || backtestParams.initialBalance <= 0) {
          toast({ title: "Backtest Hatası", description: "Lütfen parite, tarih aralığı ve geçerli başlangıç bakiyesi girin.", variant: "destructive" });
          setBacktestResult({ errorMessage: "Eksik veya geçersiz parametreler.", totalTrades: 0, winningTrades: 0, losingTrades: 0, winRate: 0, totalPnl: 0, totalPnlPercent: 0, maxDrawdown: 0 });
@@ -574,16 +630,20 @@ export default function Dashboard() {
         return;
     }
 
+    // Prepare the full BacktestParams object for the flow
+     const fullBacktestParams: BacktestParams = {
+       strategy: strategy, // Pass the full strategy object
+       pair: backtestParams.pair,
+       interval: backtestParams.interval,
+       startDate: backtestParams.startDate,
+       endDate: backtestParams.endDate,
+       initialBalance: backtestParams.initialBalance,
+     };
+
+
     try {
-      // Call the Genkit flow for backtesting
-      const result = await backtestStrategy({
-          strategy: strategy,
-          pair: backtestParams.pair,
-          interval: backtestParams.interval,
-          startDate: backtestParams.startDate,
-          endDate: backtestParams.endDate,
-          initialBalance: backtestParams.initialBalance
-      });
+      // Call the Genkit flow for backtesting with the full parameters
+      const result: BacktestResult = await backtestStrategy(fullBacktestParams);
 
       setBacktestResult(result); // Set the result from the flow
 
@@ -606,31 +666,34 @@ export default function Dashboard() {
   // --- Sub-Components for Rendering ---
 
   const PortfolioRow = ({ balance }: { balance: Balance }) => {
+       // Use the hook for client-side formatting
       const formattedFree = useFormattedNumber(balance.free, { maximumFractionDigits: 8 });
       const formattedLocked = useFormattedNumber(balance.locked, { maximumFractionDigits: 8 });
 
       return (
           <TableRow key={balance.asset}>
               <TableCell className="font-medium">{balance.asset}</TableCell>
-              <TableCell className="text-right">{formattedFree}</TableCell>
-              <TableCell className="text-right">{formattedLocked}</TableCell>
+              <TableCell className="text-right tabular-nums">{formattedFree}</TableCell>
+              <TableCell className="text-right tabular-nums">{formattedLocked}</TableCell>
           </TableRow>
       );
   };
 
    const TradeHistoryRow = ({ trade }: { trade: typeof tradeHistoryData[0] }) => {
-       const formattedPrice = useFormattedNumber(trade.price);
-       const formattedAmount = useFormattedNumber(trade.amount, { maximumFractionDigits: 8 });
-       const formattedTotal = useFormattedNumber(trade.total);
+       // Use the hook for client-side formatting
+        const formattedPrice = useFormattedNumber(trade.price);
+        const formattedAmount = useFormattedNumber(trade.amount, { maximumFractionDigits: 8 });
+        const formattedTotal = useFormattedNumber(trade.total);
 
        return (
            <TableRow key={trade.id}>
-               <TableCell className="text-xs whitespace-nowrap">{trade.timestamp}</TableCell>
+               <TableCell className="text-xs whitespace-nowrap">{formatTimestamp(trade.timestamp)}</TableCell>
                <TableCell>{trade.pair.replace('/', '')}</TableCell>
                <TableCell className={trade.type === 'Alış' ? 'text-[hsl(var(--primary))]' : 'text-[hsl(var(--destructive))]'}>{trade.type}</TableCell>
-               <TableCell className="text-right">{formattedPrice}</TableCell>
-               <TableCell className="text-right">{formattedAmount}</TableCell>
-               <TableCell className="text-right">{trade.status}</TableCell>
+               <TableCell className="text-right tabular-nums">{formattedPrice}</TableCell>
+               <TableCell className="text-right tabular-nums">{formattedAmount}</TableCell>
+               <TableCell className="text-right tabular-nums">{formattedTotal}</TableCell>
+                <TableCell className="text-right">{trade.status}</TableCell> {/* Keep status as text */}
            </TableRow>
        );
    };
@@ -638,11 +701,15 @@ export default function Dashboard() {
    const ChartTooltipContent = ({ active, payload, label }: any) => {
         if (active && payload && payload.length && payload[0].payload) { // Check payload[0].payload exists
            const formattedValue = formatNumberClientSide(payload[0].value, { maximumFractionDigits: 4 });
-           const timeLabel = formatTimestamp(payload[0].payload.openTime);
+           const timeLabel = formatTimestamp(payload[0].payload.openTime); // Use the direct function here
            return (
-             <div className="custom-tooltip p-2 bg-card border border-border rounded shadow-lg text-card-foreground">
-               <p className="label text-sm font-bold">{`Zaman: ${timeLabel}`}</p>
-               <p className="intro text-sm">{`${payload[0].name}: ${formattedValue}`}</p>
+             <div className="custom-tooltip p-2 bg-card border border-border rounded shadow-lg text-card-foreground text-xs">
+               <p className="label font-bold">{`${timeLabel}`}</p>
+                <p className="intro">{`${payload[0].name}: ${formattedValue}`}</p>
+                {/* Optionally add Open, High, Low, Close */}
+                <p className="text-muted-foreground">O: {formatNumberClientSide(payload[0].payload.open)} H: {formatNumberClientSide(payload[0].payload.high)}</p>
+                 <p className="text-muted-foreground">L: {formatNumberClientSide(payload[0].payload.low)} C: {formatNumberClientSide(payload[0].payload.close)}</p>
+                 <p className="text-muted-foreground">Vol: {formatNumberClientSide(payload[0].payload.volume)}</p>
              </div>
            );
          }
@@ -685,7 +752,7 @@ export default function Dashboard() {
             ) : (
                 <div className="p-2 space-y-2 group-data-[collapsible=icon]:hidden">
                     <Label htmlFor="username">Kullanıcı Adı</Label>
-                    <Input id="username" placeholder="Kullanıcı adı girin" />
+                    <Input id="username" placeholder="Kullanıcı adı girin" defaultValue="Demo Kullanıcı"/> {/* Simplified login */}
                     <Button className="w-full" onClick={() => handleLogin('Demo Kullanıcı')}>
                         <LogIn className="mr-2 h-4 w-4"/> Giriş Yap
                     </Button>
@@ -770,8 +837,15 @@ export default function Dashboard() {
                     size="sm"
                     onClick={toggleBotStatus}
                     className="group-data-[collapsible=icon]:w-full"
-                    disabled={botStatus === 'running' ? false : (validationStatus.spot !== 'valid' || validationStatus.telegramToken !== 'valid' || validationStatus.telegramChatId !== 'valid')} // Disable start if not validated
-                    title={botStatus === 'stopped' && (validationStatus.spot !== 'valid' || validationStatus.telegramToken !== 'valid' || validationStatus.telegramChatId !== 'valid') ? "Botu başlatmak için API ve Telegram ayarlarını doğrulayın" : ""}
+                     disabled={!activeUser || botStatus === 'running' ? false : (validationStatus.spot !== 'valid' || validationStatus.telegramToken !== 'valid' || validationStatus.telegramChatId !== 'valid' || activeStrategies.length === 0 || selectedPairsForBot.length === 0)}
+                    title={
+                         !activeUser ? "Botu kullanmak için giriş yapın." :
+                         botStatus === 'stopped' && validationStatus.spot !== 'valid' ? "Botu başlatmak için Spot API anahtarlarını doğrulayın" :
+                         botStatus === 'stopped' && (validationStatus.telegramToken !== 'valid' || validationStatus.telegramChatId !== 'valid') ? "Botu başlatmak için Telegram ayarlarını doğrulayın" :
+                         botStatus === 'stopped' && activeStrategies.length === 0 ? "Botu başlatmak için en az bir strateji seçin" :
+                          botStatus === 'stopped' && selectedPairsForBot.length === 0 ? "Botu başlatmak için en az bir parite seçin" :
+                         ""
+                    }
                     >
                     {botStatus === 'running' ? <Pause className="mr-2 h-4 w-4 group-data-[collapsible=icon]:mr-0"/> : <Play className="mr-2 h-4 w-4 group-data-[collapsible=icon]:mr-0"/>}
                     <span className="group-data-[collapsible=icon]:hidden">{botStatus === 'running' ? 'Durdur' : 'Başlat'}</span>
@@ -855,8 +929,20 @@ export default function Dashboard() {
                    <ResponsiveContainer width="100%" height="100%">
                      <LineChart data={candleData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                       <XAxis dataKey="openTime" tickFormatter={formatTimestamp} stroke="hsl(var(--muted-foreground))" tick={{ fontSize: 10 }} interval="preserveStartEnd" minTickGap={50} />
-                       <YAxis stroke="hsl(var(--muted-foreground))" domain={['auto', 'auto']} tick={{ fontSize: 10 }} tickFormatter={(value) => formatNumberClientSide(value, { maximumFractionDigits: 4 })} />
+                        <XAxis
+                           dataKey="openTime"
+                           tickFormatter={(value) => formatTimestamp(value)} // Use direct function
+                           stroke="hsl(var(--muted-foreground))"
+                           tick={{ fontSize: 10 }}
+                           interval="preserveStartEnd" // Adjust interval as needed
+                           minTickGap={50} // Adjust gap for readability
+                         />
+                        <YAxis
+                           stroke="hsl(var(--muted-foreground))"
+                           domain={['auto', 'auto']}
+                           tick={{ fontSize: 10 }}
+                            tickFormatter={(value) => formatNumberClientSide(value, { maximumFractionDigits: 4 })} // Use client-side formatter
+                           />
                        <ChartTooltip content={<ChartTooltipContent />} cursor={{ stroke: 'hsl(var(--accent))', strokeWidth: 1 }}/>
                        <Legend />
                        <Line type="monotone" dataKey="close" name="Kapanış" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
@@ -885,11 +971,21 @@ export default function Dashboard() {
                         Anlık Portföy
                         {loadingPortfolio && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
                     </h3>
-                     {validationStatus.spot !== 'valid' && (
-                        <Alert variant="default" className="mb-4 bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700">
+                     {/* Inform user to login or validate API */}
+                     {!activeUser && (
+                         <Alert variant="default" className="mb-4 bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700">
                            <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                            <AlertTitle className="text-blue-800 dark:text-blue-300">Bilgi</AlertTitle>
+                            <AlertTitle className="text-blue-800 dark:text-blue-300">Giriş Gerekli</AlertTitle>
                            <AlertDescription className="text-blue-700 dark:text-blue-400">
+                               Portföy verilerini görmek için lütfen giriş yapın.
+                           </AlertDescription>
+                       </Alert>
+                     )}
+                     {activeUser && validationStatus.spot !== 'valid' && (
+                        <Alert variant="default" className="mb-4 bg-yellow-50 dark:bg-yellow-900/30 border-yellow-200 dark:border-yellow-700">
+                           <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+                            <AlertTitle className="text-yellow-800 dark:text-yellow-300">API Doğrulaması Bekleniyor</AlertTitle>
+                           <AlertDescription className="text-yellow-700 dark:text-yellow-400">
                                Portföy verilerini görmek için lütfen Spot API anahtarlarınızı <a href="#api-spot" className="underline">API Ayarları</a> bölümünden girip doğrulayın.
                            </AlertDescription>
                        </Alert>
@@ -909,14 +1005,17 @@ export default function Dashboard() {
                                     <Loader2 className="inline-block h-6 w-6 animate-spin text-muted-foreground" />
                                 </TableCell>
                             </TableRow>
-                        ) : portfolioData.length > 0 && portfolioData[0].asset !== '...' && validationStatus.spot === 'valid' ? (
+                        ) : portfolioData.length > 0 && portfolioData[0].asset !== '...' && activeUser && validationStatus.spot === 'valid' ? (
                            portfolioData.map((balance) => (
                               <PortfolioRow key={balance.asset} balance={balance} />
                            ))
                        ) : (
                             <TableRow>
                                 <TableCell colSpan={3} className="text-center text-muted-foreground h-24">
-                                    {activeUser && validationStatus.spot === 'valid' ? "Portföy verisi yok veya yüklenemedi." : (activeUser ? "API doğrulaması bekleniyor." : "Giriş yapınız.")}
+                                    {!activeUser ? "Giriş yapınız." :
+                                     validationStatus.spot !== 'valid' ? "API doğrulaması bekleniyor." :
+                                      portfolioData.length === 0 ? "Portföy boş." : // Explicitly state if empty after fetch
+                                     "Portföy verisi yok veya yüklenemedi."}
                                 </TableCell>
                             </TableRow>
                        )}
@@ -924,7 +1023,7 @@ export default function Dashboard() {
                     </Table>
                   </TabsContent>
                   <TabsContent value="history" className="p-4">
-                     <h3 className="text-lg font-semibold mb-2">İşlem Geçmişi</h3>
+                     <h3 className="text-lg font-semibold mb-2">İşlem Geçmişi (Placeholder)</h3>
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -933,13 +1032,20 @@ export default function Dashboard() {
                           <TableHead>Tip</TableHead>
                           <TableHead className="text-right">Fiyat</TableHead>
                           <TableHead className="text-right">Miktar</TableHead>
+                           <TableHead className="text-right">Toplam</TableHead>
                           <TableHead className="text-right">Durum</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {tradeHistoryData.map((trade) => (
-                           <TradeHistoryRow key={trade.id} trade={trade} />
-                        ))}
+                         {tradeHistoryData.length === 0 ? (
+                            <TableRow>
+                                <TableCell colSpan={7} className="text-center h-24 text-muted-foreground">Gerçekleşen işlem yok.</TableCell>
+                            </TableRow>
+                         ) : (
+                            tradeHistoryData.map((trade) => (
+                               <TradeHistoryRow key={trade.id} trade={trade} />
+                             ))
+                         )}
                       </TableBody>
                     </Table>
                   </TabsContent>
@@ -954,22 +1060,29 @@ export default function Dashboard() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {logData.slice().reverse().map((log, index) => ( // Show newest logs first
-                             <TableRow key={index}>
-                               <TableCell className="text-xs whitespace-nowrap">{formatTimestamp(log.timestamp)}</TableCell>
-                               <TableCell>
-                                   <span className={cn("px-2 py-0.5 rounded text-xs font-medium",
-                                        log.type === 'ERROR' ? 'bg-destructive/10 text-destructive dark:bg-destructive/30' :
-                                        log.type === 'TRADE' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' :
-                                        log.type === 'TELEGRAM' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300' :
-                                         log.type === 'TELEGRAM_ERROR' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300' :
-                                        'bg-secondary text-secondary-foreground')}>
-                                        {log.type}
-                                   </span>
-                               </TableCell>
-                               <TableCell className="text-xs">{log.message}</TableCell>
-                             </TableRow>
-                           ))}
+                           {logData.length === 0 ? (
+                              <TableRow>
+                                  <TableCell colSpan={3} className="text-center h-24 text-muted-foreground">Log kaydı bulunamadı.</TableCell>
+                              </TableRow>
+                           ) : (
+                              logData.slice().reverse().map((log, index) => ( // Show newest logs first
+                                 <TableRow key={index}>
+                                   <TableCell className="text-xs whitespace-nowrap">{formatTimestamp(log.timestamp)}</TableCell>
+                                   <TableCell>
+                                       <span className={cn("px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap",
+                                            log.type === 'ERROR' ? 'bg-destructive/10 text-destructive dark:bg-destructive/30' :
+                                            log.type === 'TRADE' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' :
+                                            log.type === 'TELEGRAM' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300' :
+                                            log.type === 'TELEGRAM_ERROR' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300' :
+                                            log.type === 'STRATEGY_START' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
+                                            'bg-secondary text-secondary-foreground')}>
+                                            {log.type}
+                                       </span>
+                                   </TableCell>
+                                   <TableCell className="text-xs">{log.message}</TableCell>
+                                 </TableRow>
+                               ))
+                            )}
                         </TableBody>
                       </Table>
                   </TabsContent>
@@ -999,10 +1112,19 @@ export default function Dashboard() {
                                     <Label htmlFor="spot-secret-key">Secret Key</Label>
                                     <Input id="spot-secret-key" type="password" placeholder="Spot Secret Key Girin" value={apiKeys.spot.secret} onChange={(e) => handleApiKeyChange(e, 'spot', 'secret')} />
                                 </div>
-                                <Button size="sm" onClick={() => handleValidateApiKey('spot')} disabled={!apiKeys.spot.key || !apiKeys.spot.secret || validationStatus.spot === 'pending'}>
-                                    <ValidationIcon status={validationStatus.spot} />
-                                     <span className="ml-2">Doğrula</span>
-                                 </Button>
+                                <TooltipProvider>
+                                     <Tooltip>
+                                         <TooltipTrigger asChild>
+                                             <Button size="sm" onClick={() => handleValidateApiKey('spot')} disabled={!apiKeys.spot.key || !apiKeys.spot.secret || validationStatus.spot === 'pending'}>
+                                                 <ValidationIcon status={validationStatus.spot} />
+                                                  <span className="ml-2">Doğrula</span>
+                                              </Button>
+                                         </TooltipTrigger>
+                                         <TooltipContent>
+                                             <p>{ validationStatus.spot === 'valid' ? 'API anahtarı geçerli.' : validationStatus.spot === 'invalid' ? 'API anahtarı geçersiz veya doğrulanamadı.' : validationStatus.spot === 'pending' ? 'Doğrulanıyor...' : 'Doğrulamak için tıklayın.'}</p>
+                                         </TooltipContent>
+                                     </Tooltip>
+                                </TooltipProvider>
                             </div>
                         </AccordionContent>
                     </AccordionItem>
@@ -1020,10 +1142,19 @@ export default function Dashboard() {
                                      <Label htmlFor="futures-secret-key">Secret Key</Label>
                                      <Input id="futures-secret-key" type="password" placeholder="Futures Secret Key Girin" value={apiKeys.futures.secret} onChange={(e) => handleApiKeyChange(e, 'futures', 'secret')} />
                                  </div>
-                                 <Button size="sm" onClick={() => handleValidateApiKey('futures')} disabled={!apiKeys.futures.key || !apiKeys.futures.secret || validationStatus.futures === 'pending'}>
-                                     <ValidationIcon status={validationStatus.futures} />
-                                     <span className="ml-2">Doğrula</span>
-                                 </Button>
+                                 <TooltipProvider>
+                                      <Tooltip>
+                                          <TooltipTrigger asChild>
+                                             <Button size="sm" onClick={() => handleValidateApiKey('futures')} disabled={!apiKeys.futures.key || !apiKeys.futures.secret || validationStatus.futures === 'pending'}>
+                                                 <ValidationIcon status={validationStatus.futures} />
+                                                 <span className="ml-2">Doğrula</span>
+                                             </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>
+                                             <p>{ validationStatus.futures === 'valid' ? 'API anahtarı geçerli.' : validationStatus.futures === 'invalid' ? 'API anahtarı geçersiz veya doğrulanamadı.' : validationStatus.futures === 'pending' ? 'Doğrulanıyor...' : 'Doğrulamak için tıklayın.'}</p>
+                                         </TooltipContent>
+                                      </Tooltip>
+                                 </TooltipProvider>
                              </div>
                              <p className="text-xs text-muted-foreground">Not: Futures API anahtarları ayrı olarak oluşturulmalıdır.</p>
                          </AccordionContent>
@@ -1042,10 +1173,19 @@ export default function Dashboard() {
                                       <Label htmlFor="testnet-spot-secret-key">Secret Key</Label>
                                       <Input id="testnet-spot-secret-key" type="password" placeholder="Testnet Spot Secret Key Girin" value={apiKeys.testnetSpot.secret} onChange={(e) => handleApiKeyChange(e, 'testnetSpot', 'secret')}/>
                                   </div>
-                                   <Button size="sm" onClick={() => handleValidateApiKey('testnetSpot')} disabled={!apiKeys.testnetSpot.key || !apiKeys.testnetSpot.secret || validationStatus.testnetSpot === 'pending'}>
-                                       <ValidationIcon status={validationStatus.testnetSpot} />
-                                       <span className="ml-2">Doğrula</span>
-                                   </Button>
+                                   <TooltipProvider>
+                                     <Tooltip>
+                                       <TooltipTrigger asChild>
+                                          <Button size="sm" onClick={() => handleValidateApiKey('testnetSpot')} disabled={!apiKeys.testnetSpot.key || !apiKeys.testnetSpot.secret || validationStatus.testnetSpot === 'pending'}>
+                                              <ValidationIcon status={validationStatus.testnetSpot} />
+                                              <span className="ml-2">Doğrula</span>
+                                          </Button>
+                                        </TooltipTrigger>
+                                         <TooltipContent>
+                                             <p>{ validationStatus.testnetSpot === 'valid' ? 'API anahtarı geçerli.' : validationStatus.testnetSpot === 'invalid' ? 'API anahtarı geçersiz veya doğrulanamadı.' : validationStatus.testnetSpot === 'pending' ? 'Doğrulanıyor...' : 'Doğrulamak için tıklayın.'}</p>
+                                          </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
                                </div>
                                <p className="text-xs text-muted-foreground">Binance Testnet (<a href="https://testnet.binance.vision/" target="_blank" rel="noopener noreferrer" className="underline">testnet.binance.vision</a>) üzerinden alınır.</p>
                           </AccordionContent>
@@ -1064,10 +1204,19 @@ export default function Dashboard() {
                                      <Label htmlFor="testnet-futures-secret-key">Secret Key</Label>
                                      <Input id="testnet-futures-secret-key" type="password" placeholder="Testnet Futures Secret Key Girin" value={apiKeys.testnetFutures.secret} onChange={(e) => handleApiKeyChange(e, 'testnetFutures', 'secret')}/>
                                  </div>
-                                 <Button size="sm" onClick={() => handleValidateApiKey('testnetFutures')} disabled={!apiKeys.testnetFutures.key || !apiKeys.testnetFutures.secret || validationStatus.testnetFutures === 'pending'}>
-                                      <ValidationIcon status={validationStatus.testnetFutures} />
-                                      <span className="ml-2">Doğrula</span>
-                                  </Button>
+                                  <TooltipProvider>
+                                     <Tooltip>
+                                       <TooltipTrigger asChild>
+                                          <Button size="sm" onClick={() => handleValidateApiKey('testnetFutures')} disabled={!apiKeys.testnetFutures.key || !apiKeys.testnetFutures.secret || validationStatus.testnetFutures === 'pending'}>
+                                               <ValidationIcon status={validationStatus.testnetFutures} />
+                                               <span className="ml-2">Doğrula</span>
+                                           </Button>
+                                       </TooltipTrigger>
+                                        <TooltipContent>
+                                             <p>{ validationStatus.testnetFutures === 'valid' ? 'API anahtarı geçerli.' : validationStatus.testnetFutures === 'invalid' ? 'API anahtarı geçersiz veya doğrulanamadı.' : validationStatus.testnetFutures === 'pending' ? 'Doğrulanıyor...' : 'Doğrulamak için tıklayın.'}</p>
+                                         </TooltipContent>
+                                     </Tooltip>
+                                  </TooltipProvider>
                              </div>
                               <p className="text-xs text-muted-foreground">Binance Testnet Futures (<a href="https://testnet.binancefuture.com/" target="_blank" rel="noopener noreferrer" className="underline">testnet.binancefuture.com</a>) üzerinden alınır.</p>
                          </AccordionContent>
@@ -1080,24 +1229,48 @@ export default function Dashboard() {
                           <div className="flex items-end gap-2">
                               <div className="flex-1 space-y-1">
                                   <Label htmlFor="telegram-token">Bot Token</Label>
-                                  <Input id="telegram-token" placeholder="Telegram Bot Token Girin" value={apiKeys.telegram.token} onChange={(e) => handleApiKeyChange(e, 'telegram', 'token')} />
+                                  <Input id="telegram-token" type="password" placeholder="Telegram Bot Token Girin" value={apiKeys.telegram.token} onChange={(e) => handleApiKeyChange(e, 'telegram', 'token')} />
                               </div>
-                               <Button size="sm" onClick={handleValidateTelegramToken} disabled={!apiKeys.telegram.token || validationStatus.telegramToken === 'pending'}>
-                                  <ValidationIcon status={validationStatus.telegramToken} />
-                                  <span className="ml-2">Token'ı Doğrula</span>
-                              </Button>
+                               <TooltipProvider>
+                                   <Tooltip>
+                                       <TooltipTrigger asChild>
+                                            <Button size="sm" onClick={handleValidateTelegramToken} disabled={!apiKeys.telegram.token || validationStatus.telegramToken === 'pending'}>
+                                                <ValidationIcon status={validationStatus.telegramToken} />
+                                                <span className="ml-2">Token'ı Doğrula</span>
+                                            </Button>
+                                       </TooltipTrigger>
+                                       <TooltipContent>
+                                            <p>{ validationStatus.telegramToken === 'valid' ? 'Token geçerli.' : validationStatus.telegramToken === 'invalid' ? 'Token geçersiz veya doğrulanamadı.' : validationStatus.telegramToken === 'pending' ? 'Doğrulanıyor...' : 'Doğrulamak için tıklayın.'}</p>
+                                        </TooltipContent>
+                                   </Tooltip>
+                               </TooltipProvider>
                           </div>
                            <div className="flex items-end gap-2">
                                <div className="flex-1 space-y-1">
                                    <Label htmlFor="telegram-chat-id">Chat ID</Label>
                                    <Input id="telegram-chat-id" placeholder="Telegram Grup/Kullanıcı ID Girin" value={apiKeys.telegram.chatId} onChange={(e) => handleApiKeyChange(e, 'telegram', 'chatId')} />
                                </div>
-                               <Button size="sm" onClick={handleValidateTelegramChatId} disabled={!apiKeys.telegram.chatId || validationStatus.telegramToken !== 'valid' || validationStatus.telegramChatId === 'pending'}>
-                                   <ValidationIcon status={validationStatus.telegramChatId} />
-                                   <span className="ml-2">Test Mesajı Gönder</span>
-                               </Button>
+                                <TooltipProvider>
+                                    <Tooltip>
+                                       <TooltipTrigger asChild>
+                                           <Button size="sm" onClick={handleValidateTelegramChatId} disabled={!apiKeys.telegram.chatId || validationStatus.telegramToken !== 'valid' || validationStatus.telegramChatId === 'pending'}>
+                                               <ValidationIcon status={validationStatus.telegramChatId} />
+                                               <span className="ml-2">Test Mesajı Gönder</span>
+                                           </Button>
+                                       </TooltipTrigger>
+                                        <TooltipContent>
+                                             <p>
+                                                 {validationStatus.telegramToken !== 'valid' ? 'Önce geçerli bir token girin.' :
+                                                  validationStatus.telegramChatId === 'valid' ? 'Chat ID geçerli, test mesajı gönderildi.' :
+                                                  validationStatus.telegramChatId === 'invalid' ? 'Chat ID geçersiz veya bulunamadı.' :
+                                                   validationStatus.telegramChatId === 'pending' ? 'Doğrulanıyor...' :
+                                                  'Chat ID doğrulaması ve test mesajı için tıklayın.'}
+                                            </p>
+                                        </TooltipContent>
+                                   </Tooltip>
+                               </TooltipProvider>
                            </div>
-                           <p className="text-xs text-muted-foreground">BotFather'dan token alın. Chat ID için <a href="https://t.me/userinfobot" target="_blank" rel="noopener noreferrer" className="underline">@userinfobot</a> veya grup ID'si kullanın.</p>
+                           <p className="text-xs text-muted-foreground">BotFather'dan token alın. Chat ID için <a href="https://t.me/userinfobot" target="_blank" rel="noopener noreferrer" className="underline">@userinfobot</a> (kendi ID'niz) veya grup ID'si (-100... ile başlar) kullanın. Botun gruba ekli olması gerekir.</p>
                        </AccordionContent>
                     </AccordionItem>
                 </Accordion>
@@ -1111,57 +1284,55 @@ export default function Dashboard() {
                      <div className="flex items-center">
                         <List className="mr-2 text-primary" /> Strateji Yönetimi
                      </div>
-                      {/* Dialog for Adding New Strategy */}
-                     <Dialog>
+                      {/* Dialog for Defining New Strategy with AI */}
+                     <Dialog open={isDefineStrategyDialogOpen} onOpenChange={setIsDefineStrategyDialogOpen}>
                          <DialogTrigger asChild>
-                              <Button size="sm"><PlusCircle className="mr-2 h-4 w-4"/> Yeni Strateji</Button>
+                              <Button size="sm"><PlusCircle className="mr-2 h-4 w-4"/> Yeni Strateji (AI)</Button>
                           </DialogTrigger>
-                         <DialogContent className="sm:max-w-md"> {/* Wider dialog */}
+                         <DialogContent className="sm:max-w-lg"> {/* Wider dialog for prompt */}
                              <DialogHeader>
-                                 <DialogTitle>Yeni Ticaret Stratejisi Ekle</DialogTitle>
+                                 <DialogTitle>Yeni Ticaret Stratejisi Tanımla (AI)</DialogTitle>
                                  <DialogDescription>
-                                     Yeni bir strateji tanımlayın. AI, bu açıklamayı ve istemi kullanarak stratejiyi çalıştırmaya çalışacaktır.
+                                      AI'nın sizin için bir ticaret stratejisi tanımlamasını sağlayın. İstem alanına net kurallar girin.
                                  </DialogDescription>
                              </DialogHeader>
                              <div className="grid gap-4 py-4">
                                  <div className="space-y-1">
-                                    <Label htmlFor="new-strategy-name">Strateji Adı</Label>
+                                    <Label htmlFor="define-strategy-name">Strateji Adı</Label>
                                      <Input
-                                         id="new-strategy-name"
-                                         value={newStrategyName}
-                                         onChange={(e) => setNewStrategyName(e.target.value)}
+                                         id="define-strategy-name"
+                                         value={defineStrategyParams.name}
+                                         onChange={(e) => handleDefineStrategyParamChange(e, 'name')}
                                          placeholder="Örn: Gelişmiş RSI + Hacim Teyidi"
                                      />
                                  </div>
                                   <div className="space-y-1">
-                                      <Label htmlFor="new-strategy-desc">Kısa Açıklama</Label>
+                                      <Label htmlFor="define-strategy-desc">Kısa Açıklama</Label>
                                       <Input
-                                          id="new-strategy-desc"
-                                          value={newStrategyDescription}
-                                          onChange={(e) => setNewStrategyDescription(e.target.value)}
+                                          id="define-strategy-desc"
+                                          value={defineStrategyParams.description}
+                                          onChange={(e) => handleDefineStrategyParamChange(e, 'description')}
                                            placeholder="Stratejinin ana fikrini özetleyin."
                                       />
                                   </div>
                                  <div className="space-y-1">
-                                     <Label htmlFor="new-strategy-prompt">Detaylı Strateji İstemi (Prompt)</Label>
+                                     <Label htmlFor="define-strategy-prompt">Detaylı Strateji İstemi (Prompt)</Label>
                                      <Textarea
-                                          id="new-strategy-prompt"
-                                          value={newStrategyPrompt}
-                                          onChange={(e) => setNewStrategyPrompt(e.target.value)}
-                                          className="min-h-[100px]"
+                                          id="define-strategy-prompt"
+                                          value={defineStrategyParams.prompt}
+                                          onChange={(e) => handleDefineStrategyParamChange(e, 'prompt')}
+                                          className="min-h-[150px]" // Increased height
                                           placeholder="AI için detaylı alım/satım kurallarını, kullanılacak indikatörleri ve parametreleri açıklayın. Örneğin: 'RSI(14) 35 altına düştüğünde VE Hacim son 10 mumun ortalamasının 1.5 katından fazlaysa AL. RSI(14) 70 üzerine çıktığında veya %3 Stop-Loss tetiklendiğinde SAT.'"
                                       />
                                         <p className="text-xs text-muted-foreground">AI'nın anlayabileceği net ve spesifik kurallar yazın.</p>
                                  </div>
                              </div>
                              <DialogFooter>
-                                 <DialogClose asChild>
-                                     <Button type="button" variant="secondary">İptal</Button>
-                                 </DialogClose>
-                                  {/* Combine Add and Close */}
-                                  <DialogClose asChild>
-                                      <Button type="button" onClick={handleAddNewStrategy}>Stratejiyi Ekle</Button>
-                                  </DialogClose>
+                                 <Button type="button" variant="secondary" onClick={() => setIsDefineStrategyDialogOpen(false)} disabled={isDefiningStrategy}>İptal</Button>
+                                 <Button type="button" onClick={handleDefineNewStrategy} disabled={isDefiningStrategy || !defineStrategyParams.name || !defineStrategyParams.description || !defineStrategyParams.prompt}>
+                                     {isDefiningStrategy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                     {isDefiningStrategy ? 'Tanımlanıyor...' : 'AI ile Strateji Tanımla'}
+                                 </Button>
                              </DialogFooter>
                          </DialogContent>
                      </Dialog>
@@ -1192,6 +1363,7 @@ export default function Dashboard() {
                               onCheckedChange={() => handleStrategyToggle(strategy.id)}
                             />
                             {strategy.name}
+                             {strategy.id.startsWith('ai_') && <Bot className="h-3 w-3 text-blue-500" title="AI Tarafından Tanımlandı"/>}
                           </Label>
                           <TooltipProvider>
                             <Tooltip>
@@ -1203,7 +1375,7 @@ export default function Dashboard() {
                                 <TooltipContent side="left" className="max-w-xs">
                                     <p className="font-medium">{strategy.name}</p>
                                     <p className="text-xs text-muted-foreground">{strategy.description}</p>
-                                     {/* If strategy has a prompt, maybe show a snippet? */}
+                                    {strategy.prompt && <p className="text-xs mt-1 pt-1 border-t border-border text-muted-foreground italic">AI İstem: {strategy.prompt.substring(0, 100)}...</p> }
                                 </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
@@ -1288,7 +1460,7 @@ export default function Dashboard() {
                      <p className="text-xs text-muted-foreground mt-1">Pozisyon açılış fiyatının yüzdesi.</p>
                   </div>
                    <div className="md:col-span-2">
-                       <Button size="sm">Risk Ayarlarını Kaydet</Button> {/* TODO: Implement save logic */}
+                       <Button size="sm" disabled>Risk Ayarlarını Kaydet (Yakında)</Button> {/* TODO: Implement save logic */}
                    </div>
                </CardContent>
             </Card>
@@ -1304,7 +1476,7 @@ export default function Dashboard() {
                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                      <div>
                          <Label htmlFor="backtest-strategy">Test Edilecek Strateji</Label>
-                         <Select value={backtestParams.strategyId} onValueChange={(value) => handleBacktestSelectChange(value, 'strategyId')}>
+                         <Select value={selectedBacktestStrategyId} onValueChange={(value) => handleBacktestSelectChange(value, 'strategyId')}>
                             <SelectTrigger id="backtest-strategy">
                                 <SelectValue placeholder="Strateji Seçin" />
                             </SelectTrigger>
@@ -1364,10 +1536,17 @@ export default function Dashboard() {
                       </div>
                       <div>
                           <Label htmlFor="initial-balance">Başlangıç Bakiyesi (USDT)</Label>
-                          <Input id="initial-balance" type="number" placeholder="1000" value={backtestParams.initialBalance} onChange={(e) => handleBacktestParamChange(e, 'initialBalance')} />
+                           <Input
+                               id="initial-balance"
+                               type="number"
+                               placeholder="1000"
+                               value={backtestParams.initialBalance}
+                               onChange={(e) => handleBacktestParamChange(e, 'initialBalance')}
+                               min="1" // Ensure positive balance
+                           />
                       </div>
                  </div>
-                 <Button onClick={runBacktestHandler} disabled={isBacktesting || !backtestParams.strategyId || !backtestParams.pair || !backtestParams.startDate || !backtestParams.endDate || backtestParams.initialBalance <= 0}>
+                 <Button onClick={runBacktestHandler} disabled={isBacktesting || !selectedBacktestStrategyId || !backtestParams.pair || !backtestParams.startDate || !backtestParams.endDate || backtestParams.initialBalance <= 0}>
                     {isBacktesting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FlaskConical className="mr-2 h-4 w-4"/>}
                     {isBacktesting ? 'Test Çalışıyor...' : 'Testi Başlat'}
                 </Button>
@@ -1387,7 +1566,7 @@ export default function Dashboard() {
                             <div><span className="font-medium">Kaybeden İşlem:</span> {backtestResult.losingTrades}</div>
                             <div><span className="font-medium">Kazanma Oranı:</span> {formatNumberClientSide(backtestResult.winRate)}%</div>
                             <div><span className="font-medium">Maks. Kayıp:</span> {formatNumberClientSide(backtestResult.maxDrawdown)}%</div>
-                             <div className={cn("font-semibold", backtestResult.totalPnl >= 0 ? "text-[hsl(var(--primary))]" : "text-[hsl(var(--destructive))]")}>
+                             <div className={cn("font-semibold col-span-2 md:col-span-1", backtestResult.totalPnl >= 0 ? "text-[hsl(var(--primary))]" : "text-[hsl(var(--destructive))]")}>
                                 <span className="font-medium text-foreground">Net Kar/Zarar:</span> {formatNumberClientSide(backtestResult.totalPnl, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 })} ({formatNumberClientSide(backtestResult.totalPnlPercent)}%)
                             </div>
                             {/* Add Sharpe Ratio if calculated */}
