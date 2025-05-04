@@ -48,6 +48,7 @@ export interface OrderResponse {
 
 /**
  * Represents the account balance for a specific asset.
+ * Note: Binance API returns these as strings.
  */
 export interface Balance {
   /**
@@ -55,14 +56,15 @@ export interface Balance {
    */
   asset: string;
   /**
-   * The free balance of the asset.
+   * The free balance of the asset (as a string).
    */
-  free: number;
+  free: string;
   /**
-   * The locked balance of the asset (in orders).
+   * The locked balance of the asset (in orders, as a string).
    */
-  locked: number;
+  locked: string;
 }
+
 
 /**
  * Represents a candlestick (OHLCV) data point.
@@ -223,21 +225,41 @@ export async function getAccountBalances(
   if (apiKey.length < 10 || secretKey.length < 10) {
      await new Promise(resolve => setTimeout(resolve, 200)); // Extra delay for simulated error
      console.error("Simulated API Error (getAccountBalances): Invalid API Key or Secret Key format.");
-     throw new Error("Invalid API Key or Secret Key format (Placeholder Check).");
+     // Simulate specific Binance error messages for invalid keys
+     if (Math.random() < 0.5) {
+       throw new Error("Invalid API Key or Secret Key format (Simulated: API-key format invalid).");
+     } else {
+        throw new Error("Invalid API Key or Secret Key format (Simulated: Signature for this request is not valid).");
+     }
   }
    // Simulate other random errors
    if (Math.random() < 0.05) {
      console.error("Simulated API Error (getAccountBalances): Network connection failed.");
      throw new Error("Simulated Network Error (getAccountBalances).");
    }
+   // Simulate clock skew error
+    if (Math.random() < 0.05) {
+        console.error("Simulated API Error (getAccountBalances): Timestamp ahead of server time.");
+        throw new Error("Timestamp for this request was 1000ms ahead of the server time.");
+    }
 
-  // Return plausible-looking placeholder balances
+
+  // Return plausible-looking placeholder balances (as strings, like Binance API)
+  const generateBalance = (freeMultiplier: number, lockedMultiplier: number): string => {
+      return (Math.random() * freeMultiplier).toFixed(8); // Generate random balance with 8 decimal places
+  };
+   const generateLocked = (lockedMultiplier: number): string => {
+        return (Math.random() * lockedMultiplier).toFixed(8);
+    };
+
   return [
-    { asset: 'BTC', free: 0.5 + Math.random() * 0.1, locked: 0.1 + Math.random() * 0.05 },
-    { asset: 'ETH', free: 10 + Math.random() * 1, locked: 2 + Math.random() * 0.5 },
-    { asset: isTestnet ? 'TEST_USDT' : 'USDT', free: 5000 + Math.random() * 500, locked: 1000 + Math.random() * 100 },
-    { asset: 'SOL', free: 15.7 + Math.random() * 2, locked: 0 },
-    { asset: 'BNB', free: 25 + Math.random() * 5, locked: 1 + Math.random() * 0.2 },
+      { asset: 'BTC', free: generateBalance(1, 0.1), locked: generateLocked(0.05) },
+      { asset: 'ETH', free: generateBalance(12, 1), locked: generateLocked(0.5) },
+      { asset: isTestnet ? 'TEST_USDT' : 'USDT', free: generateBalance(5500, 500), locked: generateLocked(100) },
+      { asset: 'SOL', free: generateBalance(18, 2), locked: "0.00000000" },
+      { asset: 'BNB', free: generateBalance(30, 5), locked: generateLocked(0.2) },
+      { asset: 'ADA', free: generateBalance(1000, 100), locked: generateLocked(50) },
+      { asset: 'XRP', free: generateBalance(5000, 500), locked: generateLocked(200) },
   ].filter(() => Math.random() > 0.1); // Randomly remove some for variety
 }
 
@@ -406,3 +428,4 @@ export async function getExchangeInfo(isTestnet: boolean = false): Promise<Excha
     throw new Error(`Failed to get exchange info: ${error instanceof Error ? error.message : error}`);
   }
 }
+```
