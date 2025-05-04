@@ -198,28 +198,49 @@ export async function placeOrder(
 
 /**
  * Asynchronously retrieves account balances from Binance.
+ * Used for general portfolio view and API key validation.
  *
  * **This is a placeholder function.** You need to implement the actual Binance API call.
  * Ensure you call the correct endpoint for the intended environment (Spot/Futures).
  *
  * @param apiKey The Binance API key.
  * @param secretKey The Binance API secret key.
+ * @param isTestnet Optional flag for testnet environments (may change the base URL). Defaults to false.
  * @returns A promise that resolves to an array of Balance objects.
- * @throws Error if the API call fails.
+ * @throws Error if the API call fails (e.g., invalid keys, network issues).
  */
 export async function getAccountBalances(
   apiKey: string,
-  secretKey: string
+  secretKey: string,
+  isTestnet: boolean = false // Add optional testnet flag
 ): Promise<Balance[]> {
-   console.log('Getting Account Balances (Placeholder)');
+   console.log(`Getting Account Balances (Placeholder, Testnet: ${isTestnet})`);
+   // Basic validation
+   if (!apiKey || !secretKey) {
+       throw new Error("API Key and Secret Key are required.");
+   }
+
   // TODO: Implement actual Binance API call here.
+  // Use the isTestnet flag to potentially change the API base URL.
   // Example (Conceptual - requires 'binance-api-node'):
   /*
   const Binance = require('binance-api-node').default;
-  const client = Binance({ apiKey, apiSecret: secretKey }); // Add sandbox: true for Testnet
+  const clientOptions = { apiKey, apiSecret: secretKey };
+  if (isTestnet) {
+       // Note: binance-api-node might have a specific 'sandbox' or 'testnet' option,
+       // or you might need to configure the baseURLs directly. CHECK LIBRARY DOCS.
+       // clientOptions.sandbox = true; // Example if library supports it
+       // clientOptions.baseURL = 'https://testnet.binance.vision'; // Example manual override
+       // clientOptions.futuresBaseURL = 'https://testnet.binancefuture.com'; // Example manual override
+  }
+  const client = Binance(clientOptions);
   try {
       // For Spot:
       const accountInfo = await client.accountInfo();
+       if (!accountInfo || !Array.isArray(accountInfo.balances)) {
+           console.error("Invalid response structure from accountInfo:", accountInfo);
+           throw new Error("Failed to parse account balance response.");
+       }
       const balances = accountInfo.balances.map(b => ({
           asset: b.asset,
           free: parseFloat(b.free),
@@ -227,27 +248,66 @@ export async function getAccountBalances(
       })).filter(b => b.free > 0 || b.locked > 0); // Filter zero balances
       return balances;
 
-      // For Futures (different endpoint):
-      // const futuresAccountInfo = await client.futuresAccountInfo(); // Check library docs for exact method
+      // For Futures (different endpoint, check library):
+      // const futuresAccountInfo = await client.futuresAccountInfo();
       // Adapt response structure accordingly
   } catch (error) {
+      // Catch specific error codes for invalid API keys if possible (e.g., -2014, -2015)
+      // if (error.code === -2015) { // Example code for invalid key
+      //   throw new Error("Invalid API Key or Secret Key.");
+      // }
       console.error("Binance API Error (getAccountBalances):", error);
       throw new Error(`Failed to get account balances: ${error.message || error}`);
   }
   */
 
   // Placeholder response:
-  await new Promise(resolve => setTimeout(resolve, 300));
-   if (Math.random() < 0.05) { // Simulate occasional error
-     throw new Error("Simulated API Error: Invalid API Key");
+  await new Promise(resolve => setTimeout(resolve, 300 + Math.random() * 400)); // Simulate network delay
+
+  // Simulate API key failure based on simple length check (adjust as needed)
+  if (apiKey.length < 10 || secretKey.length < 10) {
+     await new Promise(resolve => setTimeout(resolve, 200)); // Extra delay for simulated error
+     throw new Error("Simulated API Error: Invalid API Key or Secret Key format.");
+  }
+   // Simulate other random errors
+   if (Math.random() < 0.05) {
+     throw new Error("Simulated API Error: Network connection failed.");
    }
+
+  // Return plausible-looking balances if keys seem okay format-wise
   return [
     { asset: 'BTC', free: 0.5 + Math.random() * 0.1, locked: 0.1 + Math.random() * 0.05 },
     { asset: 'ETH', free: 10 + Math.random() * 1, locked: 2 + Math.random() * 0.5 },
-    { asset: 'USDT', free: 5000 + Math.random() * 500, locked: 1000 + Math.random() * 100 },
-     { asset: 'SOL', free: 15.7 + Math.random() * 2, locked: 0 },
-  ];
+    { asset: isTestnet ? 'TEST_USDT' : 'USDT', free: 5000 + Math.random() * 500, locked: 1000 + Math.random() * 100 },
+    { asset: 'SOL', free: 15.7 + Math.random() * 2, locked: 0 },
+  ].filter(() => Math.random() > 0.1); // Randomly remove some for variety
 }
+
+/**
+ * Validates Binance API keys by attempting to fetch account balances.
+ * @param apiKey The API Key.
+ * @param secretKey The Secret Key.
+ * @param isTestnet Optional flag for testnet environments. Defaults to false.
+ * @returns True if the keys are valid (API call succeeds), false otherwise.
+ */
+export async function validateApiKey(
+    apiKey: string,
+    secretKey: string,
+    isTestnet: boolean = false
+): Promise<boolean> {
+    try {
+        // Attempt to get balances. If it throws an error (e.g., due to invalid keys),
+        // the catch block will handle it. If it succeeds, the keys are considered valid.
+        await getAccountBalances(apiKey, secretKey, isTestnet);
+        return true;
+    } catch (error) {
+         console.warn(`API Key validation failed (Testnet: ${isTestnet}):`, error);
+        // Check for specific error messages if needed, otherwise assume invalid
+        // if (error instanceof Error && error.message.includes("Invalid API Key")) { ... }
+        return false;
+    }
+}
+
 
 /**
  * Asynchronously retrieves candlestick data from Binance.
@@ -313,15 +373,15 @@ export async function getCandlestickData(
   */
 
   // Placeholder response generation:
-  await new Promise(resolve => setTimeout(resolve, 400)); // Simulate network delay
+  await new Promise(resolve => setTimeout(resolve, 250 + Math.random() * 250)); // Simulate network delay
 
   // Simple way to make placeholder data slightly different per symbol
   const symbolSeed = symbol.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  const basePrice = 100 + (symbolSeed % 10000); // Base price based on symbol name
+  const basePrice = 100 + (symbolSeed % 50000); // Base price based on symbol name (wider range)
 
   const generatePlaceholderCandles = (num: number): Candle[] => {
     const candles: Candle[] = [];
-    let lastClose = basePrice + Math.random() * (basePrice * 0.1); // Start with some variation
+    let lastClose = basePrice * (0.95 + Math.random() * 0.1); // Start with some variation
     // Calculate interval duration in milliseconds (crude approximation)
     let intervalMs = 60 * 60 * 1000; // Default to 1h
     if (interval.endsWith('m')) intervalMs = parseInt(interval) * 60 * 1000;
@@ -332,24 +392,32 @@ export async function getCandlestickData(
 
     for (let i = 0; i < num; i++) {
       const open = lastClose;
-      const priceFluctuation = lastClose * 0.02; // Fluctuate by ~2%
-      const high = open + Math.random() * priceFluctuation;
+      // Make fluctuation potentially larger for more volatile symbols (crude heuristic)
+      const volatilityFactor = 1 + (symbolSeed % 5) / 10; // Add 0% to 40% extra volatility
+      const priceFluctuation = lastClose * 0.015 * volatilityFactor; // Fluctuate by ~1.5% base
+      const high = open + Math.random() * priceFluctuation * 1.2; // Allow higher highs
       const low = open - Math.random() * priceFluctuation;
-      const close = low + Math.random() * (high - low);
-      const volume = 50 + Math.random() * 100;
+      const close = low + Math.random() * (high - low); // Close somewhere between low and high
+      const volume = (50 + Math.random() * 150) * (1/volatilityFactor); // More volatile might have less volume? Or inverse? Adjust as needed.
       const openTime = currentTime;
       const closeTime = currentTime + intervalMs - 1;
 
+      // Determine appropriate decimal places based on price
+      let decimalPlaces = 2;
+      if (basePrice < 0.01) decimalPlaces = 8;
+      else if (basePrice < 1) decimalPlaces = 4;
+
+
       candles.push({
         openTime: openTime,
-        open: parseFloat(open.toFixed(Math.max(2, 8 - Math.floor(Math.log10(basePrice))))), // Dynamic precision
-        high: parseFloat(high.toFixed(Math.max(2, 8 - Math.floor(Math.log10(basePrice))))),
-        low: parseFloat(low.toFixed(Math.max(2, 8 - Math.floor(Math.log10(basePrice))))),
-        close: parseFloat(close.toFixed(Math.max(2, 8 - Math.floor(Math.log10(basePrice))))),
+        open: parseFloat(open.toFixed(decimalPlaces)),
+        high: parseFloat(high.toFixed(decimalPlaces)),
+        low: parseFloat(low.toFixed(decimalPlaces)),
+        close: parseFloat(close.toFixed(decimalPlaces)),
         volume: parseFloat(volume.toFixed(2)),
         closeTime: closeTime,
         quoteAssetVolume: parseFloat((volume * close).toFixed(2)),
-        numberOfTrades: Math.floor(100 + Math.random() * 200),
+        numberOfTrades: Math.floor(100 + Math.random() * 200 * volatilityFactor),
         takerBuyBaseAssetVolume: parseFloat((volume * (0.4 + Math.random() * 0.2)).toFixed(2)), // Simulate taker buy volume
         takerBuyQuoteAssetVolume: parseFloat((volume * close * (0.4 + Math.random() * 0.2)).toFixed(2)),
         ignore: 0,
@@ -359,6 +427,17 @@ export async function getCandlestickData(
     }
     return candles;
   };
+
+  // Simulate API error for specific symbols if needed for testing
+  if (symbol === 'ERRORUSDT') {
+      await new Promise(resolve => setTimeout(resolve, 150));
+      throw new Error(`Simulated API Error: Unknown error for symbol ${symbol}`);
+  }
+   if (symbol === 'NODATAUSDT') {
+       await new Promise(resolve => setTimeout(resolve, 150));
+       return []; // Simulate symbol with no data
+   }
+
 
   return generatePlaceholderCandles(limit);
 }
@@ -428,39 +507,71 @@ export async function getExchangeInfo(): Promise<ExchangeInfo> {
 
   const placeholderSymbols: SymbolInfo[] = [];
   let symbolCount = 0;
+  const maxSymbols = 100 + Math.floor(Math.random() * 20); // Generate 100-120 symbols
 
   for (const base of baseAssets) {
-      if (symbolCount >= 100) break;
+      if (symbolCount >= maxSymbols) break;
       // Prioritize USDT pairs
-      if (base !== 'USDT') {
-          placeholderSymbols.push({ symbol: `${base}USDT`, status: 'TRADING', baseAsset: base, quoteAsset: 'USDT', isSpotTradingAllowed: true });
-          symbolCount++;
-      }
-      // Add some BUSD pairs
-      if (base !== 'BUSD' && Math.random() < 0.5 && symbolCount < 100) {
-           placeholderSymbols.push({ symbol: `${base}BUSD`, status: 'TRADING', baseAsset: base, quoteAsset: 'BUSD', isSpotTradingAllowed: true });
-           symbolCount++;
-      }
-        // Add some TRY pairs
-      if (base !== 'TRY' && ['BTC', 'ETH', 'XRP', 'DOGE', 'SHIB'].includes(base) && symbolCount < 100) { // Only popular ones vs TRY
-           placeholderSymbols.push({ symbol: `${base}TRY`, status: 'TRADING', baseAsset: base, quoteAsset: 'TRY', isSpotTradingAllowed: true });
-           symbolCount++;
-      }
-      // Add some BTC pairs (except for BTC itself)
-      if (base !== 'BTC' && Math.random() < 0.3 && symbolCount < 100) {
-          placeholderSymbols.push({ symbol: `${base}BTC`, status: 'TRADING', baseAsset: base, quoteAsset: 'BTC', isSpotTradingAllowed: true });
-          symbolCount++;
-      }
-       // Add some ETH pairs (except for ETH itself)
-       if (base !== 'ETH' && Math.random() < 0.2 && symbolCount < 100) {
-           placeholderSymbols.push({ symbol: `${base}ETH`, status: 'TRADING', baseAsset: base, quoteAsset: 'ETH', isSpotTradingAllowed: true });
-           symbolCount++;
+      if (base !== 'USDT' && base !== 'BUSD' && base !== 'TRY' && base !== 'BTC' && base !== 'ETH') {
+           if (Math.random() > 0.1) { // High probability for USDT
+             placeholderSymbols.push({ symbol: `${base}USDT`, status: 'TRADING', baseAsset: base, quoteAsset: 'USDT', isSpotTradingAllowed: true });
+             symbolCount++;
+           }
+           // Add some BUSD pairs
+           if (Math.random() < 0.4 && symbolCount < maxSymbols) { // Moderate probability for BUSD
+              placeholderSymbols.push({ symbol: `${base}BUSD`, status: 'TRADING', baseAsset: base, quoteAsset: 'BUSD', isSpotTradingAllowed: true });
+              symbolCount++;
+           }
+            // Add some TRY pairs
+           if (Math.random() < 0.2 && symbolCount < maxSymbols) { // Lower probability for TRY
+              placeholderSymbols.push({ symbol: `${base}TRY`, status: 'TRADING', baseAsset: base, quoteAsset: 'TRY', isSpotTradingAllowed: true });
+              symbolCount++;
+           }
+          // Add some BTC pairs
+          if (Math.random() < 0.25 && symbolCount < maxSymbols) { // Moderate-low probability for BTC
+              placeholderSymbols.push({ symbol: `${base}BTC`, status: 'TRADING', baseAsset: base, quoteAsset: 'BTC', isSpotTradingAllowed: true });
+              symbolCount++;
+          }
+           // Add some ETH pairs
+           if (Math.random() < 0.15 && symbolCount < maxSymbols) { // Low probability for ETH
+               placeholderSymbols.push({ symbol: `${base}ETH`, status: 'TRADING', baseAsset: base, quoteAsset: 'ETH', isSpotTradingAllowed: true });
+               symbolCount++;
+           }
        }
+       // Ensure BTC, ETH vs USDT/BUSD/TRY are included if not generated randomly
+       if (base === 'BTC') {
+           if (!placeholderSymbols.some(p => p.symbol === 'BTCUSDT')) placeholderSymbols.push({ symbol: `BTCUSDT`, status: 'TRADING', baseAsset: 'BTC', quoteAsset: 'USDT', isSpotTradingAllowed: true });
+           if (!placeholderSymbols.some(p => p.symbol === 'BTCBUSD')) placeholderSymbols.push({ symbol: `BTCBUSD`, status: 'TRADING', baseAsset: 'BTC', quoteAsset: 'BUSD', isSpotTradingAllowed: true });
+            if (!placeholderSymbols.some(p => p.symbol === 'BTCTRY')) placeholderSymbols.push({ symbol: `BTCTRY`, status: 'TRADING', baseAsset: 'BTC', quoteAsset: 'TRY', isSpotTradingAllowed: true });
+           symbolCount+=3;
+       }
+        if (base === 'ETH') {
+            if (!placeholderSymbols.some(p => p.symbol === 'ETHUSDT')) placeholderSymbols.push({ symbol: `ETHUSDT`, status: 'TRADING', baseAsset: 'ETH', quoteAsset: 'USDT', isSpotTradingAllowed: true });
+            if (!placeholderSymbols.some(p => p.symbol === 'ETHBUSD')) placeholderSymbols.push({ symbol: `ETHBUSD`, status: 'TRADING', baseAsset: 'ETH', quoteAsset: 'BUSD', isSpotTradingAllowed: true });
+            if (!placeholderSymbols.some(p => p.symbol === 'ETHTRY')) placeholderSymbols.push({ symbol: `ETHTRY`, status: 'TRADING', baseAsset: 'ETH', quoteAsset: 'TRY', isSpotTradingAllowed: true });
+            if (!placeholderSymbols.some(p => p.symbol === 'ETHBTC')) placeholderSymbols.push({ symbol: `ETHBTC`, status: 'TRADING', baseAsset: 'ETH', quoteAsset: 'BTC', isSpotTradingAllowed: true });
+            symbolCount+=4;
+        }
+
+        // Add a few non-trading examples randomly
+        if (Math.random() < 0.05 && symbolCount < maxSymbols) {
+           const nonTradingBase = baseAssets[Math.floor(Math.random()*baseAssets.length)];
+           const nonTradingQuote = quoteAssets[Math.floor(Math.random()*quoteAssets.length)];
+            if (nonTradingBase !== nonTradingQuote && !placeholderSymbols.some(p => p.symbol === `${nonTradingBase}${nonTradingQuote}`)) {
+                placeholderSymbols.push({ symbol: `${nonTradingBase}${nonTradingQuote}`, status: 'BREAK', baseAsset: nonTradingBase, quoteAsset: nonTradingQuote, isSpotTradingAllowed: false });
+                symbolCount++;
+            }
+        }
+
   }
 
-    // Add a non-trading pair example
+  // Ensure SHIBUSDT is present for testing non-trading display if it wasn't added
    if (!placeholderSymbols.find(p => p.symbol === 'SHIBUSDT')) {
-        placeholderSymbols.push({ symbol: 'SHIBUSDT', status: 'BREAK', baseAsset: 'SHIB', quoteAsset: 'USDT', isSpotTradingAllowed: false });
+        placeholderSymbols.push({ symbol: 'SHIBUSDT', status: 'TRADING', baseAsset: 'SHIB', quoteAsset: 'USDT', isSpotTradingAllowed: true });
+   }
+    // Add one explicit BREAK example if none were added randomly
+   if (!placeholderSymbols.find(p => p.status === 'BREAK')) {
+        placeholderSymbols.push({ symbol: 'XYZABC', status: 'BREAK', baseAsset: 'XYZ', quoteAsset: 'ABC', isSpotTradingAllowed: false });
    }
 
 

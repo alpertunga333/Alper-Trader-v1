@@ -1,69 +1,122 @@
+// Helper function to make Telegram API requests (internal)
+async function makeTelegramRequest(botToken: string, method: string, params: Record<string, any> = {}): Promise<any> {
+    const TELEGRAM_API_URL = `https://api.telegram.org/bot${botToken}/${method}`;
+    try {
+        const response = await fetch(TELEGRAM_API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(params),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.ok) {
+            console.error(`Telegram API Error (${method}, Status: ${response.status}): ${data.description || 'Unknown error'}`);
+            // Throw a specific error or return data with ok: false
+            throw new Error(`Telegram API Error: ${data.description || `HTTP ${response.status}`}`);
+        }
+
+        return data; // Contains { ok: true, result: ... }
+    } catch (error) {
+        console.error(`Error during Telegram request (${method}):`, error);
+        // Rethrow a generic error or the specific one from above
+        throw new Error(`Failed to execute Telegram API method ${method}: ${error instanceof Error ? error.message : error}`);
+    }
+}
+
+
 /**
  * Asynchronously sends a message to a Telegram group via a bot.
  *
- * **This is a placeholder function.** You need to implement the actual Telegram Bot API call.
- * Consider using a library like 'node-telegram-bot-api' or 'telegraf'.
- * Handle potential errors (invalid token, chat not found, rate limits).
+ * Uses the actual Telegram Bot API.
+ * Handles potential errors (invalid token, chat not found, rate limits).
  *
- * @param message The message text to send. Supports basic Markdown or HTML based on Telegram API options.
+ * @param message The message text to send. Supports basic MarkdownV2 or HTML formatting.
  * @param botToken The Telegram bot token.
  * @param chatId The Telegram chat ID (can be a user ID or a group/channel ID).
- * @returns A promise that resolves when the message is attempted to be sent. It might not guarantee delivery.
- * @throws Error if the API call fails significantly (e.g., network error).
+ * @param parseMode Optional parse mode ('MarkdownV2' or 'HTML'). Defaults to undefined (plain text).
+ * @returns A promise that resolves when the message is attempted to be sent. It might not guarantee delivery success on Telegram's side, but confirms the API call was made.
+ * @throws Error if the API call fails significantly (e.g., network error, invalid token).
  */
 export async function sendMessage(
   message: string,
   botToken: string,
-  chatId: string
+  chatId: string,
+  parseMode?: 'MarkdownV2' | 'HTML'
 ): Promise<void> {
    // Basic validation
    if (!botToken || !chatId || !message) {
      console.error("Telegram sendMessage: Missing botToken, chatId, or message.");
-     // Decide if you want to throw an error or just log and return
-     // throw new Error("Missing required parameters for sending Telegram message.");
-     return;
+     throw new Error("Missing required parameters for sending Telegram message.");
    }
 
    console.log(`Attempting to send message to Telegram Chat ID ${chatId}: "${message.substring(0, 50)}..."`);
 
-  // TODO: Implement actual Telegram Bot API call here.
-  // Example (Conceptual - using fetch API, requires error handling and proper encoding):
-  /*
-  const TELEGRAM_API_URL = `https://api.telegram.org/bot${botToken}/sendMessage`;
-  try {
-      const response = await fetch(TELEGRAM_API_URL, {
-          method: 'POST',
-          headers: {
-              'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-              chat_id: chatId,
-              text: message,
-              parse_mode: 'MarkdownV2', // Or 'HTML', remember to escape characters accordingly
-          }),
-      });
+   try {
+       const params: Record<string, any> = {
+           chat_id: chatId,
+           text: message,
+       };
+       if (parseMode) {
+           params.parse_mode = parseMode;
+       }
 
-      if (!response.ok) {
-          const errorData = await response.json();
-          console.error(`Telegram API Error (${response.status}): ${errorData.description}`);
-          // Optionally throw an error based on status code or description
-          // throw new Error(`Telegram API Error: ${errorData.description}`);
-      } else {
-          console.log("Telegram message sent successfully (according to API response).");
-      }
-  } catch (error) {
-      console.error("Error sending Telegram message (Network/Fetch Error):", error);
-      // Rethrow or handle as appropriate
-      // throw new Error(`Failed to send Telegram message: ${error.message || error}`);
-  }
-  */
+       await makeTelegramRequest(botToken, 'sendMessage', params);
+       console.log("Telegram sendMessage: API request successful.");
 
-   // Simulate network delay for placeholder
-   await new Promise(resolve => setTimeout(resolve, 200));
-   console.log("Telegram sendMessage (Placeholder): Function executed.");
-    // Simulate occasional failure for placeholder
-   if (Math.random() < 0.05) {
-      console.error("Simulated Telegram API Error: Chat not found or token invalid.");
-      // throw new Error("Simulated Telegram API Error");
+   } catch (error) {
+       console.error("Error sending Telegram message via API:", error);
+       // Rethrow the error to be handled by the caller
+       throw error;
    }
+}
+
+/**
+ * Validates a Telegram Bot Token by calling the `getMe` API method.
+ * @param botToken The Telegram bot token to validate.
+ * @returns True if the token is valid (API call succeeds), false otherwise.
+ */
+export async function validateBotToken(botToken: string): Promise<boolean> {
+    if (!botToken) return false;
+    console.log("Validating Telegram Bot Token...");
+    try {
+        const response = await makeTelegramRequest(botToken, 'getMe');
+        const isValid = response && response.ok;
+        console.log("Telegram Bot Token validation result:", isValid);
+        return isValid;
+    } catch (error) {
+         // Log the error but return false for validation purposes
+        console.warn("Telegram Bot Token validation failed:", error);
+        return false;
+    }
+}
+
+/**
+ * Validates a Telegram Chat ID by attempting to send a 'typing' action.
+ * This is less intrusive than sending a message. Requires a valid bot token.
+ * @param botToken A *valid* Telegram bot token.
+ * @param chatId The Chat ID to validate.
+ * @returns True if the chat ID is valid and the bot has access, false otherwise.
+ */
+export async function validateChatId(botToken: string, chatId: string): Promise<boolean> {
+     if (!botToken || !chatId) return false;
+     console.log(`Validating Telegram Chat ID: ${chatId}...`);
+    try {
+        // Sending 'typing' action is a good way to check access without sending a visible message
+        const response = await makeTelegramRequest(botToken, 'sendChatAction', {
+            chat_id: chatId,
+            action: 'typing',
+        });
+         const isValid = response && response.ok;
+         console.log(`Telegram Chat ID ${chatId} validation result:`, isValid);
+         return isValid;
+    } catch (error) {
+        // Log the error but return false for validation purposes
+        console.warn(`Telegram Chat ID ${chatId} validation failed:`, error);
+        // Specific error check (example): 'Bad Request: chat not found'
+        // if (error instanceof Error && error.message.includes('chat not found')) { ... }
+        return false;
+    }
 }
