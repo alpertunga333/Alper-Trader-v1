@@ -1,4 +1,4 @@
-import * as React from 'react'; // Added missing import
+import * as React from 'react';
 import { useState, useEffect } from 'react';
 
 /**
@@ -31,7 +31,7 @@ export const formatTimestamp = (timestamp: number | string | undefined): string 
 /**
  * Formats a number or numeric string into a localized string representation,
  * handling potential comma decimal separators and ensuring client-side execution.
- * Returns 'N/A' for invalid inputs.
+ * Returns 'N/A' for invalid inputs. Clamps fraction digits to prevent RangeError.
  * @param value The number or string to format.
  * @param options Intl.NumberFormat options.
  * @returns Formatted number string or 'N/A'.
@@ -52,19 +52,47 @@ export const formatNumberClientSide = (value: number | string | undefined, optio
     if (numValue === undefined || numValue === null || isNaN(numValue)) {
         return 'N/A'; // Return Not Available for invalid numbers
     }
-    const defaultOptions: Intl.NumberFormatOptions = {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2, // Default to 2 for consistency unless overridden
-        ...options,
+
+    // --- Start: Clamp fraction digits ---
+    let minDigits = options?.minimumFractionDigits ?? (options?.style === 'currency' ? 2 : undefined); // Sensible default for currency, else undefined
+    let maxDigits = options?.maximumFractionDigits ?? (options?.style === 'currency' ? 8 : 3); // Default max for currency, else 3
+
+    // Clamp values to the typical valid range [0, 20]
+    minDigits = minDigits !== undefined ? Math.max(0, Math.min(20, minDigits)) : undefined;
+    maxDigits = maxDigits !== undefined ? Math.max(0, Math.min(20, maxDigits)) : undefined;
+
+    // Ensure max is not less than min if both are defined
+    if (minDigits !== undefined && maxDigits !== undefined) {
+        maxDigits = Math.max(minDigits, maxDigits);
+    }
+    // --- End: Clamp fraction digits ---
+
+    const safeOptions: Intl.NumberFormatOptions = {
+        ...options, // Apply original options first
+        // Apply potentially clamped values, only if they were defined initially or had defaults
+        ...(minDigits !== undefined && { minimumFractionDigits: minDigits }),
+        ...(maxDigits !== undefined && { maximumFractionDigits: maxDigits }),
     };
+
+    // Special handling for compact notation: Let it infer digits if not explicitly set
+    if (options?.notation === 'compact') {
+         // If fraction digits were NOT explicitly provided in the original options, remove them for compact
+         if (options.minimumFractionDigits === undefined && options.maximumFractionDigits === undefined) {
+             delete safeOptions.minimumFractionDigits;
+             delete safeOptions.maximumFractionDigits;
+         }
+         // Otherwise, keep the (potentially clamped) explicit values
+    }
+
 
      // Use try-catch for safety with localization
      try {
-        return numValue.toLocaleString('tr-TR', defaultOptions);
+        return numValue.toLocaleString('tr-TR', safeOptions);
      } catch (error) {
-        console.error("Error formatting number:", error);
-         // Fallback to basic formatting
-        return numValue.toFixed(defaultOptions.minimumFractionDigits);
+        console.error("Error formatting number:", error, "Value:", numValue, "Options:", safeOptions);
+         // Fallback to basic formatting with clamped digits
+         const fallbackMaxDigits = maxDigits !== undefined ? maxDigits : (minDigits !== undefined ? minDigits : 2);
+        return numValue.toFixed(fallbackMaxDigits);
      }
 };
 
@@ -76,12 +104,22 @@ export const formatNumberClientSide = (value: number | string | undefined, optio
  */
 export const useFormattedNumber = (value: number | string | undefined, options?: Intl.NumberFormatOptions) => {
     const [formatted, setFormatted] = useState<string | null>(null);
+
+    // Calculate server value based on clamped digits
     const serverValue = React.useMemo(() => {
         const numValue = typeof value === 'string' ? parseFloat(value.replace(',', '.')) : value;
-        return (typeof numValue === 'number' && !isNaN(numValue))
-            ? numValue.toFixed(options?.minimumFractionDigits ?? options?.maximumFractionDigits ?? 2)
-            : 'N/A';
-     }, [value, options?.minimumFractionDigits, options?.maximumFractionDigits]);
+        if (typeof numValue !== 'number' || isNaN(numValue)) return 'N/A';
+
+        let minDigits = options?.minimumFractionDigits ?? (options?.style === 'currency' ? 2 : undefined);
+        let maxDigits = options?.maximumFractionDigits ?? (options?.style === 'currency' ? 8 : 3);
+        minDigits = minDigits !== undefined ? Math.max(0, Math.min(20, minDigits)) : undefined;
+        maxDigits = maxDigits !== undefined ? Math.max(0, Math.min(20, maxDigits)) : undefined;
+        if (minDigits !== undefined && maxDigits !== undefined) maxDigits = Math.max(minDigits, maxDigits);
+        const fallbackMaxDigits = maxDigits !== undefined ? maxDigits : (minDigits !== undefined ? minDigits : 2);
+
+        return numValue.toFixed(fallbackMaxDigits);
+     // eslint-disable-next-line react-hooks/exhaustive-deps
+     }, [value, JSON.stringify(options)]); // Stringify options to capture changes
 
 
     useEffect(() => {

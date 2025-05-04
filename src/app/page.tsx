@@ -1,3 +1,4 @@
+// src/app/page.tsx
 'use client';
 
 import * as React from 'react';
@@ -45,8 +46,8 @@ import {
   SidebarMenuSubItem,
   SidebarGroup,
   SidebarGroupLabel,
-  SidebarSeparator, // Added Separator import for sidebar
-  SidebarMenuButton, // Added import
+  SidebarSeparator,
+  SidebarMenuButton,
 } from '@/components/ui/sidebar';
 import {
   Table,
@@ -125,7 +126,7 @@ import { useFormattedNumber, formatNumberClientSide, formatTimestamp } from '@/l
 import type { BacktestParams, BacktestResult, DefineStrategyParams, DefineStrategyResult, RunParams, RunResult, Strategy } from '@/ai/types/strategy-types';
 import { backtestStrategy, runStrategy, defineNewStrategy } from '@/ai/actions/trading-strategy-actions';
 import { fetchAccountBalancesAction } from '@/actions/binanceActions'; // Server Action for fetching balances
-import { Separator } from '@/components/ui/separator'; // Import Separator
+import { Separator } from '@/components/ui/separator';
 
 
 // Initial empty data for charts before loading
@@ -198,7 +199,6 @@ type ApiEnvironment = 'spot'; // Only spot is supported now
 // ----- Main Dashboard Component -----
 export default function Dashboard() {
   // --- State Definitions ---
-  // Removed activeUser state
   const [selectedPair, setSelectedPair] = React.useState<string>('');
   const [selectedInterval, setSelectedInterval] = React.useState<string>('1h');
   const [botStatus, setBotStatus] = React.useState<'running' | 'stopped'>('stopped');
@@ -432,9 +432,6 @@ export default function Dashboard() {
 
 
   // --- Handlers ---
-
-  // Removed handleLogin and handleLogout
-
 
   const toggleBotStatus = async () => {
      const newStatus = botStatus === 'running' ? 'stopped' : 'running';
@@ -835,17 +832,12 @@ export default function Dashboard() {
     const total = parseFloat(balance.free) + parseFloat(balance.locked); // Calculate total as number
     const formattedTotal = useFormattedNumber(total, { maximumFractionDigits: 8 });
 
-    // Placeholder for USD value - replace with actual price fetching logic
-    // const [usdValue, setUsdValue] = React.useState<string>('...');
-    // React.useEffect(() => { /* Fetch price and calculate value */ }, [balance]);
-
     return (
       <TableRow key={balance.asset}>
         <TableCell className="font-medium">{balance.asset}</TableCell>
         <TableCell className="text-right tabular-nums">{formattedFree}</TableCell>
         <TableCell className="text-right tabular-nums">{formattedLocked}</TableCell>
         <TableCell className="text-right tabular-nums font-semibold">{formattedTotal}</TableCell>
-        {/* <TableCell className="text-right text-xs text-muted-foreground tabular-nums">{usdValue}</TableCell> */}
       </TableRow>
     );
   };
@@ -880,7 +872,7 @@ export default function Dashboard() {
          const timeLabel = formatTimestamp(label);
          // Use client-side formatting function directly
          const price = formatNumberClientSide(pricePayload?.value, { style: 'currency', currency: 'USD', maximumFractionDigits: Math.max(2, String(pricePayload?.value ?? '0').split('.')[1]?.length || 0) });
-         const volume = formatNumberClientSide(volumePayload?.value, { maximumFractionDigits: 0 });
+         const volume = formatNumberClientSide(volumePayload?.value, { notation: 'compact', maximumFractionDigits: 1 }); // Use compact notation for volume
          const open = formatNumberClientSide(dataPoint.open, { style: 'currency', currency: 'USD', maximumFractionDigits: Math.max(2, String(dataPoint.open).split('.')[1]?.length || 0) });
          const high = formatNumberClientSide(dataPoint.high, { style: 'currency', currency: 'USD', maximumFractionDigits: Math.max(2, String(dataPoint.high).split('.')[1]?.length || 0) });
          const low = formatNumberClientSide(dataPoint.low, { style: 'currency', currency: 'USD', maximumFractionDigits: Math.max(2, String(dataPoint.low).split('.')[1]?.length || 0) });
@@ -1015,899 +1007,891 @@ export default function Dashboard() {
 
   // --- JSX Structure ---
   return (
-      <SidebarProvider>
-        <Sidebar side="left" collapsible="icon" variant="sidebar">
-          {/* Sidebar Header: Logo */}
-          <SidebarHeader>
-            {/* Replace with your logo */}
-            <Link href="/" className="flex items-center gap-2 p-2">
-              <TrendingUp className="h-6 w-6 text-primary" />
-              <span className="font-semibold text-lg group-data-[collapsible=icon]:hidden">KriptoPilot</span>
-            </Link>
-          </SidebarHeader>
-          {/* Removed User Login Section */}
+    <SidebarProvider>
+      <Sidebar side="left" collapsible="icon" variant="sidebar">
+        {/* Sidebar Header: Logo */}
+        <SidebarHeader>
+          {/* Replace with your logo */}
+          <Link href="/" className="flex items-center gap-2 p-2">
+            <TrendingUp className="h-6 w-6 text-primary" />
+            <span className="font-semibold text-lg group-data-[collapsible=icon]:hidden">KriptoPilot</span>
+          </Link>
+        </SidebarHeader>
 
-          {/* Main Navigation */}
-          <SidebarContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton href="#" isActive={true} tooltip="Gösterge Paneli">
-                  <Home />
-                  <span>Gösterge Paneli</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+        {/* Main Navigation */}
+        <SidebarContent>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton href="#" isActive={true} tooltip="Gösterge Paneli">
+                <Home />
+                <span>Gösterge Paneli</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
 
-              <SidebarMenuItem>
-                <SidebarMenuButton href="#portfolio" tooltip="Portföy">
-                  <Wallet />
-                  <span>Portföy</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton href="#portfolio" tooltip="Portföy">
+                <Wallet />
+                <span>Portföy</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
 
-              <SidebarMenuItem>
-                <SidebarMenuButton href="#strategies" tooltip="Stratejiler">
-                  <BrainCircuit />
-                  <span>Stratejiler</span>
-                </SidebarMenuButton>
-                <SidebarMenuSub>
-                  <SidebarMenuSubItem><SidebarMenuSubButton href="#strategies-manage">Yönetim</SidebarMenuSubButton></SidebarMenuSubItem>
-                  <SidebarMenuSubItem><SidebarMenuSubButton href="#strategies-backtest">Geriye Dönük Test</SidebarMenuSubButton></SidebarMenuSubItem>
-                  <SidebarMenuSubItem><SidebarMenuSubButton href="#strategies-risk">Risk Yönetimi</SidebarMenuSubButton></SidebarMenuSubItem>
-                </SidebarMenuSub>
-              </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton href="#strategies" tooltip="Stratejiler">
+                <BrainCircuit />
+                <span>Stratejiler</span>
+              </SidebarMenuButton>
+              <SidebarMenuSub>
+                <SidebarMenuSubItem><SidebarMenuSubButton href="#strategies-manage">Yönetim</SidebarMenuSubButton></SidebarMenuSubItem>
+                <SidebarMenuSubItem><SidebarMenuSubButton href="#strategies-backtest">Geriye Dönük Test</SidebarMenuSubButton></SidebarMenuSubItem>
+                <SidebarMenuSubItem><SidebarMenuSubButton href="#strategies-risk">Risk Yönetimi</SidebarMenuSubButton></SidebarMenuSubItem>
+              </SidebarMenuSub>
+            </SidebarMenuItem>
 
-              <SidebarMenuItem>
-                <SidebarMenuButton href="#bot-pairs" tooltip="Bot Pariteleri">
-                  <List />
-                  <span>Bot Pariteleri</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton href="#bot-pairs" tooltip="Bot Pariteleri">
+                <List />
+                <span>Bot Pariteleri</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
 
-              <SidebarMenuItem>
-                <SidebarMenuButton href="#trade-history" tooltip="İşlem Geçmişi">
-                  <History />
-                  <span>İşlem Geçmişi</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton href="#trade-history" tooltip="İşlem Geçmişi">
+                <History />
+                <span>İşlem Geçmişi</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
 
-              <SidebarMenuItem>
-                <SidebarMenuButton href="#logs" tooltip="Log Kayıtları">
-                  <FileText />
-                  <span>Log Kayıtları</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarContent>
+            <SidebarMenuItem>
+              <SidebarMenuButton href="#logs" tooltip="Log Kayıtları">
+                <FileText />
+                <span>Log Kayıtları</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarContent>
 
-          {/* Footer: Settings */}
-          <SidebarFooter>
-            <SidebarSeparator />
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton href="#settings" tooltip="Ayarlar">
-                  <Settings />
-                  <span>Ayarlar</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarFooter>
-        </Sidebar>
+        {/* Footer: Settings */}
+        <SidebarFooter>
+          <SidebarSeparator />
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton href="#settings" tooltip="Ayarlar">
+                <Settings />
+                <span>Ayarlar</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
+      </Sidebar>
 
-        {/* Main Content Area */}
-        <SidebarInset className="flex flex-col p-4 md:p-6">
-          {/* Top Bar: Pair/Interval Selection, Bot Control */}
-          <Card className="mb-4 md:mb-6">
-            <CardContent className="flex flex-col md:flex-row items-center justify-between p-4 gap-4">
-              {/* Pair and Interval Selection */}
-              <div className="flex flex-wrap items-center gap-4">
-                <Select value={selectedPair} onValueChange={setSelectedPair}>
-                  <SelectTrigger className="w-full md:w-[180px]">
-                    <SelectValue placeholder={loadingPairs ? "Yükleniyor..." : (availablePairs.length === 0 ? "Parite Yok" : "Parite Seç")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <ScrollArea className="h-[300px]">
-                      {loadingPairs ? (
-                        <SelectItem value="loading" disabled>Yükleniyor...</SelectItem>
-                      ) : availablePairs.length > 0 ? (
-                        availablePairs.map((pair) => (
-                          <SelectItem key={pair.symbol} value={pair.symbol}>
-                            {pair.baseAsset}/{pair.quoteAsset}
-                          </SelectItem>
-                        ))
-                      ) : (
-                        <SelectItem value="no_pairs" disabled>Parite bulunamadı.</SelectItem>
-                      )}
-                    </ScrollArea>
-                  </SelectContent>
-                </Select>
+      {/* Main Content Area */}
+      <SidebarInset className="flex flex-col p-4 md:p-6">
+        {/* Top Bar: Pair/Interval Selection, Bot Control */}
+        <Card className="mb-4 md:mb-6">
+          <CardContent className="flex flex-col md:flex-row items-center justify-between p-4 gap-4">
+            {/* Pair and Interval Selection */}
+            <div className="flex flex-wrap items-center gap-4">
+              <Select value={selectedPair} onValueChange={setSelectedPair}>
+                <SelectTrigger className="w-full md:w-[180px]">
+                  <SelectValue placeholder={loadingPairs ? "Yükleniyor..." : (availablePairs.length === 0 ? "Parite Yok" : "Parite Seç")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <ScrollArea className="h-[300px]">
+                    {loadingPairs ? (
+                      <SelectItem value="loading" disabled>Yükleniyor...</SelectItem>
+                    ) : availablePairs.length > 0 ? (
+                      availablePairs.map((pair) => (
+                        <SelectItem key={pair.symbol} value={pair.symbol}>
+                          {pair.baseAsset}/{pair.quoteAsset}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="no_pairs" disabled>Parite bulunamadı.</SelectItem>
+                    )}
+                  </ScrollArea>
+                </SelectContent>
+              </Select>
 
-                <Select value={selectedInterval} onValueChange={setSelectedInterval}>
-                  <SelectTrigger className="w-full md:w-[100px]">
-                    <SelectValue placeholder="Aralık" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1m">1m</SelectItem>
-                    <SelectItem value="5m">5m</SelectItem>
-                    <SelectItem value="15m">15m</SelectItem>
-                    <SelectItem value="1h">1h</SelectItem>
-                    <SelectItem value="4h">4h</SelectItem>
-                    <SelectItem value="1d">1d</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <Select value={selectedInterval} onValueChange={setSelectedInterval}>
+                <SelectTrigger className="w-full md:w-[100px]">
+                  <SelectValue placeholder="Aralık" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1m">1m</SelectItem>
+                  <SelectItem value="5m">5m</SelectItem>
+                  <SelectItem value="15m">15m</SelectItem>
+                  <SelectItem value="1h">1h</SelectItem>
+                  <SelectItem value="4h">4h</SelectItem>
+                  <SelectItem value="1d">1d</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-              {/* Bot Status and Control */}
-              <div className="flex items-center gap-2">
-                <span className={cn(
-                  "text-sm font-medium px-2 py-1 rounded",
-                  botStatus === 'running' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800',
-                  'dark:bg-opacity-20',
-                  botStatus === 'running' ? 'dark:bg-green-800/30 dark:text-green-300' : 'dark:bg-red-800/30 dark:text-red-300'
-                )}>
-                  Bot: {botStatus === 'running' ? 'Çalışıyor' : 'Durdu'}
-                  {botStatus === 'running' && activeApiEnvironment && ` (${activeApiEnvironment.toUpperCase()})`}
-                </span>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        size="sm"
-                        onClick={toggleBotStatus}
-                        variant={botStatus === 'running' ? 'destructive' : 'default'}
-                        disabled={botStatus === 'stopped' && (validationStatus.spot !== 'valid' || validationStatus.telegramToken !== 'valid' || validationStatus.telegramChatId !== 'valid' || activeStrategies.length === 0 || selectedPairsForBot.length === 0)}
-                      >
-                        {botStatus === 'running' ? <Pause className="mr-1 h-4 w-4" /> : <Play className="mr-1 h-4 w-4" />}
-                        {botStatus === 'running' ? 'Durdur' : 'Başlat'}
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      {validationStatus.spot !== 'valid' ? `Botu başlatmak için Spot API anahtarlarını doğrulayın.` :
-                        (validationStatus.telegramToken !== 'valid' || validationStatus.telegramChatId !== 'valid') ? "Botu başlatmak için Telegram ayarlarını doğrulayın." :
-                          botStatus === 'stopped' && activeStrategies.length === 0 ? "Botu başlatmak için en az bir strateji seçin." :
-                            botStatus === 'stopped' && selectedPairsForBot.length === 0 ? "Botu başlatmak için en az bir parite seçin." :
-                              botStatus === 'running' ? "Botu durdur." : "Botu başlat."
-                      }
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
+            {/* Bot Status and Control */}
+            <div className="flex items-center gap-2">
+              <span className={cn(
+                "text-sm font-medium px-2 py-1 rounded",
+                botStatus === 'running' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800',
+                'dark:bg-opacity-20',
+                botStatus === 'running' ? 'dark:bg-green-800/30 dark:text-green-300' : 'dark:bg-red-800/30 dark:text-red-300'
+              )}>
+                Bot: {botStatus === 'running' ? 'Çalışıyor' : 'Durdu'}
+                {botStatus === 'running' && activeApiEnvironment && ` (${activeApiEnvironment.toUpperCase()})`}
+              </span>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="sm"
+                      onClick={toggleBotStatus}
+                      variant={botStatus === 'running' ? 'destructive' : 'default'}
+                      disabled={botStatus === 'stopped' && (validationStatus.spot !== 'valid' || validationStatus.telegramToken !== 'valid' || validationStatus.telegramChatId !== 'valid' || activeStrategies.length === 0 || selectedPairsForBot.length === 0)}
+                    >
+                      {botStatus === 'running' ? <Pause className="mr-1 h-4 w-4" /> : <Play className="mr-1 h-4 w-4" />}
+                      {botStatus === 'running' ? 'Durdur' : 'Başlat'}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {validationStatus.spot !== 'valid' ? `Botu başlatmak için Spot API anahtarlarını doğrulayın.` :
+                      (validationStatus.telegramToken !== 'valid' || validationStatus.telegramChatId !== 'valid') ? "Botu başlatmak için Telegram ayarlarını doğrulayın." :
+                        botStatus === 'stopped' && activeStrategies.length === 0 ? "Botu başlatmak için en az bir strateji seçin." :
+                          botStatus === 'stopped' && selectedPairsForBot.length === 0 ? "Botu başlatmak için en az bir parite seçin." :
+                            botStatus === 'running' ? "Botu durdur." : "Botu başlat."
+                    }
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Main Chart and Side Panel (Tabs) */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 flex-1">
+          {/* Chart Area */}
+          <Card className="lg:col-span-2">
+            {error && (
+              <Alert variant="destructive" className="m-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Hata</AlertTitle>
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+               <div className="flex flex-col">
+                  <CardTitle className="text-lg font-semibold">
+                     {selectedPair ? `${selectedPair.replace('USDT', '/USDT')}` : "Grafik"}
+                     {loadingCandles && <Loader2 className="ml-2 h-4 w-4 animate-spin inline-block" />}
+                  </CardTitle>
+                   {/* Display OHLC data */}
+                   {candleData.length > 0 && !loadingCandles && (
+                       <div className="text-xs text-muted-foreground mt-1 flex gap-3">
+                           <span>A: <span className="font-mono">{formatNumberClientSide(candleData[candleData.length - 1]?.open, { maximumFractionDigits: 4})}</span></span>
+                           <span>Y: <span className="font-mono">{formatNumberClientSide(candleData[candleData.length - 1]?.high, { maximumFractionDigits: 4})}</span></span>
+                           <span>D: <span className="font-mono">{formatNumberClientSide(candleData[candleData.length - 1]?.low, { maximumFractionDigits: 4})}</span></span>
+                           <span>K: <span className="font-mono">{formatNumberClientSide(candleData[candleData.length - 1]?.close, { maximumFractionDigits: 4})}</span></span>
+                       </div>
+                   )}
+               </div>
+               <CardDescription className="text-xs text-muted-foreground self-start pt-1">
+                  {selectedInterval}
+               </CardDescription>
+            </CardHeader>
+            <CardContent className="h-[400px] p-2 pt-0">
+              {loadingCandles ? (
+                <div className="flex items-center justify-center h-full">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  <span className="ml-2">Grafik yükleniyor...</span>
+                </div>
+              ) : candleData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={candleData} margin={{ top: 5, right: 5, left: -25, bottom: 5 }}>
+                     {/* Define gradient */}
+                     <defs>
+                         <linearGradient id="chartGradientUp" x1="0" y1="0" x2="0" y2="1">
+                             <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.8} />
+                             <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0.1} />
+                         </linearGradient>
+                         <linearGradient id="chartGradientDown" x1="0" y1="0" x2="0" y2="1">
+                             <stop offset="5%" stopColor="hsl(var(--destructive))" stopOpacity={0.7} />
+                             <stop offset="95%" stopColor="hsl(var(--destructive))" stopOpacity={0.1} />
+                         </linearGradient>
+                     </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                    <XAxis
+                      dataKey="closeTime"
+                      tickFormatter={(value) => formatTimestamp(value)}
+                      tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                      axisLine={false}
+                      tickLine={false}
+                      interval="preserveStartEnd" // Show first and last ticks clearly
+                       tickCount={6} // Limit number of ticks
+                    />
+                    <YAxis
+                      yAxisId="left"
+                      orientation="left"
+                      tickFormatter={(value) => formatNumberClientSide(value, { notation: 'compact', maximumFractionDigits: 1 })}
+                      tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                      axisLine={false}
+                      tickLine={false}
+                      domain={['dataMin - dataMin * 0.01', 'dataMax + dataMax * 0.01']} // Add padding
+                    />
+                    <YAxis
+                      yAxisId="right"
+                      orientation="right"
+                       tickFormatter={(value) => formatNumberClientSide(value, { notation: 'compact' })} // Use compact notation, let it infer digits
+                      tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={40} // Give volume axis some space
+                      domain={[0, 'dataMax * 4']} // Scale volume axis dynamically (increased multiplier)
+                    />
+                    <TooltipProvider>
+                      <ChartTooltip content={<ChartTooltipContent />} cursor={{ fill: 'hsl(var(--accent))', fillOpacity: 0.3 }} />
+                    </TooltipProvider>
+                    <Area
+                      yAxisId="left"
+                      type="monotone"
+                      dataKey="close"
+                      stroke={chartColor} // Use dynamic color based on trend
+                      fillOpacity={1}
+                      fill={chartColor === 'hsl(var(--chart-1))' ? "url(#chartGradientUp)" : "url(#chartGradientDown)"} // Dynamic gradient
+                      strokeWidth={2}
+                      name="Kapanış"
+                      dot={false}
+                    />
+                    <Bar
+                      yAxisId="right"
+                      dataKey="volume"
+                      fill="hsl(var(--muted))"
+                      name="Hacim"
+                      barSize={5} // Make volume bars thinner
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  {selectedPair ? `${selectedPair} için ${selectedInterval} aralığında veri bulunamadı.` : "Lütfen bir parite seçin."}
+                </div>
+              )}
             </CardContent>
           </Card>
 
-          {/* Main Chart and Side Panel (Tabs) */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 flex-1">
-            {/* Chart Area */}
-            <Card className="lg:col-span-2">
-              {error && (
-                <Alert variant="destructive" className="m-4">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Hata</AlertTitle>
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
 
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                 <div className="flex flex-col">
-                    <CardTitle className="text-lg font-semibold">
-                       {selectedPair ? `${selectedPair.replace('USDT', '/USDT')}` : "Grafik"}
-                       {loadingCandles && <Loader2 className="ml-2 h-4 w-4 animate-spin inline-block" />}
-                    </CardTitle>
-                     {/* Display OHLC data */}
-                     {candleData.length > 0 && !loadingCandles && (
-                         <div className="text-xs text-muted-foreground mt-1 flex gap-3">
-                             <span>O: <span className="font-mono">{formatNumberClientSide(candleData[candleData.length - 1]?.open, { maximumFractionDigits: 4})}</span></span>
-                             <span>H: <span className="font-mono">{formatNumberClientSide(candleData[candleData.length - 1]?.high, { maximumFractionDigits: 4})}</span></span>
-                             <span>L: <span className="font-mono">{formatNumberClientSide(candleData[candleData.length - 1]?.low, { maximumFractionDigits: 4})}</span></span>
-                             <span>C: <span className="font-mono">{formatNumberClientSide(candleData[candleData.length - 1]?.close, { maximumFractionDigits: 4})}</span></span>
-                         </div>
-                     )}
-                 </div>
-                 <CardDescription className="text-xs text-muted-foreground self-start pt-1">
-                    {selectedInterval}
-                     {/* {candleData.length > 0 && formatTimestamp(candleData[candleData.length - 1]?.closeTime)} */}
-                 </CardDescription>
-              </CardHeader>
-              <CardContent className="h-[400px] p-2 pt-0">
-                {loadingCandles ? (
-                  <div className="flex items-center justify-center h-full">
-                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                    <span className="ml-2">Grafik yükleniyor...</span>
+          {/* Side Panel: Portfolio, History, Logs */}
+          <Card className="lg:col-span-1">
+            <CardContent className="p-0">
+              <Tabs defaultValue="portfolio" className="w-full">
+                <TabsList className="grid w-full grid-cols-3 rounded-t-lg rounded-b-none p-0 h-auto">
+                  <TabsTrigger value="portfolio" className="rounded-tl-md rounded-tr-none rounded-b-none py-2">
+                    <Wallet className="h-4 w-4 mr-1" /> Portföy
+                  </TabsTrigger>
+                  <TabsTrigger value="history" className="rounded-none py-2">
+                    <History className="h-4 w-4 mr-1" /> Geçmiş
+                  </TabsTrigger>
+                  <TabsTrigger value="logs" className="rounded-tr-md rounded-tl-none rounded-b-none py-2">
+                    <FileText className="h-4 w-4 mr-1" /> Loglar
+                  </TabsTrigger>
+                </TabsList>
+
+                {/* Portfolio Tab */}
+                <TabsContent value="portfolio" className="p-4 max-h-[400px] overflow-y-auto">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-base font-medium">
+                      Portföy {activeApiEnvironment && ` (${activeApiEnvironment.toUpperCase()})`}
+                    </h3>
+                    {loadingPortfolio && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
                   </div>
-                ) : candleData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={candleData} margin={{ top: 5, right: 5, left: -25, bottom: 5 }}>
-                       {/* Define gradient */}
-                       <defs>
-                           <linearGradient id="chartGradientUp" x1="0" y1="0" x2="0" y2="1">
-                               <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.8} />
-                               <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0.1} />
-                           </linearGradient>
-                           <linearGradient id="chartGradientDown" x1="0" y1="0" x2="0" y2="1">
-                               <stop offset="5%" stopColor="hsl(var(--destructive))" stopOpacity={0.7} />
-                               <stop offset="95%" stopColor="hsl(var(--destructive))" stopOpacity={0.1} />
-                           </linearGradient>
-                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                      <XAxis
-                        dataKey="closeTime"
-                        tickFormatter={(value) => formatTimestamp(value)}
-                        tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                        axisLine={false}
-                        tickLine={false}
-                        interval="preserveStartEnd" // Show first and last ticks clearly
-                         tickCount={6} // Limit number of ticks
-                      />
-                      <YAxis
-                        yAxisId="left"
-                        orientation="left"
-                        tickFormatter={(value) => formatNumberClientSide(value, { notation: 'compact', maximumFractionDigits: 1 })}
-                        tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                        axisLine={false}
-                        tickLine={false}
-                        domain={['dataMin - dataMin * 0.01', 'dataMax + dataMax * 0.01']} // Add padding
-                      />
-                      <YAxis
-                        yAxisId="right"
-                        orientation="right"
-                        tickFormatter={(value) => formatNumberClientSide(value, { notation: 'compact', maximumFractionDigits: 0 })}
-                        tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                        axisLine={false}
-                        tickLine={false}
-                        width={40} // Give volume axis some space
-                        domain={[0, 'dataMax * 4']} // Scale volume axis dynamically (increased multiplier)
-                      />
-                      <TooltipProvider>
-                        <ChartTooltip content={<ChartTooltipContent />} cursor={{ fill: 'hsl(var(--accent))', fillOpacity: 0.3 }} />
-                      </TooltipProvider>
-                      <Area
-                        yAxisId="left"
-                        type="monotone"
-                        dataKey="close"
-                        stroke={chartColor} // Use dynamic color based on trend
-                        fillOpacity={1}
-                        fill={chartColor === 'hsl(var(--chart-1))' ? "url(#chartGradientUp)" : "url(#chartGradientDown)"} // Dynamic gradient
-                        strokeWidth={2}
-                        name="Kapanış"
-                        dot={false}
-                      />
-                      <Bar
-                        yAxisId="right"
-                        dataKey="volume"
-                        fill="hsl(var(--muted))"
-                        name="Hacim"
-                        barSize={5} // Make volume bars thinner
-                        // Conditional bar color based on price move (optional, can be complex)
-                        // shape={<CustomBar />} // Requires a custom component
-                      />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="flex items-center justify-center h-full text-muted-foreground">
-                    {selectedPair ? `${selectedPair} için ${selectedInterval} aralığında veri bulunamadı.` : "Lütfen bir parite seçin."}
+
+                  {/* Portfolio Summary & Pie Chart */}
+                  <div className="mb-4 p-4 bg-muted/50 rounded-lg">
+                     <PortfolioPieChart />
                   </div>
-                )}
-              </CardContent>
-            </Card>
 
 
-            {/* Side Panel: Portfolio, History, Logs */}
-            <Card className="lg:col-span-1">
-              <CardContent className="p-0">
-                <Tabs defaultValue="portfolio" className="w-full">
-                  <TabsList className="grid w-full grid-cols-3 rounded-t-lg rounded-b-none p-0 h-auto">
-                    <TabsTrigger value="portfolio" className="rounded-tl-md rounded-tr-none rounded-b-none py-2">
-                      <Wallet className="h-4 w-4 mr-1" /> Portföy
-                    </TabsTrigger>
-                    <TabsTrigger value="history" className="rounded-none py-2">
-                      <History className="h-4 w-4 mr-1" /> Geçmiş
-                    </TabsTrigger>
-                    <TabsTrigger value="logs" className="rounded-tr-md rounded-tl-none rounded-b-none py-2">
-                      <FileText className="h-4 w-4 mr-1" /> Loglar
-                    </TabsTrigger>
-                  </TabsList>
-
-                  {/* Portfolio Tab */}
-                  <TabsContent value="portfolio" className="p-4 max-h-[400px] overflow-y-auto">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-base font-medium">
-                        Portföy {activeApiEnvironment && ` (${activeApiEnvironment.toUpperCase()})`}
-                      </h3>
-                      {loadingPortfolio && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-                    </div>
-
-                    {/* Portfolio Summary & Pie Chart */}
-                    <div className="mb-4 p-4 bg-muted/50 rounded-lg">
-                       <PortfolioPieChart />
-                    </div>
-
-
-                    {validationStatus.spot === 'not_checked' && (
-                      <Alert variant="default" className="mb-4">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertTitle>API Doğrulaması Gerekli</AlertTitle>
-                        <AlertDescription>
-                          Portföy verilerini görmek için lütfen <Link href="#settings" className="font-medium underline">Ayarlar</Link> bölümünden geçerli bir Spot API anahtarını doğrulayın.
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                    {validationStatus.spot === 'invalid' && (
-                      <Alert variant="destructive" className="mb-4">
-                        <ShieldX className="h-4 w-4" />
-                        <AlertTitle>Geçersiz API Anahtarı</AlertTitle>
-                        <AlertDescription>
-                          Girilen Spot API anahtarları geçersiz. Lütfen <Link href="#settings" className="font-medium underline">Ayarlar</Link> bölümünden kontrol edin.
-                        </AlertDescription>
-                      </Alert>
-                    )}
-
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Varlık</TableHead>
-                          <TableHead className="text-right">Kullanılabilir</TableHead>
-                          <TableHead className="text-right">Kilitli</TableHead>
-                          <TableHead className="text-right"> Toplam</TableHead>
-                          {/* <TableHead className="text-right text-xs">Değer (USD)</TableHead> */}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {loadingPortfolio ? (
-                          <TableRow>
-                            <TableCell colSpan={4} className="h-24 text-center">
-                              <Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Yükleniyor...
-                            </TableCell>
-                          </TableRow>
-                        ) : portfolioData.length > 0 && validationStatus.spot === 'valid' ? (
-                          portfolioData.map((balance) => <PortfolioRow key={balance.asset} balance={balance} />)
-                        ) : (
-                          <TableRow>
-                            <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
-                              {validationStatus.spot !== 'valid' ? "API anahtarları doğrulanmamış veya geçersiz." :
-                                portfolioData.length === 0 && !loadingPortfolio ? "Portföy boş veya yüklenemedi." :
-                                  "Portföy verisi bekleniyor..."}
-                            </TableCell>
-                          </TableRow>
-                        )}
-                      </TableBody>
-                      {/* Optional: Add TableFooter for Total Value */}
-                      {/* <TableFooter> <TableRow> <TableCell colSpan={3}>Toplam Değer (Tahmini)</TableCell> <TableCell className="text-right">{totalPortfolioValue}</TableCell> </TableRow> </TableFooter> */}
-                    </Table>
-                  </TabsContent>
-
-                  {/* Trade History Tab */}
-                  <TabsContent value="history" className="p-4 max-h-[400px] overflow-y-auto">
-                    <h3 className="text-base font-medium mb-2">İşlem Geçmişi (Yakında)</h3>
-                    <p className="text-sm text-muted-foreground mb-4">Binance API üzerinden son işlemleriniz burada listelenecektir.</p>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Zaman</TableHead>
-                          <TableHead>Parite</TableHead>
-                          <TableHead>Tip</TableHead>
-                          <TableHead className="text-right">Fiyat</TableHead>
-                          <TableHead className="text-right">Miktar</TableHead>
-                          <TableHead className="text-right">Toplam</TableHead>
-                          <TableHead className="text-right">Durum</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {tradeHistoryData.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                              Gerçekleşen işlem verisi yok.
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          tradeHistoryData.map((trade, index) => <TradeHistoryRow key={index} trade={trade} />)
-                        )}
-                      </TableBody>
-                    </Table>
-                  </TabsContent>
-
-                  {/* Logs Tab */}
-                  <TabsContent value="logs" className="p-4 max-h-[400px] overflow-y-auto">
-                    <h3 className="text-base font-medium mb-2">Log Kayıtları ({dynamicLogData.length})</h3>
-                    <ScrollArea className="h-[340px]">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="w-[100px]">Zaman</TableHead>
-                            <TableHead className="w-[80px]">Tip</TableHead>
-                            <TableHead>Mesaj</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {dynamicLogData.length === 0 ? (
-                            <TableRow>
-                              <TableCell colSpan={3} className="h-24 text-center text-muted-foreground">
-                                Log kaydı bulunamadı.
-                              </TableCell>
-                            </TableRow>
-                          ) : (
-                            dynamicLogData.map((log, index) => (
-                              <TableRow key={index}>
-                                <TableCell className="text-xs whitespace-nowrap text-muted-foreground">{formatTimestamp(log.timestamp)}</TableCell>
-                                <TableCell>
-                                  <span className={cn("px-1.5 py-0.5 rounded text-xs font-medium",
-                                    log.type === 'INFO' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' :
-                                      log.type === 'WARN' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' :
-                                        log.type === 'ERROR' || log.type.includes('ERROR') ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' :
-                                          log.type === 'CONFIG' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300' :
-                                            log.type.includes('START') || log.type === 'BACKTEST' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
-                                              log.type.includes('TELEGRAM') ? 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300' :
-                                                log.type.includes('AI') ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300' :
-                                                'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
-                                  )}>
-                                    {log.type}
-                                  </span>
-                                </TableCell>
-                                <TableCell className="text-xs">{log.message}</TableCell>
-                              </TableRow>
-                            ))
-                          )}
-                        </TableBody>
-                      </Table>
-                    </ScrollArea>
-                  </TabsContent>
-                </Tabs>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Configuration Sections */}
-          <div className="mt-4 md:mt-6 grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-            {/* Settings Section */}
-            <Card id="settings">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Settings className="h-5 w-5" />
-                  API &amp; Telegram Ayarları
-                  {activeApiEnvironment && (
-                    <span className="text-xs font-normal px-1.5 py-0.5 rounded bg-primary/10 text-primary">Aktif: {activeApiEnvironment.toUpperCase()}</span>
+                  {validationStatus.spot === 'not_checked' && (
+                    <Alert variant="default" className="mb-4">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>API Doğrulaması Gerekli</AlertTitle>
+                      <AlertDescription>
+                        Portföy verilerini görmek için lütfen <Link href="#settings" className="font-medium underline">Ayarlar</Link> bölümünden geçerli bir Spot API anahtarını doğrulayın.
+                      </AlertDescription>
+                    </Alert>
                   )}
-                </CardTitle>
-                <CardDescription>
-                  Binance Spot API anahtarlarınızı girin ve doğrulayın. Doğrulama başarılı olursa, bu anahtarlar portföy ve işlem işlemleri için kullanılacaktır. Telegram bildirimleri için bot token ve chat ID'nizi girin.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Binance API */}
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-1.5">
-                    Binance Spot API
-                    <ValidationIcon status={validationStatus.spot} />
-                    {validationStatus.spot === 'valid' && <span className="text-xs text-green-600">(Geçerli)</span>}
-                  </Label>
-                  <div className="flex flex-col md:flex-row gap-2">
+                  {validationStatus.spot === 'invalid' && (
+                    <Alert variant="destructive" className="mb-4">
+                      <ShieldX className="h-4 w-4" />
+                      <AlertTitle>Geçersiz API Anahtarı</AlertTitle>
+                      <AlertDescription>
+                        Girilen Spot API anahtarları geçersiz. Lütfen <Link href="#settings" className="font-medium underline">Ayarlar</Link> bölümünden kontrol edin.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Varlık</TableHead>
+                        <TableHead className="text-right">Kullanılabilir</TableHead>
+                        <TableHead className="text-right">Kilitli</TableHead>
+                        <TableHead className="text-right"> Toplam</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {loadingPortfolio ? (
+                        <TableRow>
+                          <TableCell colSpan={4} className="h-24 text-center">
+                            <Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Yükleniyor...
+                          </TableCell>
+                        </TableRow>
+                      ) : portfolioData.length > 0 && validationStatus.spot === 'valid' ? (
+                        portfolioData.map((balance) => <PortfolioRow key={balance.asset} balance={balance} />)
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                            {validationStatus.spot !== 'valid' ? "API anahtarları doğrulanmamış veya geçersiz." :
+                              portfolioData.length === 0 && !loadingPortfolio ? "Portföy boş veya yüklenemedi." :
+                                "Portföy verisi bekleniyor..."}
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </TabsContent>
+
+                {/* Trade History Tab */}
+                <TabsContent value="history" className="p-4 max-h-[400px] overflow-y-auto">
+                  <h3 className="text-base font-medium mb-2">İşlem Geçmişi (Yakında)</h3>
+                  <p className="text-sm text-muted-foreground mb-4">Binance API üzerinden son işlemleriniz burada listelenecektir.</p>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Zaman</TableHead>
+                        <TableHead>Parite</TableHead>
+                        <TableHead>Tip</TableHead>
+                        <TableHead className="text-right">Fiyat</TableHead>
+                        <TableHead className="text-right">Miktar</TableHead>
+                        <TableHead className="text-right">Toplam</TableHead>
+                        <TableHead className="text-right">Durum</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {tradeHistoryData.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                            Gerçekleşen işlem verisi yok.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        tradeHistoryData.map((trade, index) => <TradeHistoryRow key={index} trade={trade} />)
+                      )}
+                    </TableBody>
+                  </Table>
+                </TabsContent>
+
+                {/* Logs Tab */}
+                <TabsContent value="logs" className="p-4 max-h-[400px] overflow-y-auto">
+                  <h3 className="text-base font-medium mb-2">Log Kayıtları ({dynamicLogData.length})</h3>
+                  <ScrollArea className="h-[340px]">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[100px]">Zaman</TableHead>
+                          <TableHead className="w-[80px]">Tip</TableHead>
+                          <TableHead>Mesaj</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {dynamicLogData.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={3} className="h-24 text-center text-muted-foreground">
+                              Log kaydı bulunamadı.
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          dynamicLogData.map((log, index) => (
+                            <TableRow key={index}>
+                              <TableCell className="text-xs whitespace-nowrap text-muted-foreground">{formatTimestamp(log.timestamp)}</TableCell>
+                              <TableCell>
+                                <span className={cn("px-1.5 py-0.5 rounded text-xs font-medium",
+                                  log.type === 'INFO' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' :
+                                    log.type === 'WARN' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' :
+                                      log.type === 'ERROR' || log.type.includes('ERROR') ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' :
+                                        log.type === 'CONFIG' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300' :
+                                          log.type.includes('START') || log.type === 'BACKTEST' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
+                                            log.type.includes('TELEGRAM') ? 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300' :
+                                              log.type.includes('AI') ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300' :
+                                              'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                                )}>
+                                  {log.type}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-xs">{log.message}</TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                </TabsContent>
+              </Tabs>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Configuration Sections */}
+        <div className="mt-4 md:mt-6 grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+          {/* Settings Section */}
+          <Card id="settings">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Settings className="h-5 w-5" />
+                API &amp; Telegram Ayarları
+                {activeApiEnvironment && (
+                  <span className="text-xs font-normal px-1.5 py-0.5 rounded bg-primary/10 text-primary">Aktif: {activeApiEnvironment.toUpperCase()}</span>
+                )}
+              </CardTitle>
+              <CardDescription>
+                Binance Spot API anahtarlarınızı girin ve doğrulayın. Doğrulama başarılı olursa, bu anahtarlar portföy ve işlem işlemleri için kullanılacaktır. Telegram bildirimleri için bot token ve chat ID'nizi girin.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Binance API */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5">
+                  Binance Spot API
+                  <ValidationIcon status={validationStatus.spot} />
+                  {validationStatus.spot === 'valid' && <span className="text-xs text-green-600">(Geçerli)</span>}
+                </Label>
+                <div className="flex flex-col md:flex-row gap-2">
+                  <Input
+                    type="password"
+                    placeholder="Spot API Key Girin"
+                    value={apiKeys.spot.key}
+                    onChange={(e) => handleApiKeyChange(e, 'spot', 'key')}
+                    className="flex-1"
+                  />
+                  <Input
+                    type="password"
+                    placeholder="Spot Secret Key Girin"
+                    value={apiKeys.spot.secret}
+                    onChange={(e) => handleApiKeyChange(e, 'spot', 'secret')}
+                    className="flex-1"
+                  />
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => handleValidateApiKey('spot')}
+                          disabled={!apiKeys.spot.key || !apiKeys.spot.secret || validationStatus.spot === 'pending'}
+                          aria-label="Binance API Anahtarını Doğrula"
+                        >
+                          <ValidationIcon status={validationStatus.spot} />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {validationStatus.spot === 'valid' ? 'Spot API geçerli.' : validationStatus.spot === 'invalid' ? 'Spot API geçersiz.' : validationStatus.spot === 'pending' ? 'Doğrulanıyor...' : 'Doğrulamak için tıklayın.'}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              </div>
+
+              {/* Separator */}
+              <Separator />
+
+              {/* Telegram Bot */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5">
+                  Telegram Bot Entegrasyonu
+                  <ValidationIcon status={validationStatus.telegramToken === 'valid' && validationStatus.telegramChatId === 'valid' ? 'valid' : validationStatus.telegramToken === 'invalid' || validationStatus.telegramChatId === 'invalid' ? 'invalid' : validationStatus.telegramToken === 'pending' || validationStatus.telegramChatId === 'pending' ? 'pending' : 'not_checked'} />
+                  {(validationStatus.telegramToken === 'valid' && validationStatus.telegramChatId === 'valid') && <span className="text-xs text-green-600">(Geçerli)</span>}
+                </Label>
+                <div className="flex flex-col md:flex-row gap-2 items-start">
+                  <div className="flex-1 space-y-2">
                     <Input
+                      placeholder="Telegram Bot Token Girin"
+                      value={apiKeys.telegram.token}
+                      onChange={(e) => handleApiKeyChange(e, 'telegram', 'token')}
                       type="password"
-                      placeholder="Spot API Key Girin"
-                      value={apiKeys.spot.key}
-                      onChange={(e) => handleApiKeyChange(e, 'spot', 'key')}
-                      className="flex-1"
                     />
                     <Input
-                      type="password"
-                      placeholder="Spot Secret Key Girin"
-                      value={apiKeys.spot.secret}
-                      onChange={(e) => handleApiKeyChange(e, 'spot', 'secret')}
-                      className="flex-1"
+                      placeholder="Telegram Grup/Kullanıcı ID Girin"
+                      value={apiKeys.telegram.chatId}
+                      onChange={(e) => handleApiKeyChange(e, 'telegram', 'chatId')}
                     />
-                    <TooltipProvider>
+                  </div>
+                  <TooltipProvider>
+                    <div className="flex gap-2">
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
                             variant="outline"
                             size="icon"
-                            onClick={() => handleValidateApiKey('spot')}
-                            disabled={!apiKeys.spot.key || !apiKeys.spot.secret || validationStatus.spot === 'pending'}
-                            aria-label="Binance API Anahtarını Doğrula"
+                            onClick={handleValidateTelegramToken}
+                            disabled={!apiKeys.telegram.token || validationStatus.telegramToken === 'pending'}
+                            aria-label="Telegram Bot Token Doğrula"
                           >
-                            <ValidationIcon status={validationStatus.spot} />
+                            <ValidationIcon status={validationStatus.telegramToken} />
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent>
-                          {validationStatus.spot === 'valid' ? 'Spot API geçerli.' : validationStatus.spot === 'invalid' ? 'Spot API geçersiz.' : validationStatus.spot === 'pending' ? 'Doğrulanıyor...' : 'Doğrulamak için tıklayın.'}
+                          {validationStatus.telegramToken === 'valid' ? 'Token geçerli.' : validationStatus.telegramToken === 'invalid' ? 'Token geçersiz.' : validationStatus.telegramToken === 'pending' ? 'Doğrulanıyor...' : 'Token doğrulamak için tıklayın.'}
                         </TooltipContent>
                       </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                </div>
-
-                {/* Separator */}
-                <Separator />
-
-                {/* Telegram Bot */}
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-1.5">
-                    Telegram Bot Entegrasyonu
-                    <ValidationIcon status={validationStatus.telegramToken === 'valid' && validationStatus.telegramChatId === 'valid' ? 'valid' : validationStatus.telegramToken === 'invalid' || validationStatus.telegramChatId === 'invalid' ? 'invalid' : validationStatus.telegramToken === 'pending' || validationStatus.telegramChatId === 'pending' ? 'pending' : 'not_checked'} />
-                    {(validationStatus.telegramToken === 'valid' && validationStatus.telegramChatId === 'valid') && <span className="text-xs text-green-600">(Geçerli)</span>}
-                  </Label>
-                  <div className="flex flex-col md:flex-row gap-2 items-start">
-                    <div className="flex-1 space-y-2">
-                      <Input
-                        placeholder="Telegram Bot Token Girin"
-                        value={apiKeys.telegram.token}
-                        onChange={(e) => handleApiKeyChange(e, 'telegram', 'token')}
-                        type="password"
-                      />
-                      <Input
-                        placeholder="Telegram Grup/Kullanıcı ID Girin"
-                        value={apiKeys.telegram.chatId}
-                        onChange={(e) => handleApiKeyChange(e, 'telegram', 'chatId')}
-                      />
-                    </div>
-                    <TooltipProvider>
-                      <div className="flex gap-2">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              onClick={handleValidateTelegramToken}
-                              disabled={!apiKeys.telegram.token || validationStatus.telegramToken === 'pending'}
-                              aria-label="Telegram Bot Token Doğrula"
-                            >
-                              <ValidationIcon status={validationStatus.telegramToken} />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            {validationStatus.telegramToken === 'valid' ? 'Token geçerli.' : validationStatus.telegramToken === 'invalid' ? 'Token geçersiz.' : validationStatus.telegramToken === 'pending' ? 'Doğrulanıyor...' : 'Token doğrulamak için tıklayın.'}
-                          </TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              onClick={handleValidateTelegramChatId}
-                              disabled={validationStatus.telegramToken !== 'valid' || !apiKeys.telegram.chatId || validationStatus.telegramChatId === 'pending'}
-                              aria-label="Telegram Chat ID Doğrula ve Test Mesajı Gönder"
-                            >
-                              <ValidationIcon status={validationStatus.telegramChatId} />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            {validationStatus.telegramToken !== 'valid' ? 'Önce geçerli token girin.' : validationStatus.telegramChatId === 'valid' ? 'Chat ID geçerli.' : validationStatus.telegramChatId === 'invalid' ? 'Chat ID geçersiz/bulunamadı.' : validationStatus.telegramChatId === 'pending' ? 'Doğrulanıyor...' : 'Doğrulama ve test mesajı için tıklayın.'}
-                          </TooltipContent>
-                        </Tooltip>
-                      </div>
-                    </TooltipProvider>
-                  </div>
-                  <p className="text-xs text-muted-foreground">BotFather'dan token alın. Chat ID için <a href="https://t.me/userinfobot" target="_blank" rel="noopener noreferrer" className="underline">@userinfobot</a> veya grup ID'si (-100...) kullanın. Botun gruba ekli olması/başlatılmış olması gerekir.</p>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Strategies Sections combined in Tabs */}
-            <Card id="strategies" className="row-span-1 md:row-span-2">
-              <CardContent className="p-0">
-                <Tabs defaultValue="manage" className="w-full">
-                  <TabsList className="grid w-full grid-cols-3 rounded-t-lg rounded-b-none p-0 h-auto">
-                    <TabsTrigger value="manage" className="rounded-tl-md rounded-tr-none rounded-b-none py-2">
-                      <BrainCircuit className="h-4 w-4 mr-1" /> Yönetim
-                    </TabsTrigger>
-                    <TabsTrigger value="backtest" className="rounded-none py-2">
-                      <FlaskConical className="h-4 w-4 mr-1" /> Test
-                    </TabsTrigger>
-                    <TabsTrigger value="risk" className="rounded-tr-md rounded-tl-none rounded-b-none py-2">
-                      <Activity className="h-4 w-4 mr-1" /> Risk
-                    </TabsTrigger>
-                  </TabsList>
-
-                  {/* Strategy Management Tab */}
-                  <TabsContent value="manage" className="p-4 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-base font-medium">Strateji Yönetimi</h3>
-                      <Dialog open={isDefineStrategyDialogOpen} onOpenChange={setIsDefineStrategyDialogOpen}>
-                        <DialogTrigger asChild>
-                          <Button size="sm" variant="outline">
-                            <PlusCircle className="mr-2 h-4 w-4" />
-                            Yeni Strateji (AI)
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={handleValidateTelegramChatId}
+                            disabled={validationStatus.telegramToken !== 'valid' || !apiKeys.telegram.chatId || validationStatus.telegramChatId === 'pending'}
+                            aria-label="Telegram Chat ID Doğrula ve Test Mesajı Gönder"
+                          >
+                            <ValidationIcon status={validationStatus.telegramChatId} />
                           </Button>
-                        </DialogTrigger>
-                        <DialogContent className="sm:max-w-[600px]">
-                          <DialogHeader>
-                            <DialogTitle>Yeni Ticaret Stratejisi Tanımla (AI)</DialogTitle>
-                            <DialogDescription>
-                              AI'nın sizin için bir ticaret stratejisi tanımlamasını sağlayın. Net kurallar girin. AI tarafından oluşturulan stratejiler deneyseldir ve dikkatli kullanılmalıdır.
-                            </DialogDescription>
-                          </DialogHeader>
-                          <div className="grid gap-4 py-4">
-                            <div className="grid grid-cols-4 items-center gap-4">
-                              <Label htmlFor="strategy-name" className="text-right">Strateji Adı</Label>
-                              <Input id="strategy-name" value={defineStrategyParams.name} onChange={(e) => handleDefineStrategyParamChange(e, 'name')} placeholder="Örn: RSI + Hacim Teyidi" className="col-span-3" />
-                            </div>
-                            <div className="grid grid-cols-4 items-center gap-4">
-                              <Label htmlFor="strategy-description" className="text-right">Kısa Açıklama</Label>
-                              <Input id="strategy-description" value={defineStrategyParams.description} onChange={(e) => handleDefineStrategyParamChange(e, 'description')} placeholder="Stratejinin ana fikri." className="col-span-3" />
-                            </div>
-                            <div className="grid grid-cols-4 items-start gap-4">
-                              <Label htmlFor="strategy-prompt" className="text-right pt-2">Detaylı Strateji İstemi (Prompt)</Label>
-                              <div className="col-span-3 space-y-1">
-                                <Textarea id="strategy-prompt" value={defineStrategyParams.prompt} onChange={(e) => handleDefineStrategyParamChange(e, 'prompt')} placeholder="AI için detaylı alım/satım kuralları, indikatörler ve parametreler... Örn: 'RSI(14) 35 altına düştüğünde VE Hacim son 10 mumun ortalamasının 1.5 katından fazlaysa AL. RSI(14) 70 üzerine çıktığında veya %3 Stop-Loss tetiklendiğinde SAT.'" className="min-h-[150px]" />
-                                <p className="text-xs text-muted-foreground">AI'nın anlayabileceği net ve spesifik kurallar yazın.</p>
-                              </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {validationStatus.telegramToken !== 'valid' ? 'Önce geçerli token girin.' : validationStatus.telegramChatId === 'valid' ? 'Chat ID geçerli.' : validationStatus.telegramChatId === 'invalid' ? 'Chat ID geçersiz/bulunamadı.' : validationStatus.telegramChatId === 'pending' ? 'Doğrulanıyor...' : 'Doğrulama ve test mesajı için tıklayın.'}
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                  </TooltipProvider>
+                </div>
+                <p className="text-xs text-muted-foreground">BotFather'dan token alın. Chat ID için <a href="https://t.me/userinfobot" target="_blank" rel="noopener noreferrer" className="underline">@userinfobot</a> veya grup ID'si (-100...) kullanın. Botun gruba ekli olması/başlatılmış olması gerekir.</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Strategies Sections combined in Tabs */}
+          <Card id="strategies" className="row-span-1 md:row-span-2">
+            <CardContent className="p-0">
+              <Tabs defaultValue="manage" className="w-full">
+                <TabsList className="grid w-full grid-cols-3 rounded-t-lg rounded-b-none p-0 h-auto">
+                  <TabsTrigger value="manage" className="rounded-tl-md rounded-tr-none rounded-b-none py-2">
+                    <BrainCircuit className="h-4 w-4 mr-1" /> Yönetim
+                  </TabsTrigger>
+                  <TabsTrigger value="backtest" className="rounded-none py-2">
+                    <FlaskConical className="h-4 w-4 mr-1" /> Test
+                  </TabsTrigger>
+                  <TabsTrigger value="risk" className="rounded-tr-md rounded-tl-none rounded-b-none py-2">
+                    <Activity className="h-4 w-4 mr-1" /> Risk
+                  </TabsTrigger>
+                </TabsList>
+
+                {/* Strategy Management Tab */}
+                <TabsContent value="manage" className="p-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-base font-medium">Strateji Yönetimi</h3>
+                    <Dialog open={isDefineStrategyDialogOpen} onOpenChange={setIsDefineStrategyDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button size="sm" variant="outline">
+                          <PlusCircle className="mr-2 h-4 w-4" />
+                          Yeni Strateji (AI)
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-[600px]">
+                        <DialogHeader>
+                          <DialogTitle>Yeni Ticaret Stratejisi Tanımla (AI)</DialogTitle>
+                          <DialogDescription>
+                            AI'nın sizin için bir ticaret stratejisi tanımlamasını sağlayın. Net kurallar girin. AI tarafından oluşturulan stratejiler deneyseldir ve dikkatli kullanılmalıdır.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="grid gap-4 py-4">
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="strategy-name" className="text-right">Strateji Adı</Label>
+                            <Input id="strategy-name" value={defineStrategyParams.name} onChange={(e) => handleDefineStrategyParamChange(e, 'name')} placeholder="Örn: RSI + Hacim Teyidi" className="col-span-3" />
+                          </div>
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="strategy-description" className="text-right">Kısa Açıklama</Label>
+                            <Input id="strategy-description" value={defineStrategyParams.description} onChange={(e) => handleDefineStrategyParamChange(e, 'description')} placeholder="Stratejinin ana fikri." className="col-span-3" />
+                          </div>
+                          <div className="grid grid-cols-4 items-start gap-4">
+                            <Label htmlFor="strategy-prompt" className="text-right pt-2">Detaylı Strateji İstemi (Prompt)</Label>
+                            <div className="col-span-3 space-y-1">
+                              <Textarea id="strategy-prompt" value={defineStrategyParams.prompt} onChange={(e) => handleDefineStrategyParamChange(e, 'prompt')} placeholder="AI için detaylı alım/satım kuralları, indikatörler ve parametreler... Örn: 'RSI(14) 35 altına düştüğünde VE Hacim son 10 mumun ortalamasının 1.5 katından fazlaysa AL. RSI(14) 70 üzerine çıktığında veya %3 Stop-Loss tetiklendiğinde SAT.'" className="min-h-[150px]" />
+                              <p className="text-xs text-muted-foreground">AI'nın anlayabileceği net ve spesifik kurallar yazın.</p>
                             </div>
                           </div>
-                          <DialogFooter>
-                            <DialogClose asChild>
-                              <Button type="button" variant="secondary">İptal</Button>
-                            </DialogClose>
-                            <Button type="button" onClick={handleDefineNewStrategy} disabled={isDefiningStrategy}>
-                              {isDefiningStrategy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                              {isDefiningStrategy ? 'Tanımlanıyor...' : 'AI ile Strateji Tanımla'}
-                            </Button>
-                          </DialogFooter>
-                        </DialogContent>
-                      </Dialog>
-                    </div>
-                    <p className="text-sm text-muted-foreground">Çalıştırmak istediğiniz stratejileri seçin veya AI ile yenilerini oluşturun.</p>
+                        </div>
+                        <DialogFooter>
+                          <DialogClose asChild>
+                            <Button type="button" variant="secondary">İptal</Button>
+                          </DialogClose>
+                          <Button type="button" onClick={handleDefineNewStrategy} disabled={isDefiningStrategy}>
+                            {isDefiningStrategy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            {isDefiningStrategy ? 'Tanımlanıyor...' : 'AI ile Strateji Tanımla'}
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                  <p className="text-sm text-muted-foreground">Çalıştırmak istediğiniz stratejileri seçin veya AI ile yenilerini oluşturun.</p>
 
-                    {/* Active Strategies Display */}
-                    <Accordion type="single" collapsible defaultValue="available-strategies">
-                      <AccordionItem value="active-strategies">
-                        <AccordionTrigger>Aktif Stratejiler ({activeStrategies.length})</AccordionTrigger>
-                        <AccordionContent>
-                          {activeStrategies.length === 0 ? (
-                            <p className="text-sm text-muted-foreground px-4 pb-2">Aktif strateji yok.</p>
-                          ) : (
-                            <div className="space-y-1">
-                              {activeStrategies.map((stratId) => {
-                                const strategy = definedStrategies.find(s => s.id === stratId);
-                                return (
-                                  <div key={stratId} className="flex items-center justify-between p-2 rounded hover:bg-muted/50">
-                                    <span className="text-sm font-medium">{strategy?.name ?? stratId}</span>
-                                    <Button variant="ghost" size="sm" className="h-auto p-1 text-muted-foreground hover:text-destructive" onClick={() => handleStrategyToggle(stratId)}>
-                                      <CloseIcon className="h-3 w-3" />
-                                    </Button>
-                                  </div>
-                                )
-                              })}
-                            </div>
-                          )}
-                        </AccordionContent>
-                      </AccordionItem>
-
-                      <AccordionItem value="available-strategies">
-                        <AccordionTrigger>Mevcut Stratejiler ({definedStrategies.length})</AccordionTrigger>
-                        <AccordionContent>
-                          <ScrollArea className="h-[250px] pr-3">
-                            <div className="space-y-2">
-                              {definedStrategies.map((strategy) => (
-                                <div key={strategy.id} className="flex items-center gap-2 p-2 border rounded-md bg-card">
-                                  <Checkbox
-                                    id={`strategy-${strategy.id}`}
-                                    checked={activeStrategies.includes(strategy.id)}
-                                    onCheckedChange={() => handleStrategyToggle(strategy.id)}
-                                  />
-                                  <div className="flex-1">
-                                    <TooltipProvider>
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <label htmlFor={`strategy-${strategy.id}`} className="text-sm font-medium cursor-pointer flex items-center gap-1">
-                                            {strategy.name}
-                                            {strategy.id.startsWith('ai_') && <Info className="h-3 w-3 text-blue-500" />}
-                                          </label>
-                                        </TooltipTrigger>
-                                        <TooltipContent>
-                                          <p className="text-xs font-semibold">{strategy.name}</p>
-                                          <p className="text-xs">{strategy.description}</p>
-                                          {strategy.prompt && <p className="text-xs mt-1 border-t pt-1"><b>AI İstem:</b> {strategy.prompt.substring(0, 100)}...</p>}
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    </TooltipProvider>
-                                  </div>
+                  {/* Active Strategies Display */}
+                  <Accordion type="single" collapsible defaultValue="available-strategies">
+                    <AccordionItem value="active-strategies">
+                      <AccordionTrigger>Aktif Stratejiler ({activeStrategies.length})</AccordionTrigger>
+                      <AccordionContent>
+                        {activeStrategies.length === 0 ? (
+                          <p className="text-sm text-muted-foreground px-4 pb-2">Aktif strateji yok.</p>
+                        ) : (
+                          <div className="space-y-1">
+                            {activeStrategies.map((stratId) => {
+                              const strategy = definedStrategies.find(s => s.id === stratId);
+                              return (
+                                <div key={stratId} className="flex items-center justify-between p-2 rounded hover:bg-muted/50">
+                                  <span className="text-sm font-medium">{strategy?.name ?? stratId}</span>
+                                  <Button variant="ghost" size="sm" className="h-auto p-1 text-muted-foreground hover:text-destructive" onClick={() => handleStrategyToggle(stratId)}>
+                                    <CloseIcon className="h-3 w-3" />
+                                  </Button>
                                 </div>
-                              ))}
-                            </div>
-                          </ScrollArea>
-                        </AccordionContent>
-                      </AccordionItem>
-                    </Accordion>
-                  </TabsContent>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </AccordionContent>
+                    </AccordionItem>
 
-                  {/* Backtesting Tab */}
-                  <TabsContent value="backtest" className="p-4 space-y-4">
-                    <h3 className="text-base font-medium">Geriye Dönük Strateji Testi</h3>
-                    <p className="text-sm text-muted-foreground">Seçtiğiniz stratejiyi geçmiş veriler üzerinde test ederek potansiyel performansını değerlendirin. Sonuçlar geleceği garanti etmez. Testler AI tarafından simüle edilir.</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <Label htmlFor="backtest-strategy">Test Edilecek Strateji</Label>
-                        <Select value={selectedBacktestStrategyId} onValueChange={(v) => handleBacktestSelectChange(v, 'strategyId')}>
-                          <SelectTrigger id="backtest-strategy">
-                            <SelectValue placeholder="Strateji Seçin" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {definedStrategies.map(strategy => (
-                              <SelectItem key={strategy.id} value={strategy.id}>{strategy.name}</SelectItem>
+                    <AccordionItem value="available-strategies">
+                      <AccordionTrigger>Mevcut Stratejiler ({definedStrategies.length})</AccordionTrigger>
+                      <AccordionContent>
+                        <ScrollArea className="h-[250px] pr-3">
+                          <div className="space-y-2">
+                            {definedStrategies.map((strategy) => (
+                              <div key={strategy.id} className="flex items-center gap-2 p-2 border rounded-md bg-card">
+                                <Checkbox
+                                  id={`strategy-${strategy.id}`}
+                                  checked={activeStrategies.includes(strategy.id)}
+                                  onCheckedChange={() => handleStrategyToggle(strategy.id)}
+                                />
+                                <div className="flex-1">
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <label htmlFor={`strategy-${strategy.id}`} className="text-sm font-medium cursor-pointer flex items-center gap-1">
+                                          {strategy.name}
+                                          {strategy.id.startsWith('ai_') && <Info className="h-3 w-3 text-blue-500" />}
+                                        </label>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p className="text-xs font-semibold">{strategy.name}</p>
+                                        <p className="text-xs">{strategy.description}</p>
+                                        {strategy.prompt && <p className="text-xs mt-1 border-t pt-1"><b>AI İstem:</b> {strategy.prompt.substring(0, 100)}...</p>}
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                </div>
+                              </div>
                             ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="backtest-pair">Parite</Label>
-                        <Select value={backtestParams.pair} onValueChange={(v) => handleBacktestSelectChange(v, 'pair')}>
-                          <SelectTrigger id="backtest-pair">
-                            <SelectValue placeholder={loadingPairs ? "Yükleniyor..." : (allAvailablePairs.length === 0 ? "Parite Yok" : "Parite Seç")} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <ScrollArea className="h-[300px]">
-                               {/* Removed commented-out search input */}
-                              {loadingPairs ? (
-                                <SelectItem value="loading" disabled>Yükleniyor...</SelectItem>
-                              ) : allAvailablePairs.length > 0 ? ( /* Use all pairs for backtest */
-                                allAvailablePairs.map((pair) => (
-                                  <SelectItem key={pair.symbol} value={pair.symbol}>{pair.symbol}</SelectItem>
-                                ))
-                              ) : (
-                                <SelectItem value="no_pairs" disabled>Parite bulunamadı.</SelectItem>
-                              )}
-                            </ScrollArea>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="backtest-interval">Zaman Aralığı</Label>
-                        <Select value={backtestParams.interval} onValueChange={(v) => handleBacktestSelectChange(v, 'interval')}>
-                          <SelectTrigger id="backtest-interval">
-                            <SelectValue placeholder="Aralık Seçin" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="5m">5m</SelectItem>
-                            <SelectItem value="15m">15m</SelectItem>
-                            <SelectItem value="1h">1h</SelectItem>
-                            <SelectItem value="4h">4h</SelectItem>
-                            <SelectItem value="1d">1d</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="backtest-balance">Başlangıç Bakiyesi (USDT)</Label>
-                        <Input id="backtest-balance" type="number" value={backtestParams.initialBalance} onChange={(e) => handleBacktestParamChange(e, 'initialBalance')} placeholder="1000" min="1" />
-                      </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="backtest-start-date">Başlangıç Tarihi</Label>
-                        <Input id="backtest-start-date" type="date" value={backtestParams.startDate} onChange={(e) => handleBacktestParamChange(e, 'startDate')} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="backtest-end-date">Bitiş Tarihi</Label>
-                        <Input id="backtest-end-date" type="date" value={backtestParams.endDate} onChange={(e) => handleBacktestParamChange(e, 'endDate')} />
-                      </div>
+                          </div>
+                        </ScrollArea>
+                      </AccordionContent>
+                    </AccordionItem>
+                  </Accordion>
+                </TabsContent>
+
+                {/* Backtesting Tab */}
+                <TabsContent value="backtest" className="p-4 space-y-4">
+                  <h3 className="text-base font-medium">Geriye Dönük Strateji Testi</h3>
+                  <p className="text-sm text-muted-foreground">Seçtiğiniz stratejiyi geçmiş veriler üzerinde test ederek potansiyel performansını değerlendirin. Sonuçlar geleceği garanti etmez. Testler AI tarafından simüle edilir.</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label htmlFor="backtest-strategy">Test Edilecek Strateji</Label>
+                      <Select value={selectedBacktestStrategyId} onValueChange={(v) => handleBacktestSelectChange(v, 'strategyId')}>
+                        <SelectTrigger id="backtest-strategy">
+                          <SelectValue placeholder="Strateji Seçin" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {definedStrategies.map(strategy => (
+                            <SelectItem key={strategy.id} value={strategy.id}>{strategy.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <Button onClick={runBacktestHandler} disabled={isBacktesting || !selectedBacktestStrategyId}>
-                      {isBacktesting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FlaskConical className="mr-2 h-4 w-4" />}
-                      {isBacktesting ? 'Test Çalışıyor...' : 'Testi Başlat'}
-                    </Button>
+                    <div className="space-y-1">
+                      <Label htmlFor="backtest-pair">Parite</Label>
+                      <Select value={backtestParams.pair} onValueChange={(v) => handleBacktestSelectChange(v, 'pair')}>
+                        <SelectTrigger id="backtest-pair">
+                          <SelectValue placeholder={loadingPairs ? "Yükleniyor..." : (allAvailablePairs.length === 0 ? "Parite Yok" : "Parite Seç")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <ScrollArea className="h-[300px]">
+                            {loadingPairs ? (
+                              <SelectItem value="loading" disabled>Yükleniyor...</SelectItem>
+                            ) : allAvailablePairs.length > 0 ? ( /* Use all pairs for backtest */
+                              allAvailablePairs.map((pair) => (
+                                <SelectItem key={pair.symbol} value={pair.symbol}>{pair.symbol}</SelectItem>
+                              ))
+                            ) : (
+                              <SelectItem value="no_pairs" disabled>Parite bulunamadı.</SelectItem>
+                            )}
+                          </ScrollArea>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="backtest-interval">Zaman Aralığı</Label>
+                      <Select value={backtestParams.interval} onValueChange={(v) => handleBacktestSelectChange(v, 'interval')}>
+                        <SelectTrigger id="backtest-interval">
+                          <SelectValue placeholder="Aralık Seçin" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="5m">5m</SelectItem>
+                          <SelectItem value="15m">15m</SelectItem>
+                          <SelectItem value="1h">1h</SelectItem>
+                          <SelectItem value="4h">4h</SelectItem>
+                          <SelectItem value="1d">1d</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="backtest-balance">Başlangıç Bakiyesi (USDT)</Label>
+                      <Input id="backtest-balance" type="number" value={backtestParams.initialBalance} onChange={(e) => handleBacktestParamChange(e, 'initialBalance')} placeholder="1000" min="1" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="backtest-start-date">Başlangıç Tarihi</Label>
+                      <Input id="backtest-start-date" type="date" value={backtestParams.startDate} onChange={(e) => handleBacktestParamChange(e, 'startDate')} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="backtest-end-date">Bitiş Tarihi</Label>
+                      <Input id="backtest-end-date" type="date" value={backtestParams.endDate} onChange={(e) => handleBacktestParamChange(e, 'endDate')} />
+                    </div>
+                  </div>
+                  <Button onClick={runBacktestHandler} disabled={isBacktesting || !selectedBacktestStrategyId}>
+                    {isBacktesting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FlaskConical className="mr-2 h-4 w-4" />}
+                    {isBacktesting ? 'Test Çalışıyor...' : 'Testi Başlat'}
+                  </Button>
 
-                    {/* Backtest Results */}
-                    <Card className="mt-4">
-                      <CardHeader>
-                        <CardTitle className="text-base">Test Sonuçları</CardTitle>
-                        {isBacktesting && (
-                          <CardDescription className="flex items-center gap-1 text-sm">
-                            <Loader2 className="h-4 w-4 animate-spin" /> Test ediliyor...
-                          </CardDescription>
-                        )}
-                      </CardHeader>
-                      <CardContent>
-                        {backtestResult && !isBacktesting ? (
-                          backtestResult.errorMessage ? (
-                            <Alert variant="destructive">
-                              <AlertCircle className="h-4 w-4" />
-                              <AlertTitle>Backtest Hatası</AlertTitle>
-                              <AlertDescription>{backtestResult.errorMessage}</AlertDescription>
-                            </Alert>
-                          ) : (
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                              <p><strong>Strateji:</strong> {definedStrategies.find(s => s.id === selectedBacktestStrategyId)?.name}</p>
-                              <p><strong>Parite/Aralık:</strong> {backtestParams.pair} / {backtestParams.interval}</p>
-                              <p className="col-span-2"><strong>Tarih Aralığı:</strong> {backtestParams.startDate} - {backtestParams.endDate}</p>
-                              <p><strong>Toplam İşlem:</strong> {backtestResult.totalTrades}</p>
-                              <p><strong>Kazanan/Kaybeden:</strong> {backtestResult.winningTrades} / {backtestResult.losingTrades}</p>
-                              <p><strong>Kazanma Oranı:</strong> <span className={cn(backtestResult.winRate >= 50 ? 'text-green-600' : 'text-red-600')}>{formatNumberClientSide(backtestResult.winRate)}%</span></p>
-                              <p><strong>Maks. Düşüş:</strong> {formatNumberClientSide(backtestResult.maxDrawdown)}%</p>
-                              <p className="col-span-2"><strong>Net Kar/Zarar:</strong> <span className={cn(backtestResult.totalPnl >= 0 ? 'text-green-600' : 'text-red-600')}>{formatNumberClientSide(backtestResult.totalPnl, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 })} ({formatNumberClientSide(backtestResult.totalPnlPercent)}%)</span></p>
-                            </div>
-                          )
-                        ) : !isBacktesting && (
-                          <p className="text-sm text-muted-foreground">Test sonuçları burada gösterilecek.</p>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </TabsContent>
+                  {/* Backtest Results */}
+                  <Card className="mt-4">
+                    <CardHeader>
+                      <CardTitle className="text-base">Test Sonuçları</CardTitle>
+                      {isBacktesting && (
+                        <CardDescription className="flex items-center gap-1 text-sm">
+                          <Loader2 className="h-4 w-4 animate-spin" /> Test ediliyor...
+                        </CardDescription>
+                      )}
+                    </CardHeader>
+                    <CardContent>
+                      {backtestResult && !isBacktesting ? (
+                        backtestResult.errorMessage ? (
+                          <Alert variant="destructive">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertTitle>Backtest Hatası</AlertTitle>
+                            <AlertDescription>{backtestResult.errorMessage}</AlertDescription>
+                          </Alert>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                            <p><strong>Strateji:</strong> {definedStrategies.find(s => s.id === selectedBacktestStrategyId)?.name}</p>
+                            <p><strong>Parite/Aralık:</strong> {backtestParams.pair} / {backtestParams.interval}</p>
+                            <p className="col-span-2"><strong>Tarih Aralığı:</strong> {backtestParams.startDate} - {backtestParams.endDate}</p>
+                            <p><strong>Toplam İşlem:</strong> {backtestResult.totalTrades}</p>
+                            <p><strong>Kazanan/Kaybeden:</strong> {backtestResult.winningTrades} / {backtestResult.losingTrades}</p>
+                            <p><strong>Kazanma Oranı:</strong> <span className={cn(backtestResult.winRate >= 50 ? 'text-green-600' : 'text-red-600')}>{formatNumberClientSide(backtestResult.winRate)}%</span></p>
+                            <p><strong>Maks. Düşüş:</strong> {formatNumberClientSide(backtestResult.maxDrawdown)}%</p>
+                            <p className="col-span-2"><strong>Net Kar/Zarar:</strong> <span className={cn(backtestResult.totalPnl >= 0 ? 'text-green-600' : 'text-red-600')}>{formatNumberClientSide(backtestResult.totalPnl, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 })} ({formatNumberClientSide(backtestResult.totalPnlPercent)}%)</span></p>
+                          </div>
+                        )
+                      ) : !isBacktesting && (
+                        <p className="text-sm text-muted-foreground">Test sonuçları burada gösterilecek.</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
 
-                  {/* Risk Management Tab */}
-                  <TabsContent value="risk" className="p-4 space-y-4">
-                    <h3 className="text-base font-medium">Risk Yönetimi (Zarar Durdur / Kar Al)</h3>
-                    <p className="text-sm text-muted-foreground">Her işlem için otomatik Zarar Durdur (Stop-Loss) ve Kar Al (Take-Profit) yüzdeleri belirleyin. Bu ayarlar, çalışan stratejilere uygulanacaktır. (Geliştirme aşamasında)</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <Label htmlFor="stop-loss">Zarar Durdur (%)</Label>
-                        <Input id="stop-loss" type="number" value={stopLoss} onChange={(e) => setStopLoss(e.target.value)} placeholder="Örn: 2" min="0.1" step="0.1" />
-                        <p className="text-xs text-muted-foreground">Pozisyon açılış fiyatının % kaç altında zararı durdur.</p>
-                      </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="take-profit">Kar Al (%)</Label>
-                        <Input id="take-profit" type="number" value={takeProfit} onChange={(e) => setTakeProfit(e.target.value)} placeholder="Örn: 5" min="0.1" step="0.1" />
-                        <p className="text-xs text-muted-foreground">Pozisyon açılış fiyatının % kaç üstünde kar al.</p>
-                      </div>
-                      <div className="sm:col-span-2">
-                        <Button disabled>
-                          Risk Ayarlarını Kaydet (Yakında)
+                {/* Risk Management Tab */}
+                <TabsContent value="risk" className="p-4 space-y-4">
+                  <h3 className="text-base font-medium">Risk Yönetimi (Zarar Durdur / Kar Al)</h3>
+                  <p className="text-sm text-muted-foreground">Her işlem için otomatik Zarar Durdur (Stop-Loss) ve Kar Al (Take-Profit) yüzdeleri belirleyin. Bu ayarlar, çalışan stratejilere uygulanacaktır. (Geliştirme aşamasında)</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label htmlFor="stop-loss">Zarar Durdur (%)</Label>
+                      <Input id="stop-loss" type="number" value={stopLoss} onChange={(e) => setStopLoss(e.target.value)} placeholder="Örn: 2" min="0.1" step="0.1" />
+                      <p className="text-xs text-muted-foreground">Pozisyon açılış fiyatının % kaç altında zararı durdur.</p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="take-profit">Kar Al (%)</Label>
+                      <Input id="take-profit" type="number" value={takeProfit} onChange={(e) => setTakeProfit(e.target.value)} placeholder="Örn: 5" min="0.1" step="0.1" />
+                      <p className="text-xs text-muted-foreground">Pozisyon açılış fiyatının % kaç üstünde kar al.</p>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <Button disabled>
+                        Risk Ayarlarını Kaydet (Yakında)
+                      </Button>
+                    </div>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </CardContent>
+          </Card>
+
+          {/* Bot Pairs Section */}
+          <Card id="bot-pairs">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <List className="h-5 w-5" />
+                Bot İçin Parite Seçimi
+              </CardTitle>
+              <CardDescription>Botun işlem yapmasını istediğiniz pariteleri seçin (En popüler {availablePairs.length} USDT paritesi listelenmiştir).</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Selected Pairs Display */}
+              <div>
+                <Label>Seçili Pariteler ({selectedPairsForBot.length})</Label>
+                <div className="mt-1 flex flex-wrap gap-1 p-2 border rounded-md min-h-[40px] bg-muted/50">
+                  {selectedPairsForBot.length === 0 ? (
+                    <span className="text-xs text-muted-foreground italic">Bot için parite seçilmedi.</span>
+                  ) : (
+                    selectedPairsForBot.map((pairSymbol) => (
+                      <div key={pairSymbol} className="flex items-center gap-1 bg-background border rounded-full px-2 py-0.5 text-xs">
+                        <span>{pairSymbol}</span>
+                        <Button variant="ghost" size="icon" className="h-4 w-4 rounded-full text-muted-foreground hover:text-destructive" onClick={() => handleBotPairToggle(pairSymbol)}>
+                          <CloseIcon className="h-3 w-3" />
                         </Button>
                       </div>
+                    ))
+                  )}
+                </div>
+              </div>
+              {/* Available Pairs Selection */}
+              <div>
+                <Label>Mevcut Popüler Pariteler ({availablePairs.length})</Label>
+                <ScrollArea className="h-[200px] mt-1 border rounded-md">
+                  {loadingPairs ? (
+                    <div className="p-4 text-center text-muted-foreground">
+                      <Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Yükleniyor...
                     </div>
-                  </TabsContent>
-                </Tabs>
-              </CardContent>
-            </Card>
-
-            {/* Bot Pairs Section */}
-            <Card id="bot-pairs">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <List className="h-5 w-5" />
-                  Bot İçin Parite Seçimi
-                </CardTitle>
-                <CardDescription>Botun işlem yapmasını istediğiniz pariteleri seçin (En popüler {availablePairs.length} USDT paritesi listelenmiştir).</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Selected Pairs Display */}
-                <div>
-                  <Label>Seçili Pariteler ({selectedPairsForBot.length})</Label>
-                  <div className="mt-1 flex flex-wrap gap-1 p-2 border rounded-md min-h-[40px] bg-muted/50">
-                    {selectedPairsForBot.length === 0 ? (
-                      <span className="text-xs text-muted-foreground italic">Bot için parite seçilmedi.</span>
-                    ) : (
-                      selectedPairsForBot.map((pairSymbol) => (
-                        <div key={pairSymbol} className="flex items-center gap-1 bg-background border rounded-full px-2 py-0.5 text-xs">
-                          <span>{pairSymbol}</span>
-                          <Button variant="ghost" size="icon" className="h-4 w-4 rounded-full text-muted-foreground hover:text-destructive" onClick={() => handleBotPairToggle(pairSymbol)}>
-                            <CloseIcon className="h-3 w-3" />
-                          </Button>
+                  ) : availablePairs.length > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 p-2">
+                      {availablePairs.map((pair) => (
+                        <div key={pair.symbol} className="flex items-center gap-1">
+                          <Checkbox
+                            id={`pair-${pair.symbol}`}
+                            checked={selectedPairsForBot.includes(pair.symbol)}
+                            onCheckedChange={() => handleBotPairToggle(pair.symbol)}
+                          />
+                          <label htmlFor={`pair-${pair.symbol}`} className="text-xs font-medium cursor-pointer">{pair.symbol}</label>
                         </div>
-                      ))
-                    )}
-                  </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-4 text-center text-muted-foreground">
+                      Parite bulunamadı veya yüklenemedi.
+                    </div>
+                  )}
+                </ScrollArea>
+                <div className="mt-2 flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setSelectedPairsForBot(availablePairs.map(p => p.symbol))}>Tümünü Seç</Button>
+                  <Button size="sm" variant="outline" onClick={() => setSelectedPairsForBot([])}>Temizle</Button>
                 </div>
-                {/* Available Pairs Selection */}
-                <div>
-                  <Label>Mevcut Popüler Pariteler ({availablePairs.length})</Label>
-                  <ScrollArea className="h-[200px] mt-1 border rounded-md">
-                    {loadingPairs ? (
-                      <div className="p-4 text-center text-muted-foreground">
-                        <Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Yükleniyor...
-                      </div>
-                    ) : availablePairs.length > 0 ? (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 p-2">
-                        {availablePairs.map((pair) => (
-                          <div key={pair.symbol} className="flex items-center gap-1">
-                            <Checkbox
-                              id={`pair-${pair.symbol}`}
-                              checked={selectedPairsForBot.includes(pair.symbol)}
-                              onCheckedChange={() => handleBotPairToggle(pair.symbol)}
-                            />
-                            <label htmlFor={`pair-${pair.symbol}`} className="text-xs font-medium cursor-pointer">{pair.symbol}</label>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="p-4 text-center text-muted-foreground">
-                        Parite bulunamadı veya yüklenemedi.
-                      </div>
-                    )}
-                  </ScrollArea>
-                  <div className="mt-2 flex gap-2">
-                    <Button size="sm" variant="outline" onClick={() => setSelectedPairsForBot(availablePairs.map(p => p.symbol))}>Tümünü Seç</Button>
-                    <Button size="sm" variant="outline" onClick={() => setSelectedPairsForBot([])}>Temizle</Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </SidebarInset>
-      </SidebarProvider>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }
