@@ -3,6 +3,11 @@ import type { z } from 'zod';
 import type { StrategySchema, BacktestParamsSchema, BacktestResultSchema, RunParamsSchema, RunResultSchema, DefineStrategyParamsSchema, DefineStrategyResultSchema } from '@/ai/schemas/strategy-schemas';
 
 /**
+ * Represents the available API environments.
+ */
+export type ApiEnvironment = 'spot' | 'futures' | 'testnet_spot' | 'testnet_futures';
+
+/**
  * Represents a trading strategy.
  */
 export type Strategy = z.infer<typeof StrategySchema>;
@@ -19,6 +24,7 @@ export type BacktestResult = z.infer<typeof BacktestResultSchema>;
 
 /**
  * Parameters required for initiating a live strategy run.
+ * Includes the target API environment.
  */
 export type RunParams = z.infer<typeof RunParamsSchema>;
 

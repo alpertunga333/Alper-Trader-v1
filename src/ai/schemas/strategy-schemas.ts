@@ -2,6 +2,11 @@
 import { z } from 'zod';
 
 /**
+ * Zod schema for validating the API environment type.
+ */
+const ApiEnvironmentSchema = z.enum(['spot', 'futures', 'testnet_spot', 'testnet_futures']);
+
+/**
  * Zod schema for validating a trading strategy object.
  */
 export const StrategySchema = z.object({
@@ -14,6 +19,7 @@ export const StrategySchema = z.object({
 
 /**
  * Zod schema for validating backtest parameters.
+ * Backtesting always uses Spot data.
  */
 export const BacktestParamsSchema = z.object({
     strategy: StrategySchema.describe('The strategy object to test.'),
@@ -22,7 +28,7 @@ export const BacktestParamsSchema = z.object({
     startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Start date must be in YYYY-MM-DD format.").describe('Start date for backtesting (YYYY-MM-DD).'),
     endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "End date must be in YYYY-MM-DD format.").describe('End date for backtesting (YYYY-MM-DD).'),
     initialBalance: z.number().positive("Initial balance must be positive.").describe('Initial balance in quote currency (e.g., USDT).'),
-    // environment and isTestnet removed, assuming Spot market data
+    // environment and isTestnet removed, backtesting defaults to Spot
 }).refine(data => new Date(data.startDate) < new Date(data.endDate), {
     message: "End date must be after start date.",
     path: ["endDate"], // Attach error to endDate field
@@ -53,7 +59,8 @@ export const RunParamsSchema = z.object({
     interval: z.string().min(1, "Candlestick interval is required.").describe('The candlestick interval to monitor (e.g., 1h, 1d).'),
     stopLossPercent: z.number().positive("Stop loss must be positive.").optional().describe('Optional stop loss percentage.'),
     takeProfitPercent: z.number().positive("Take profit must be positive.").optional().describe('Optional take profit percentage.'),
-    // environment and isTestnet removed, assuming Spot market
+    environment: ApiEnvironmentSchema.describe('The target API environment (spot, futures, testnet_spot, testnet_futures).'),
+    // isTestnet removed, derived from environment
     // API keys should NOT be part of this schema; they must be handled securely server-side.
 });
 

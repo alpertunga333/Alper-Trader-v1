@@ -8,27 +8,43 @@
   * or a secure database.
   */
 
- type ApiEnvironment = 'spot'; // Only spot is needed now
+ type ApiEnvironment = 'spot' | 'futures' | 'testnet_spot' | 'testnet_futures';
 
  /**
-  * PLACEHOLDER: Securely retrieves the API key for the Spot environment.
+  * PLACEHOLDER: Securely retrieves the API key for the specified environment.
   * Replace this with your actual secure key retrieval logic.
-  * @param environment Must be 'spot'.
+  * @param environment The API environment ('spot', 'futures', 'testnet_spot', 'testnet_futures').
   * @returns The API key or null if not found/configured.
   * @throws Error if the environment is invalid or retrieval fails unexpectedly.
   */
  export async function fetchSecureApiKey(environment: ApiEnvironment): Promise<string | null> {
-     console.log(`Placeholder: Attempting to fetch secure API key for ${environment}`);
+     const envLabel = environment.replace('_', ' ').toUpperCase();
+     console.log(`Placeholder: Attempting to fetch secure API key for ${envLabel}`);
 
-     if (environment !== 'spot') {
-         console.error(`fetchSecureApiKey: Invalid environment specified: ${environment}. Only 'spot' is supported.`);
-         throw new Error(`Invalid API environment specified: ${environment}`);
+     let envVarName: string;
+     switch (environment) {
+         case 'spot':
+             envVarName = 'BINANCE_API_KEY_SPOT';
+             break;
+         case 'futures':
+             envVarName = 'BINANCE_API_KEY_FUTURES';
+             break;
+         case 'testnet_spot':
+             envVarName = 'BINANCE_API_KEY_TESTNET_SPOT';
+             break;
+         case 'testnet_futures':
+             envVarName = 'BINANCE_API_KEY_TESTNET_FUTURES';
+             break;
+         default:
+             // This should ideally be caught by TypeScript, but belt-and-suspenders
+             console.error(`fetchSecureApiKey: Invalid environment specified: ${environment}.`);
+             throw new Error(`Invalid API environment specified: ${environment}`);
      }
 
-     const envVarKey = process.env.BINANCE_API_KEY_SPOT;
+     const envVarKey = process.env[envVarName];
 
      if (!envVarKey) {
-         console.warn(`fetchSecureApiKey: API Key environment variable not found for ${environment}. Check BINANCE_API_KEY_SPOT.`);
+         console.warn(`fetchSecureApiKey: API Key environment variable not found for ${envLabel}. Check ${envVarName}.`);
          return null;
      }
 
@@ -37,24 +53,40 @@
  }
 
  /**
-  * PLACEHOLDER: Securely retrieves the Secret key for the Spot environment.
+  * PLACEHOLDER: Securely retrieves the Secret key for the specified environment.
   * Replace this with your actual secure key retrieval logic.
-  * @param environment Must be 'spot'.
+  * @param environment The API environment ('spot', 'futures', 'testnet_spot', 'testnet_futures').
   * @returns The Secret key or null if not found/configured.
   * @throws Error if the environment is invalid or retrieval fails unexpectedly.
   */
  export async function fetchSecureSecretKey(environment: ApiEnvironment): Promise<string | null> {
-     console.log(`Placeholder: Attempting to fetch secure Secret key for ${environment}`);
+      const envLabel = environment.replace('_', ' ').toUpperCase();
+      console.log(`Placeholder: Attempting to fetch secure Secret key for ${envLabel}`);
 
-     if (environment !== 'spot') {
-         console.error(`fetchSecureSecretKey: Invalid environment specified: ${environment}. Only 'spot' is supported.`);
-         throw new Error(`Invalid API environment specified: ${environment}`);
+      let envVarName: string;
+      switch (environment) {
+         case 'spot':
+             envVarName = 'BINANCE_SECRET_KEY_SPOT';
+             break;
+         case 'futures':
+             envVarName = 'BINANCE_SECRET_KEY_FUTURES';
+             break;
+         case 'testnet_spot':
+             envVarName = 'BINANCE_SECRET_KEY_TESTNET_SPOT';
+             break;
+         case 'testnet_futures':
+             envVarName = 'BINANCE_SECRET_KEY_TESTNET_FUTURES';
+             break;
+         default:
+             console.error(`fetchSecureSecretKey: Invalid environment specified: ${environment}.`);
+             throw new Error(`Invalid API environment specified: ${environment}`);
      }
 
-     const envVarSecret = process.env.BINANCE_SECRET_KEY_SPOT;
+
+     const envVarSecret = process.env[envVarName];
 
       if (!envVarSecret) {
-         console.warn(`fetchSecureSecretKey: Secret Key environment variable not found for ${environment}. Check BINANCE_SECRET_KEY_SPOT.`);
+         console.warn(`fetchSecureSecretKey: Secret Key environment variable not found for ${envLabel}. Check ${envVarName}.`);
          return null;
       }
 
