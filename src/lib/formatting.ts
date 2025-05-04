@@ -1,3 +1,4 @@
+import * as React from 'react'; // Added missing import
 import { useState, useEffect } from 'react';
 
 /**
