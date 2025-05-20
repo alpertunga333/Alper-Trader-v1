@@ -346,6 +346,7 @@ export async function getAccountBalances(
 
    try {
      // **SECURITY:** Ensure this function is ONLY called from a secure server context (Server Action, API Route)
+     // OR by another server action that passes user-provided keys for validation.
      const response = await makeAuthenticatedRequest(endpoint, { recvWindow: 5000 }, apiKey, secretKey, 'GET', isTestnet, isFutures);
 
      if (isFutures) {
@@ -374,46 +375,6 @@ export async function getAccountBalances(
      console.error(`Error fetching account balances from ${envLabel}:`, error);
      throw error; // Re-throw for the caller (e.g., Server Action) to handle
    }
-}
-
-
-/**
- * Validates Binance API keys by attempting to fetch account information for the specified environment.
- * Note: In a real application, this should call a secure server-side endpoint for validation.
- * @param apiKey The API Key.
- * @param secretKey The Secret Key.
- * @param isTestnet Whether to validate against the testnet environment.
- * @param isFutures Whether to validate against the futures environment.
- * @returns True if the keys are considered valid, false otherwise.
- */
-export async function validateApiKey(
-    apiKey: string,
-    secretKey: string,
-    isTestnet: boolean,
-    isFutures: boolean = false
-): Promise<boolean> {
-    const envLabel = `${isTestnet ? 'Testnet ' : ''}${isFutures ? 'Futures' : 'Spot'}`;
-    console.log(`Validating API Keys for ${envLabel}...`);
-    try {
-        // Attempt to get account info using the actual function (requires server-side execution).
-        // A successful call (even with empty balances) indicates valid keys.
-        // For Futures, we use getAccountBalances. For Spot, we use getAccountBalances.
-        await getAccountBalances(apiKey, secretKey, isTestnet, isFutures);
-        console.log(`API Key validation successful for ${envLabel}.`);
-        return true;
-    } catch (error) {
-         // Log the specific error for debugging
-         console.warn(`API Key validation failed for ${envLabel}:`, error instanceof Error ? error.message : error);
-        // Check if the error indicates invalid credentials (common codes/messages)
-         if (error instanceof Error) {
-             const msg = error.message.toLowerCase();
-             if (msg.includes('invalid api key') || msg.includes('api-key format invalid') || msg.includes('signature for this request is not valid')) {
-                 // More specific logging for credential errors
-                 console.warn(`Validation failed specifically due to invalid credentials for ${envLabel}.`);
-             }
-         }
-        return false; // Any error during fetch means validation fails
-    }
 }
 
 
