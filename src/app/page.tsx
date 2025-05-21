@@ -1,3 +1,4 @@
+
 // src/app/page.tsx
 'use client';
 
@@ -116,16 +117,15 @@ import {
   BrainCircuit // Icon for Strategies
 } from 'lucide-react';
 import type { Balance, Candle, SymbolInfo, OrderParams, OrderResponse } from '@/services/binance';
-import { getCandlestickData, getExchangeInfo, placeOrder } from '@/services/binance'; // Removed validateApiKey
-// import { sendMessage, validateBotToken, validateChatId } from '@/services/telegram'; // These will be replaced by actions
+import { getCandlestickData, getExchangeInfo, placeOrder } from '@/services/binance';
 import { toast } from '@/hooks/use-toast';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useFormattedNumber, formatNumberClientSide, formatTimestamp } from '@/lib/formatting';
-import type { BacktestParams, BacktestResult, DefineStrategyParams, DefineStrategyResult, RunParams, RunResult, Strategy, ApiEnvironment } from '@/ai/types/strategy-types'; // Make sure ApiEnvironment is imported
+import type { BacktestParams, BacktestResult, DefineStrategyParams, DefineStrategyResult, RunParams, RunResult, Strategy, ApiEnvironment } from '@/ai/types/strategy-types';
 import { backtestStrategy, runStrategy, defineNewStrategy } from '@/ai/actions/trading-strategy-actions';
-import { fetchAccountBalancesAction } from '@/actions/binanceActions'; // Server Action for fetching balances
+import { fetchAccountBalancesAction } from '@/actions/binanceActions';
 import { Separator } from '@/components/ui/separator';
 import { validateBinanceKeysAction } from '@/actions/binanceValidationActions';
 import {
@@ -139,14 +139,14 @@ import {
 const initialCandleData: Candle[] = [];
 
 // Placeholder: Replace with actual trade history fetching if implemented
-const tradeHistoryData: any[] = []; // Keep as any for placeholder
+const tradeHistoryData: any[] = []; // Example: Placeholder for trade history
 
 // Will be populated by API
 let allAvailablePairs: SymbolInfo[] = [];
 
+
 // --- Updated Initial Strategies (Total 30) ---
 const availableStrategies: Strategy[] = [
-    // Existing 10
     { id: 'rsi_simple', name: 'Basit RSI Al/Sat', description: 'RSI 30 altına indiğinde al, 70 üstüne çıktığında sat.', prompt: 'RSI(14) < 30 iken AL, RSI(14) > 70 iken SAT.' },
     { id: 'sma_crossover', name: 'SMA Kesişimi (50/200)', description: '50 periyotluk SMA, 200 periyotluk SMA\'yı yukarı kestiğinde al, aşağı kestiğinde sat.', prompt: 'SMA(50) > SMA(200) iken ve önceki mumda SMA(50) <= SMA(200) ise AL. SMA(50) < SMA(200) iken ve önceki mumda SMA(50) >= SMA(200) ise SAT.' },
     { id: 'bollinger_bands', name: 'Bollinger Bantları Dokunuş', description: 'Fiyat alt Bollinger bandına dokunduğunda al, üst banda dokunduğunda sat.', prompt: 'Fiyat <= Alt Bollinger Bandı(20, 2) ise AL. Fiyat >= Üst Bollinger Bandı(20, 2) ise SAT.' },
@@ -157,7 +157,6 @@ const availableStrategies: Strategy[] = [
     { id: 'fibonacci_support', name: 'Fibonacci Destek Alımı', description: 'Fiyat önemli bir Fibonacci geri çekilme seviyesine (örn. 0.618) düşüp tepki verdiğinde al.', prompt: 'Fiyat son yükselişin 0.618 Fibonacci seviyesine yakınsa ve bir önceki mum yeşil ise AL. (Satış koşulu eklenmeli)' },
     { id: 'ema_crossover_fast', name: 'Hızlı EMA Kesişimi (9/21)', description: '9 periyotluk EMA, 21 periyotluk EMA\'yı yukarı kestiğinde al, aşağı kestiğinde sat.', prompt: 'EMA(9) > EMA(21) iken ve önceki mumda EMA(9) <= EMA(21) ise AL. EMA(9) < EMA(21) iken ve önceki mumda EMA(9) >= EMA(21) ise SAT.' },
     { id: 'support_resistance_bounce', name: 'Destek/Direnç Sekmesi', description: 'Fiyat önemli bir destek seviyesinden sektiğinde al, dirençten döndüğünde sat.', prompt: 'Tanımlanmış Destek seviyesine yakın ve bir önceki mum yeşil ise AL. Tanımlanmış Direnç seviyesine yakın ve bir önceki mum kırmızı ise SAT.' },
-    // Added 20 more
     { id: 'adx_trend_following', name: 'ADX Trend Takibi', description: 'ADX > 25 ve +DI > -DI ise al, ADX > 25 ve -DI > +DI ise sat.', prompt: 'ADX(14) > 25 VE +DI(14) > -DI(14) ise AL. ADX(14) > 25 VE -DI(14) > +DI(14) ise SAT.' },
     { id: 'obv_divergence', name: 'OBV Uyumsuzluğu', description: 'Fiyat düşerken OBV yükseliyorsa (boğa uyumsuzluğu) al, fiyat yükselirken OBV düşüyorsa (ayı uyumsuzluğu) sat.', prompt: 'Fiyat Düşük < Önceki Düşük VE OBV > Önceki OBV ise AL. Fiyat Yüksek > Önceki Yüksek VE OBV < Önceki OBV ise SAT.' },
     { id: 'mfi_overbought_oversold', name: 'MFI Aşırı Alım/Satım', description: 'Para Akışı Endeksi (MFI) 20\'nin altına düşerse al, 80\'in üzerine çıkarsa sat.', prompt: 'MFI(14) < 20 ise AL. MFI(14) > 80 ise SAT.' },
@@ -198,7 +197,6 @@ const PIE_CHART_COLORS = [
 
 // ----- API Validation Types -----
 type ValidationStatus = 'pending' | 'valid' | 'invalid' | 'not_checked';
-// ApiEnvironment type is imported from strategy-types
 
 // ----- Main Dashboard Component -----
 export default function Dashboard() {
@@ -207,32 +205,29 @@ export default function Dashboard() {
   const [selectedInterval, setSelectedInterval] = React.useState<string>('1h');
   const [botStatus, setBotStatus] = React.useState<'running' | 'stopped'>('stopped');
   const [activeStrategies, setActiveStrategies] = React.useState<string[]>([]);
-  const [stopLoss, setStopLoss] = React.useState<string>(''); // Kept as string for input
-  const [takeProfit, setTakeProfit] = React.useState<string>(''); // Kept as string for input
+  const [stopLoss, setStopLoss] = React.useState<string>('');
+  const [takeProfit, setTakeProfit] = React.useState<string>('');
   const [availablePairs, setAvailablePairs] = React.useState<SymbolInfo[]>([]);
   const [candleData, setCandleData] = React.useState<Candle[]>(initialCandleData);
-  const [portfolioData, setPortfolioData] = React.useState<Balance[]>([]); // Start empty
-  const [totalPortfolioValueUsd, setTotalPortfolioValueUsd] = React.useState<number | null>(null); // State for total value
+  const [portfolioData, setPortfolioData] = React.useState<Balance[]>([]);
+  const [totalPortfolioValueUsd, setTotalPortfolioValueUsd] = React.useState<number | null>(null);
   const [loadingPairs, setLoadingPairs] = React.useState(true);
   const [loadingCandles, setLoadingCandles] = React.useState(false);
   const [loadingPortfolio, setLoadingPortfolio] = React.useState(false);
-  const [portfolioError, setPortfolioError] = React.useState<string | null>(null); // Specific error for portfolio loading
+  const [portfolioError, setPortfolioError] = React.useState<string | null>(null);
   const [selectedPairsForBot, setSelectedPairsForBot] = React.useState<string[]>([]);
   const [dynamicLogData, setDynamicLogData] = React.useState<{ timestamp: string; type: string; message: string }[]>([]);
 
-  // New Strategy Dialog State
   const [isDefineStrategyDialogOpen, setIsDefineStrategyDialogOpen] = React.useState(false);
   const [defineStrategyParams, setDefineStrategyParams] = React.useState<DefineStrategyParams>({ name: '', description: '', prompt: '' });
   const [isDefiningStrategy, setIsDefiningStrategy] = React.useState(false);
-  const [definedStrategies, setDefinedStrategies] = React.useState<Strategy[]>(availableStrategies); // Holds both default and AI-defined
+  const [definedStrategies, setDefinedStrategies] = React.useState<Strategy[]>(availableStrategies);
 
-  // Backtesting State
   const [backtestParams, setBacktestParams] = React.useState<Omit<BacktestParams, 'strategy'>>({ pair: '', interval: '1h', startDate: '', endDate: '', initialBalance: 1000 });
   const [selectedBacktestStrategyId, setSelectedBacktestStrategyId] = React.useState<string>('');
   const [backtestResult, setBacktestResult] = React.useState<BacktestResult | null>(null);
   const [isBacktesting, setIsBacktesting] = React.useState(false);
 
-  // API Key and Input State - Reverted to include all environments
   const [apiKeys, setApiKeys] = React.useState({
       spot: { key: '', secret: '' },
       futures: { key: '', secret: '' },
@@ -241,7 +236,6 @@ export default function Dashboard() {
       telegram: { token: '', chatId: '' },
   });
 
-  // Validation Status State - Reverted to include all environments
   const [validationStatus, setValidationStatus] = React.useState<{
       spot: ValidationStatus;
       futures: ValidationStatus;
@@ -258,50 +252,58 @@ export default function Dashboard() {
       telegramChatId: 'not_checked',
   });
 
-  // State to track the currently active (last validated) API environment for portfolio/trading
   const [activeApiEnvironment, setActiveApiEnvironment] = React.useState<ApiEnvironment | null>(null);
 
 
   // --- Helper Functions ---
-
-  // Function to add log entries
   const addLog = (type: string, message: string) => {
     const newLog = { timestamp: new Date().toISOString(), type, message };
-    setDynamicLogData(prevLogs => [newLog, ...prevLogs].slice(0, 100)); // Keep last 100 logs
+    setDynamicLogData(prevLogs => [newLog, ...prevLogs].slice(0, 100));
   };
 
 
   // --- Effects ---
-
-  // Fetch available pairs on mount
   React.useEffect(() => {
     const fetchPairs = async () => {
       setLoadingPairs(true);
-      setPortfolioError(null); // Clear general error on pair fetch start
-      addLog('INFO', 'Fetching available trading pairs from Binance Spot...'); // Assume Spot for initial pair list
+      setPortfolioError(null);
+      addLog('INFO', 'Fetching available trading pairs from Binance Spot...');
       try {
-        // Always fetch from Spot initially for pair list display
-        const info = await getExchangeInfo(false); // Fetching only spot info initially
+        // Determine if we should fetch from testnet based on activeApiEnvironment
+        // For initial pair loading, default to live spot if no environment is active yet.
+        const isTestnetForPairs = activeApiEnvironment === 'testnet_spot' || activeApiEnvironment === 'testnet_futures';
+        const isFuturesForPairs = activeApiEnvironment === 'futures' || activeApiEnvironment === 'testnet_futures';
+        const envLabel = activeApiEnvironment?.replace('_', ' ').toUpperCase() || 'Spot';
+
+        addLog('INFO', `Fetching pairs from ${envLabel} environment.`);
+        const info = await getExchangeInfo(isTestnetForPairs, isFuturesForPairs);
+        
         const tradingPairs = info.symbols
-          .filter(s => s.status === 'TRADING' && s.isSpotTradingAllowed) // Filter active spot pairs
+          .filter(s => s.status === 'TRADING' && (isFuturesForPairs ? true : s.isSpotTradingAllowed)) // For futures, allow all trading; for spot, check spot trading
           .sort((a, b) => a.symbol.localeCompare(b.symbol));
 
-        // Get top 100 USDT pairs based on some criteria (e.g., volume, or just first 100 alphabetically if volume isn't available)
-        // For simplicity, we'll take the first 100 USDT pairs found alphabetically.
-        // A better approach would use volume data if available or a predefined list of popular pairs.
+        // Prioritize USDT pairs, then BUSD, then others for "popular" list
         const usdtPairs = tradingPairs.filter(p => p.quoteAsset === 'USDT');
-        const popularPairs = usdtPairs.slice(0, 100); // Limit to top 100 USDT pairs
+        const busdPairs = tradingPairs.filter(p => p.quoteAsset === 'BUSD' && !usdtPairs.some(up => up.symbol === p.symbol));
+        const otherPairs = tradingPairs.filter(p => p.quoteAsset !== 'USDT' && p.quoteAsset !== 'BUSD');
+        
+        let popularPairs = [...usdtPairs, ...busdPairs];
+        if (popularPairs.length < 100) {
+            popularPairs = [...popularPairs, ...otherPairs.slice(0, 100 - popularPairs.length)];
+        }
+        popularPairs = popularPairs.slice(0,100);
 
-        allAvailablePairs = tradingPairs; // Store all for potential future use (e.g., in backtest selector)
-        setAvailablePairs(popularPairs); // Display only top 100 USDT pairs initially
+
+        allAvailablePairs = tradingPairs; // Store all for backtesting pair selection
+        setAvailablePairs(popularPairs); // For display and bot selection
 
         if (popularPairs.length > 0 && !selectedPair) {
           const defaultPair = popularPairs.find(p => p.symbol === 'BTCUSDT') || popularPairs[0];
           setSelectedPair(defaultPair.symbol);
           setBacktestParams(prev => ({ ...prev, pair: defaultPair.symbol }));
-          addLog('INFO', `Successfully fetched ${tradingPairs.length} total pairs. Displaying top ${popularPairs.length} USDT pairs. Default pair set to ${defaultPair.symbol}.`);
+          addLog('INFO', `Successfully fetched ${tradingPairs.length} total pairs. Displaying top ${popularPairs.length} pairs from ${envLabel}. Default pair set to ${defaultPair.symbol}.`);
         } else if (popularPairs.length === 0) {
-          addLog('WARN', 'No popular USDT trading pairs found or fetched from Binance Spot.');
+           addLog('WARN', `No popular trading pairs found or fetched from ${envLabel}.`);
            // Fallback to showing all pairs if no USDT pairs found (limit still applied)
            const limitedAllPairs = tradingPairs.slice(0, 100);
            setAvailablePairs(limitedAllPairs);
@@ -309,14 +311,13 @@ export default function Dashboard() {
              const defaultPair = limitedAllPairs.find(p => p.symbol === 'BTCUSDT') || limitedAllPairs[0];
              setSelectedPair(defaultPair.symbol);
              setBacktestParams(prev => ({ ...prev, pair: defaultPair.symbol }));
-             addLog('INFO', `No USDT pairs found. Displaying first ${limitedAllPairs.length} pairs. Default pair set to ${defaultPair.symbol}.`);
+             addLog('INFO', `No specific popular pairs found. Displaying first ${limitedAllPairs.length} pairs from ${envLabel}. Default pair set to ${defaultPair.symbol}.`);
            }
         }
          addLog('INFO', `Available pairs count for bot selection: ${popularPairs.length}`);
       } catch (err) {
         console.error("Failed to fetch exchange info:", err);
         const errorMsg = err instanceof Error ? err.message : "Bilinmeyen bir hata oluştu.";
-        // Use portfolioError to display in the portfolio section if pairs fail
         setPortfolioError(`Parite verileri yüklenemedi: ${errorMsg}`);
         addLog('ERROR', `Failed to fetch exchange info: ${errorMsg}`);
         toast({ title: "Hata", description: `Binance pariteleri alınamadı: ${errorMsg}`, variant: "destructive" });
@@ -325,16 +326,14 @@ export default function Dashboard() {
       }
     };
     fetchPairs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Fetch only on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeApiEnvironment]); // Re-fetch if activeApiEnvironment changes, selectedPair is managed internally for default setting
 
 
-  // Fetch candlestick data when selected pair, interval, or ACTIVE environment changes
   React.useEffect(() => {
     const fetchCandleData = async () => {
       if (!selectedPair) return;
       setLoadingCandles(true);
-      // Don't clear the general error here, keep portfolio error if it exists
       setCandleData([]); // Clear previous data
 
       const isTestnet = activeApiEnvironment === 'testnet_spot' || activeApiEnvironment === 'testnet_futures';
@@ -343,9 +342,8 @@ export default function Dashboard() {
       addLog('INFO', `Fetching candlestick data for ${selectedPair} (${selectedInterval}) from ${envLabel}...`);
 
       try {
-          // Use activeApiEnvironment to determine if testnet/futures data should be fetched
-          const data = await getCandlestickData(selectedPair, selectedInterval, isTestnet, isFutures, 200); // Fetch more candles (e.g., 200)
-
+          // Fetch a good amount of data for the chart
+          const data = await getCandlestickData(selectedPair, selectedInterval, isTestnet, isFutures, 200);
           setCandleData(data);
           if (data.length === 0) {
             addLog('WARN', `No candlestick data returned for ${selectedPair} (${selectedInterval}) from ${envLabel}.`);
@@ -355,62 +353,60 @@ export default function Dashboard() {
       } catch (err) {
         console.error(`Failed to fetch candlestick data for ${selectedPair} (${envLabel}):`, err);
         const errorMsg = err instanceof Error ? err.message : "Bilinmeyen bir hata oluştu.";
-        setCandleData([]); // Clear previous data on error
+        setCandleData([]); // Ensure candle data is empty on error
         addLog('ERROR', `Failed to fetch candlestick data for ${selectedPair} (${envLabel}): ${errorMsg}`);
-        // Consider showing a specific chart error, but maybe avoid toast if portfolio error is already shown
-        // toast({ title: "Grafik Hatası", description: `${selectedPair} için grafik verisi yüklenemedi (${envLabel}): ${errorMsg}`, variant: "destructive" });
+        // Optionally, show a toast, but be mindful of frequent errors if polling
+        // toast({ title: "Grafik Hatası", description: `Mum verileri alınamadı: ${errorMsg}`, variant: "destructive" });
       } finally {
         setLoadingCandles(false);
       }
     };
     fetchCandleData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPair, selectedInterval, activeApiEnvironment]); // Re-fetch when active environment changes
+  }, [selectedPair, selectedInterval, activeApiEnvironment]); // Re-fetch if environment changes
 
 
-  // Fetch portfolio data when API keys for the active environment are validated OR when active environment changes
   React.useEffect(() => {
       const fetchPortfolio = async () => {
           if (!activeApiEnvironment) {
               setPortfolioData([]);
               setTotalPortfolioValueUsd(null);
-              setPortfolioError(null); // Clear error if no env selected
-              setLoadingPortfolio(false); // Ensure loading stops
-              return; // Don't fetch if no environment is active
+              setPortfolioError(null);
+              setLoadingPortfolio(false);
+              return;
           }
 
+          // Ensure keys for the active environment are validated
           if (validationStatus[activeApiEnvironment] !== 'valid') {
-               setPortfolioData([]); // Clear portfolio if keys not valid for the active env
+               setPortfolioData([]);
                setTotalPortfolioValueUsd(null);
-               setPortfolioError(`API anahtarları ${activeApiEnvironment.replace('_',' ').toUpperCase()} için doğrulanmadı.`); // Set specific error
-               setLoadingPortfolio(false); // Ensure loading stops
-               return; // Don't fetch if keys aren't valid
+               setPortfolioError(`API anahtarları ${activeApiEnvironment.replace('_',' ').toUpperCase()} için doğrulanmadı.`);
+               setLoadingPortfolio(false);
+               return;
           }
 
           setLoadingPortfolio(true);
-          setPortfolioError(null); // Clear previous errors
-          setTotalPortfolioValueUsd(null); // Reset total value while loading
+          setPortfolioError(null);
+          setTotalPortfolioValueUsd(null); // Reset total value
           const envLabel = activeApiEnvironment.replace('_', ' ').toUpperCase();
           addLog('INFO', `Fetching portfolio data for ${envLabel} environment...`);
 
           try {
-              // **SECURITY**: Use the Server Action for secure fetching
-              const apiKeyHint = apiKeys[activeApiEnvironment].key.substring(0, 4);
-              const secretKeyHint = '****';
-              // Call action, specifying the active environment
+              // Use a non-sensitive hint for the API key for logging if needed, but action uses secure retrieval
+              const apiKeyHint = apiKeys[activeApiEnvironment].key.substring(0, 4); // Example hint
+              const secretKeyHint = '****'; // Placeholder for secret key hint
+              
+              // Call the Server Action, which securely fetches keys based on activeApiEnvironment
               const result = await fetchAccountBalancesAction(apiKeyHint, secretKeyHint, activeApiEnvironment);
 
               if (result.success && result.balances) {
-                  // Filter out zero balances for a cleaner view
                   const filteredBalances = result.balances
-                      .filter(b => parseFloat(b.free) > 0 || parseFloat(b.locked) > 0) // Use parseFloat for comparison
+                      .filter(b => parseFloat(b.free) > 0 || parseFloat(b.locked) > 0)
+                       // Sort to put USDT, BUSD, other stables first, then by asset name
                        .sort((a, b) => {
-                          // Sort primarily by whether it's a quote asset (USDT, BUSD etc.)
                           const isAQuote = ['USDT', 'BUSD', 'USDC', 'TRY', 'EUR'].includes(a.asset);
                           const isBQuote = ['USDT', 'BUSD', 'USDC', 'TRY', 'EUR'].includes(b.asset);
                           if (isAQuote && !isBQuote) return -1;
                           if (!isAQuote && isBQuote) return 1;
-                          // Then sort by asset name
                           return a.asset.localeCompare(b.asset);
                       });
                   setPortfolioData(filteredBalances);
@@ -419,43 +415,38 @@ export default function Dashboard() {
                       addLog('INFO', `Portfolio (${envLabel}) is empty or all balances are zero.`);
                   }
 
-                  // --- Calculate Total Portfolio Value (Placeholder) ---
+                  // Estimate total portfolio value in USD (placeholder logic)
                    let estimatedTotal = 0;
-                   const stablecoins = ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI', 'TRY', 'EUR'];
-                   // Placeholder - Ideally fetch current prices via another API call
-                   const prices: Record<string, number> = {
-                    BTC: 65000, ETH: 3500, SOL: 150, BNB: 600, ADA: 0.45, XRP: 0.5, DOGE: 0.15, SHIB: 0.000025
-                    // Add other common assets if needed
-                 };
-
+                   const stablecoins = ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI']; // Add more as needed
+                   const tryEurRate = { TRY: 0.03, EUR: 1.08 }; // Example rates to USD
+                   const prices: Record<string, number> = { // Very rough placeholder prices
+                      BTC: 65000, ETH: 3500, SOL: 150, BNB: 600, ADA: 0.45, XRP: 0.5, DOGE: 0.15, SHIB: 0.000025
+                      // Add other common assets if needed
+                   };
 
                    filteredBalances.forEach(b => {
                       const totalAmount = parseFloat(b.free) + parseFloat(b.locked);
                       if (stablecoins.includes(b.asset)) {
-                         // Simple 1:1 for USD stables, adjust for TRY/EUR if needed
-                          if (['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI'].includes(b.asset)) {
-                              estimatedTotal += totalAmount;
-                          } else {
-                              // Placeholder: Need actual conversion rates for non-USD stables
-                              // addLog('WARN', `Missing conversion rate for ${b.asset}, treating as 0 USD for now.`);
-                          }
+                          estimatedTotal += totalAmount; // Assume 1:1 for USD stablecoins
+                      } else if (b.asset === 'TRY' && tryEurRate.TRY) {
+                          estimatedTotal += totalAmount * tryEurRate.TRY;
+                      } else if (b.asset === 'EUR' && tryEurRate.EUR) {
+                          estimatedTotal += totalAmount * tryEurRate.EUR;
                       } else if (prices[b.asset]) {
                          estimatedTotal += totalAmount * prices[b.asset];
-                      } else {
-                         // addLog('WARN', `Missing price data for ${b.asset}, cannot include in total value calculation.`);
                       }
+                      // Note: For assets not in stablecoins or prices, they won't be added to total.
+                      // A real implementation would fetch live prices for all assets.
                    });
                   setTotalPortfolioValueUsd(estimatedTotal);
-                   addLog('INFO', `Estimated total portfolio value (${envLabel}): ~$${estimatedTotal.toFixed(2)} USD`);
-                   // ------------------------------------------------------
+                  addLog('INFO', `Estimated total portfolio value (${envLabel}): ~$${estimatedTotal.toFixed(2)} USD`);
 
               } else {
-                   // Handle errors from the action
                    const errMsg = result.error || `Failed to fetch balances for ${envLabel}.`;
-                   setPortfolioError(errMsg); // Show error message from action
-                   setPortfolioData([]); // Clear data
+                   setPortfolioError(errMsg);
+                   setPortfolioData([]); // Clear data on error
                    setTotalPortfolioValueUsd(null);
-                   // Optionally set validation status to invalid, though it might already be not_checked or pending
+                   // If error is due to unconfigured keys (as per server action message), mark as invalid
                    if (activeApiEnvironment && (errMsg.includes('API anahtarları') || errMsg.includes('yapılandırılmamış') || errMsg.includes('Geçersiz'))) {
                         setValidationStatus(prev => ({ ...prev, [activeApiEnvironment!]: 'invalid' }));
                         addLog('WARN', `Portfolio fetch failed (${envLabel}) due to API key issue, setting status to invalid.`);
@@ -465,29 +456,41 @@ export default function Dashboard() {
           } catch (err) {
               const errorMsg = err instanceof Error ? err.message : "Portföy yüklenirken bilinmeyen bir hata oluştu.";
               console.error(`Failed to fetch portfolio (${envLabel}):`, err);
-              setPortfolioError(errorMsg); // Set the specific error message
+              setPortfolioError(errorMsg);
               addLog('ERROR', `Failed to fetch portfolio (${envLabel}): ${errorMsg}`);
-              // Do not show toast here, let the UI display the portfolioError
-              // toast({ title: "Portföy Hatası", description: `Hesap bakiyeleri yüklenemedi (${envLabel}): ${errorMsg}`, variant: "destructive" });
-              setPortfolioData([]); // Reset on error
-              setTotalPortfolioValueUsd(null); // Reset total value on error
+              setPortfolioData([]); // Clear data on error
+              setTotalPortfolioValueUsd(null);
           } finally {
               setLoadingPortfolio(false);
           }
       };
 
-      fetchPortfolio();
+      // Only fetch if an environment is active and validated
+      if (activeApiEnvironment && validationStatus[activeApiEnvironment] === 'valid') {
+        fetchPortfolio();
+      } else if (activeApiEnvironment && validationStatus[activeApiEnvironment] !== 'valid') {
+        // If active env is not valid, clear portfolio and show error
+        setPortfolioData([]);
+        setTotalPortfolioValueUsd(null);
+        setPortfolioError(`Lütfen aktif ortam (${activeApiEnvironment.replace('_',' ').toUpperCase()}) için API anahtarlarını doğrulayın.`);
+        setLoadingPortfolio(false);
+      } else {
+        // No active environment, clear portfolio
+        setPortfolioData([]);
+        setTotalPortfolioValueUsd(null);
+        setPortfolioError(null); // No error, just no data to show
+        setLoadingPortfolio(false);
+      }
    // eslint-disable-next-line react-hooks/exhaustive-deps
-   }, [activeApiEnvironment, validationStatus]); // Trigger when active env or any validation status changes
+   }, [activeApiEnvironment, validationStatus[activeApiEnvironment!]]); // Depend on the specific validation status of the active env
 
 
   // --- Handlers ---
-
   const toggleBotStatus = async () => {
      const newStatus = botStatus === 'running' ? 'stopped' : 'running';
 
      if (newStatus === 'running') {
-        // Pre-start checks
+         // Check for active and validated API environment
          if (!activeApiEnvironment || validationStatus[activeApiEnvironment] !== 'valid') {
              toast({ title: "API Doğrulaması Gerekli", description: `Lütfen aktif ortam (${activeApiEnvironment?.replace('_',' ').toUpperCase() || 'Yok'}) için API anahtarlarını doğrulayın.`, variant: "destructive" });
               addLog('WARN', `Bot start prevented: Active API environment (${activeApiEnvironment || 'None'}) not validated.`);
@@ -503,44 +506,47 @@ export default function Dashboard() {
             addLog('WARN', 'Bot start prevented: No strategies selected.');
             return;
         }
+        // Check Telegram validation
         if (validationStatus.telegramToken !== 'valid' || validationStatus.telegramChatId !== 'valid') {
             toast({ title: "Telegram Doğrulaması Gerekli", description: "Lütfen geçerli Telegram bot token ve chat ID'sini doğrulayın.", variant: "destructive" });
             addLog('WARN', 'Bot start prevented: Telegram not validated.');
             return;
         }
 
-        // If all checks pass, proceed to start
         setBotStatus('running');
         const strategies = activeStrategies.map(id => definedStrategies.find(s=>s.id===id)?.name).filter(Boolean);
-        const envLabel = activeApiEnvironment!.replace('_', ' ').toUpperCase(); // Should be set if we reached here
+        const envLabel = activeApiEnvironment!.replace('_', ' ').toUpperCase();
         toast({ title: `Bot Başlatılıyor...`, description: `Ortam: ${envLabel}. Pariteler: ${selectedPairsForBot.join(', ')}. Stratejiler: ${strategies.join(', ')}.` });
         addLog('INFO', `Bot starting... Env: ${envLabel}, Pairs: ${selectedPairsForBot.join(', ') || 'None'}. Strategies: ${strategies.join(', ') || 'None'}.`);
 
-        // --- Start Strategy Execution ---
         let strategyStartSuccessCount = 0;
         let strategyStartFailCount = 0;
 
+        // Iterate over selected pairs and strategies to "start" them
         for (const pair of selectedPairsForBot) {
             for (const strategyId of activeStrategies) {
                 const strategy = definedStrategies.find(s => s.id === strategyId);
                 if (strategy) {
                     try {
+                        // This is where you'd call the actual live trading initiation logic
+                        // For now, we use the placeholder `runStrategy` server action
                         console.log(`Attempting to run strategy ${strategy.name} on ${pair} in ${envLabel}`);
                         addLog('INFO', `Attempting to start strategy '${strategy.name}' on ${pair} (${envLabel})...`);
 
                         const runParams: RunParams = {
                             strategy,
                             pair,
-                            interval: selectedInterval,
+                            interval: selectedInterval, // Use the globally selected interval for now
                             stopLossPercent: stopLoss ? parseFloat(stopLoss) : undefined,
                             takeProfitPercent: takeProfit ? parseFloat(takeProfit) : undefined,
-                            environment: activeApiEnvironment!,
+                            environment: activeApiEnvironment!, // Pass the validated active environment
                         };
 
-                        const result: RunResult = await runStrategy(runParams);
+                        // Call the server action
+                        const result: RunResult = await runStrategy(runParams); // `runStrategy` is a server action
 
                         addLog('STRATEGY_START', `Strategy '${strategy.name}' on ${pair} (${envLabel}) status: ${result.status}. ${result.message || ''}`);
-                        if(result.status.toLowerCase() !== 'error') { // Count non-errors as success for now
+                        if(result.status.toLowerCase() !== 'error') { // Assuming 'Error' status means failure
                             strategyStartSuccessCount++;
                         } else {
                             strategyStartFailCount++;
@@ -561,6 +567,7 @@ export default function Dashboard() {
 
         addLog('INFO', `Strategy start attempt complete. Success: ${strategyStartSuccessCount}, Failed: ${strategyStartFailCount}.`);
 
+        // Send Telegram notification via Server Action
         try {
             const successMsg = strategyStartSuccessCount > 0 ? `${strategyStartSuccessCount} strateji başarıyla başlatıldı.` : '';
             const failMsg = strategyStartFailCount > 0 ? `${strategyStartFailCount} strateji başlatılamadı.` : '';
@@ -576,15 +583,15 @@ export default function Dashboard() {
             addLog('TELEGRAM_ERROR', `Bot start notification failed: ${errorMsg}`);
         }
 
-    } else { // Stopping the bot
+    } else { // Bot is stopping
         setBotStatus('stopped');
-        const envLabel = activeApiEnvironment ? activeApiEnvironment.replace('_', ' ').toUpperCase() : 'Tümü';
+        const envLabel = activeApiEnvironment ? activeApiEnvironment.replace('_', ' ').toUpperCase() : 'Tümü'; // Or specific environment
         toast({ title: 'Bot Durduruldu.', description: `Aktif ortam: ${envLabel}` });
         addLog('INFO', `Bot stopping process initiated for environment ${envLabel}.`);
-        console.log(`Stopping bot for environment ${envLabel}...`);
-        // TODO: Implement actual bot stop logic (e.g., signal background processes/server actions for the specific environment)
-        // await stopAllStrategiesAction(activeApiEnvironment); // Example server action call with environment
+        // Placeholder for actual stop logic (e.g., cancel orders, stop monitoring)
+        console.log(`Stopping bot for environment ${envLabel}... (Placeholder: actual stop logic needed)`);
 
+        // Send Telegram notification via Server Action
         try {
             const telegramResult = await sendTelegramMessageAction(apiKeys.telegram.token, apiKeys.telegram.chatId, `🛑 KriptoPilot bot (${envLabel}) durduruldu.`);
             if (telegramResult.success) {
@@ -604,7 +611,7 @@ export default function Dashboard() {
   const handleStrategyToggle = (strategyId: string) => {
     setActiveStrategies((prev) => {
       const isAdding = !prev.includes(strategyId);
-       const newStrategies = isAdding ? [...prev, strategyId] : prev.filter((id) => id !== strategyId); // Corrected logic
+       const newStrategies = isAdding ? [...prev, strategyId] : prev.filter((id) => id !== strategyId);
       const strategyName = definedStrategies.find(s => s.id === strategyId)?.name || strategyId;
       addLog('CONFIG', `Strategy ${isAdding ? 'activated' : 'deactivated'}: ${strategyName}`);
       return newStrategies;
@@ -622,27 +629,28 @@ export default function Dashboard() {
 
   const handleApiKeyChange = (
     e: React.ChangeEvent<HTMLInputElement>,
-    env: ApiEnvironment | 'telegram',
-    field: 'key' | 'secret' | 'token' | 'chatId'
+    env: ApiEnvironment | 'telegram', // Keep 'telegram' for Telegram specific fields
+    field: 'key' | 'secret' | 'token' | 'chatId' // Add 'token' and 'chatId' for Telegram
   ) => {
     const value = e.target.value;
     setApiKeys(prev => ({
       ...prev,
       [env]: { ...prev[env], [field]: value },
     }));
-    // Reset validation status for the specific env/field being changed
+    // Reset validation status for the changed environment or Telegram part
     if (env !== 'telegram') {
       setValidationStatus(prev => ({ ...prev, [env]: 'not_checked' }));
       addLog('CONFIG', `${env.replace('_',' ').toUpperCase()} API key/secret changed, validation status reset.`);
-      // If the changed env was the active one, deactivate it until re-validated
+      // If the currently active environment's keys are changed, deactivate it
       if (activeApiEnvironment === env) {
-          setActiveApiEnvironment(null);
+          setActiveApiEnvironment(null); // Deactivate
           addLog('CONFIG', `Deactivated API environment ${env.replace('_',' ').toUpperCase()} due to key change.`);
-          setPortfolioData([]); // Clear portfolio when env deactivates
+          setPortfolioData([]); // Clear portfolio
           setTotalPortfolioValueUsd(null);
-          setPortfolioError(null); // Clear error on deactivation
+          setPortfolioError(null);
       }
     } else if (field === 'token') {
+      // If token changes, both token and chat ID validation should be reset
       setValidationStatus(prev => ({ ...prev, telegramToken: 'not_checked', telegramChatId: 'not_checked' }));
       addLog('CONFIG', 'Telegram token changed, validation status reset.');
     } else if (field === 'chatId') {
@@ -670,17 +678,20 @@ export default function Dashboard() {
       });
 
       if (result.isValid) {
+        // If validation is successful, set this environment as active
         setActiveApiEnvironment(env);
         addLog('CONFIG', `Activated API environment: ${envLabel}`);
-        setPortfolioError(null);
+        setPortfolioError(null); // Clear any previous portfolio errors
       } else if (activeApiEnvironment === env) {
+        // If validation failed for the currently active environment, deactivate it
         setActiveApiEnvironment(null);
         addLog('CONFIG', `Deactivated API environment ${envLabel} due to failed validation.`);
-        setPortfolioData([]);
+        setPortfolioData([]); // Clear portfolio
         setTotalPortfolioValueUsd(null);
         setPortfolioError(null);
       }
-    } catch (error) { // Catch errors from the action call itself (e.g., network to server)
+    } catch (error) {
+      // This catch block is for errors in calling the server action itself
       const errorMsg = error instanceof Error ? error.message : "Sunucu aksiyonu çağrılırken bilinmeyen bir hata oluştu.";
       console.error(`Error calling validateBinanceKeysAction for ${envLabel}:`, error);
       setValidationStatus(prev => ({ ...prev, [env]: 'invalid' }));
@@ -690,7 +701,7 @@ export default function Dashboard() {
         description: `${envLabel} API anahtarları doğrulanırken bir sunucu hatası oluştu: ${errorMsg}`,
         variant: "destructive",
       });
-      if (activeApiEnvironment === env) {
+      if (activeApiEnvironment === env) { // If error occurred for active env, deactivate
         setActiveApiEnvironment(null);
         addLog('CONFIG', `Deactivated API environment ${envLabel} due to validation action error.`);
         setPortfolioData([]);
@@ -701,7 +712,7 @@ export default function Dashboard() {
   };
 
   const handleValidateTelegramToken = async () => {
-    setValidationStatus(prev => ({ ...prev, telegramToken: 'pending', telegramChatId: 'not_checked' }));
+    setValidationStatus(prev => ({ ...prev, telegramToken: 'pending', telegramChatId: 'not_checked' })); // Reset chat ID status
     addLog('INFO', 'Validating Telegram bot token via Server Action...');
     try {
       const result = await validateTelegramTokenAction(apiKeys.telegram.token);
@@ -714,6 +725,7 @@ export default function Dashboard() {
         variant: result.isValid ? "default" : "destructive",
       });
        if (!result.isValid) {
+            // If token is invalid, ensure Chat ID validation status is also marked as not checked or invalid
             setValidationStatus(prev => ({ ...prev, telegramChatId: 'not_checked'}));
             addLog('WARN', 'Telegram token invalid, chat ID validation cannot proceed.');
        }
@@ -736,9 +748,11 @@ export default function Dashboard() {
     addLog('INFO', `Validating Telegram chat ID ${apiKeys.telegram.chatId} via Server Action...`);
 
     try {
+      // First, validate the Chat ID structure/existence using the server action
       const validationResult = await validateTelegramChatIdAction(apiKeys.telegram.token, apiKeys.telegram.chatId);
       setValidationStatus(prev => ({ ...prev, telegramChatId: validationResult.isValid ? 'valid' : 'invalid' }));
 
+      // If validation through sendChatAction was successful, try sending a test message
       if (validationResult.isValid) {
         addLog('INFO', `Telegram Chat ID ${apiKeys.telegram.chatId} validation successful. Sending test message...`);
         const messageResult = await sendTelegramMessageAction(apiKeys.telegram.token, apiKeys.telegram.chatId, "✅ KriptoPilot Telegram bağlantısı başarıyla doğrulandı!");
@@ -751,18 +765,21 @@ export default function Dashboard() {
               variant: "default",
             });
         } else {
+            // Chat ID might be valid (e.g., exists) but bot might be blocked or message fails for other reasons
             addLog('TELEGRAM_ERROR', `Test message failed to send: ${messageResult.message}`);
             toast({
               title: "Chat ID Doğrulandı, Mesaj Hatası",
               description: `Chat ID geçerli, ancak test mesajı gönderilemedi: ${messageResult.message || 'Bilinmeyen hata.'}`,
-              variant: "destructive", // Still destructive as message failed
+              variant: "destructive", // Still an issue if test message fails
             });
         }
       } else {
+         // Chat ID validation itself failed (e.g., "chat not found")
          addLog('ERROR', `Telegram Chat ID Validation: ${validationResult.message}`);
          toast({ title: "Telegram Chat ID Geçersiz", description: validationResult.message, variant: "destructive" });
       }
-    } catch (error) { // Catch errors from the action call itself (e.g., network to server)
+    } catch (error) {
+      // This catch is for errors in calling the server actions themselves
       const errorMsg = error instanceof Error ? error.message : "Sunucu aksiyonu çağrılırken bilinmeyen bir hata oluştu.";
       console.error("Error calling Telegram Chat ID validation/messaging actions:", error);
       setValidationStatus(prev => ({ ...prev, telegramChatId: 'invalid' }));
@@ -785,17 +802,14 @@ export default function Dashboard() {
     setIsDefiningStrategy(true);
     addLog('AI_TASK', `Attempting to define new strategy '${defineStrategyParams.name}' with AI...`);
     try {
-        // Use the server action for defining strategy
-      const result: DefineStrategyResult = await defineNewStrategy(defineStrategyParams);
+      const result: DefineStrategyResult = await defineNewStrategy(defineStrategyParams); // This is a server action
 
       if (result.success && result.strategy) {
-        // Add the newly defined strategy to the state
-        setDefinedStrategies(prev => [...prev, result.strategy!]); // Add the new strategy
+        setDefinedStrategies(prev => [...prev, result.strategy!]); // Add to local list
         toast({ title: "Strateji Tanımlandı", description: result.message || `"${result.strategy.name}" başarıyla tanımlandı.` });
         addLog('AI_TASK', `AI successfully defined strategy '${result.strategy.name}'. ID: ${result.strategy.id}`);
         setIsDefineStrategyDialogOpen(false); // Close dialog
-        // Reset form
-        setDefineStrategyParams({ name: '', description: '', prompt: '' });
+        setDefineStrategyParams({ name: '', description: '', prompt: '' }); // Reset form
       } else {
         const message = result.message || "AI stratejiyi tanımlayamadı.";
         toast({ title: "Strateji Tanımlama Başarısız", description: message, variant: "destructive" });
@@ -811,7 +825,6 @@ export default function Dashboard() {
     }
   };
 
-  // Backtesting Handlers
   const handleBacktestParamChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>, field: keyof Omit<BacktestParams, 'strategy'>) => {
     const value = e.target.value;
     setBacktestParams(prev => ({
@@ -830,10 +843,9 @@ export default function Dashboard() {
 
   const runBacktestHandler = async () => {
     setIsBacktesting(true);
-    setBacktestResult(null);
+    setBacktestResult(null); // Clear previous results
     addLog('BACKTEST', 'Backtest initiated...');
 
-    // Find strategy from the combined list
     const strategy = definedStrategies.find(s => s.id === selectedBacktestStrategyId);
 
     if (!strategy) {
@@ -844,7 +856,7 @@ export default function Dashboard() {
     }
     addLog('BACKTEST', `Selected Strategy: ${strategy.name}`);
 
-    // Validate parameters
+    // Validate required parameters
     const missingParams = [
         !backtestParams.pair && "Parite",
         !backtestParams.interval && "Zaman Aralığı",
@@ -860,6 +872,7 @@ export default function Dashboard() {
         setIsBacktesting(false);
         return
     }
+    // Validate date range
     if (new Date(backtestParams.startDate) >= new Date(backtestParams.endDate)) {
         toast({ title: "Backtest Hatası", description: "Başlangıç tarihi bitiş tarihinden önce olmalıdır.", variant: "destructive" });
         setBacktestResult({ errorMessage: "Geçersiz tarih aralığı.", totalTrades: 0, winningTrades: 0, losingTrades: 0, winRate: 0, totalPnl: 0, totalPnlPercent: 0, maxDrawdown: 0 });
@@ -869,22 +882,21 @@ export default function Dashboard() {
     }
     addLog('BACKTEST', `Parameters: Pair=${backtestParams.pair}, Interval=${backtestParams.interval}, Start=${backtestParams.startDate}, End=${backtestParams.endDate}, Balance=${backtestParams.initialBalance}`);
 
-    // Prepare params for the server action
     const fullBacktestParams: BacktestParams = {
-      strategy: strategy,
+      strategy: strategy, // The selected strategy object
       pair: backtestParams.pair,
       interval: backtestParams.interval,
       startDate: backtestParams.startDate,
       endDate: backtestParams.endDate,
       initialBalance: backtestParams.initialBalance,
+      // `environment` and `isTestnet` are not needed for backtest as per schema, it uses Spot data
     };
 
     try {
       addLog('BACKTEST', `Calling backtestStrategy action for ${strategy.name} on ${backtestParams.pair} (Spot Data)...`);
-      // Call the server action for backtesting
-      const result: BacktestResult = await backtestStrategy(fullBacktestParams);
+      const result: BacktestResult = await backtestStrategy(fullBacktestParams); // This is a server action
 
-      setBacktestResult(result);
+      setBacktestResult(result); // Update state with results
 
       if (result.errorMessage) {
         toast({ title: "Backtest Sonucu", description: result.errorMessage, variant: "destructive" });
@@ -894,6 +906,7 @@ export default function Dashboard() {
         addLog('BACKTEST', `Backtest completed successfully. PnL: ${result.totalPnlPercent?.toFixed(2)}%`);
       }
     } catch (error) {
+      // This catch is for errors in calling the server action itself or unhandled exceptions from it
       console.error("Backtest action error:", error);
       const errorMessage = error instanceof Error ? error.message : "Bilinmeyen bir AI veya API hatası oluştu.";
       setBacktestResult({ errorMessage, totalTrades: 0, winningTrades: 0, losingTrades: 0, winRate: 0, totalPnl: 0, totalPnlPercent: 0, maxDrawdown: 0 });
@@ -906,11 +919,10 @@ export default function Dashboard() {
 
 
   // --- Sub-Components for Rendering ---
-
   const PortfolioRow = ({ balance }: { balance: Balance }) => {
     const formattedFree = useFormattedNumber(balance.free, { maximumFractionDigits: 8 });
     const formattedLocked = useFormattedNumber(balance.locked, { maximumFractionDigits: 8 });
-    const total = parseFloat(balance.free) + parseFloat(balance.locked); // Calculate total as number
+    const total = parseFloat(balance.free) + parseFloat(balance.locked);
     const formattedTotal = useFormattedNumber(total, { maximumFractionDigits: 8 });
 
     return (
@@ -923,13 +935,14 @@ export default function Dashboard() {
     );
   };
 
-   const TradeHistoryRow = ({ trade }: { trade: any }) => {
-        const formattedPrice = useFormattedNumber(trade.price, { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 8 }); // Adjust currency based on pair
-        const formattedAmount = useFormattedNumber(trade.qty, { maximumFractionDigits: 8 });
-        const formattedTotal = useFormattedNumber(trade.quoteQty, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }); // Adjust currency
+   const TradeHistoryRow = ({ trade }: { trade: any }) => { // `trade` type can be refined
+        // Use client-side formatting for consistency and to avoid hydration issues for now
+        const formattedPrice = formatNumberClientSide(trade.price, { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 8 });
+        const formattedAmount = formatNumberClientSide(trade.qty, { maximumFractionDigits: 8 });
+        const formattedTotal = formatNumberClientSide(trade.quoteQty, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
 
        return (
-           <TableRow key={trade.id || trade.orderId}>
+           <TableRow key={trade.id || trade.orderId}> {/* Ensure a unique key */}
                <TableCell className="text-xs whitespace-nowrap">{formatTimestamp(trade.time)}</TableCell>
                <TableCell>{trade.symbol}</TableCell>
                <TableCell className={cn("font-medium", trade.isBuyer === false ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500')}>{trade.isBuyer === false ? 'BUY' : 'SELL'}</TableCell>
@@ -941,24 +954,22 @@ export default function Dashboard() {
        );
    };
 
-  // Enhanced Chart Tooltip
   const ChartTooltipContent = ({ active, payload, label }: any) => {
       if (active && payload && payload.length) {
-        const dataPoint = payload[0].payload; // Candle data is in payload
-        const pricePayload = payload.find((p: any) => p.dataKey === 'close');
+        const dataPoint = payload[0].payload;
+        const pricePayload = payload.find((p: any) => p.dataKey === 'close'); // Assuming 'close' is the main price line
         const volumePayload = payload.find((p: any) => p.dataKey === 'volume');
 
         if (!dataPoint) return null;
 
-         const timeLabel = formatTimestamp(label);
-         // Use client-side formatting function directly
+         const timeLabel = formatTimestamp(label); // `label` is usually the x-axis value (timestamp)
+         // Format numbers using client-side formatter
          const price = pricePayload?.value !== undefined ? formatNumberClientSide(pricePayload.value, { style: 'currency', currency: 'USD', maximumFractionDigits: Math.max(2, String(pricePayload.value ?? '0').split('.')[1]?.length || 0) }) : 'N/A';
-         const volume = volumePayload?.value !== undefined ? formatNumberClientSide(volumePayload.value, { notation: 'compact', maximumFractionDigits: 1 }) : 'N/A'; // Use compact notation for volume
+         const volume = volumePayload?.value !== undefined ? formatNumberClientSide(volumePayload.value, { notation: 'compact', maximumFractionDigits: 1 }) : 'N/A';
          const open = dataPoint.open !== undefined ? formatNumberClientSide(dataPoint.open, { style: 'currency', currency: 'USD', maximumFractionDigits: Math.max(2, String(dataPoint.open).split('.')[1]?.length || 0) }) : 'N/A';
          const high = dataPoint.high !== undefined ? formatNumberClientSide(dataPoint.high, { style: 'currency', currency: 'USD', maximumFractionDigits: Math.max(2, String(dataPoint.high).split('.')[1]?.length || 0) }) : 'N/A';
          const low = dataPoint.low !== undefined ? formatNumberClientSide(dataPoint.low, { style: 'currency', currency: 'USD', maximumFractionDigits: Math.max(2, String(dataPoint.low).split('.')[1]?.length || 0) }) : 'N/A';
          const close = dataPoint.close !== undefined ? formatNumberClientSide(dataPoint.close, { style: 'currency', currency: 'USD', maximumFractionDigits: Math.max(2, String(dataPoint.close).split('.')[1]?.length || 0) }) : 'N/A';
-
 
         return (
           <div className="custom-tooltip p-2 bg-card border border-border rounded shadow-lg text-card-foreground text-xs">
@@ -989,47 +1000,43 @@ export default function Dashboard() {
     }
   };
 
-   // Determine chart color based on price movement
   const chartColor = React.useMemo(() => {
-      if (!candleData || candleData.length < 2) return "hsl(var(--chart-1))"; // Default if not enough data
+      if (!candleData || candleData.length < 2) return "hsl(var(--chart-1))"; // Default green if not enough data
       const firstClose = candleData[0].close;
       const lastClose = candleData[candleData.length - 1].close;
-      return lastClose >= firstClose ? 'hsl(var(--chart-1))' : 'hsl(var(--destructive))'; // Green for up, Red for down
+      return lastClose >= firstClose ? 'hsl(var(--chart-1))' : 'hsl(var(--destructive))'; // Green if up, red if down
   }, [candleData]);
 
-  // Prepare data for portfolio pie chart
   const pieChartData = React.useMemo(() => {
       if (!portfolioData || !totalPortfolioValueUsd || totalPortfolioValueUsd === 0) return [];
 
-      const stablecoins = ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI', 'TRY', 'EUR'];
-      // Placeholder - Ideally fetch current prices via another API call
+      // Prices for estimation - ideally, fetch these live
+      const stablecoins = ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI'];
+      const tryEurRate = { TRY: 0.03, EUR: 1.08 };
       const prices: Record<string, number> = {
         BTC: 65000, ETH: 3500, SOL: 150, BNB: 600, ADA: 0.45, XRP: 0.5, DOGE: 0.15, SHIB: 0.000025
-     };
-
+     }; // Add more common assets
 
       return portfolioData
           .map(balance => {
               const totalAmount = parseFloat(balance.free) + parseFloat(balance.locked);
               let valueUsd = 0;
               if (stablecoins.includes(balance.asset)) {
-                 // Simple 1:1 for USD stables, adjust for TRY/EUR if needed
-                  if (['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI'].includes(balance.asset)) {
-                      valueUsd = totalAmount;
-                  } else {
-                      // Placeholder: Need actual conversion rates for non-USD stables
-                      // addLog('WARN', `Missing conversion rate for ${b.asset}, treating as 0 USD for now.`);
-                      valueUsd = 0; // Assign 0 if conversion rate unknown
-                  }
+                  valueUsd = totalAmount; // Assume 1:1 for USD stablecoins
+              } else if (balance.asset === 'TRY' && tryEurRate.TRY) {
+                  valueUsd = totalAmount * tryEurRate.TRY;
+              } else if (balance.asset === 'EUR' && tryEurRate.EUR) {
+                  valueUsd = totalAmount * tryEurRate.EUR;
               } else if (prices[balance.asset]) {
                   valueUsd = totalAmount * prices[balance.asset];
               } else {
-                  return null; // Exclude assets without price data or negligible value
+                  // Asset price not known, exclude from pie chart or assign minimal value if desired
+                  return null;
               }
-              // Only include if value is significant enough (e.g., > $0.01)
+              // Only include if value is somewhat significant to avoid clutter
               return valueUsd > 0.01 ? { name: balance.asset, value: valueUsd } : null;
           })
-          .filter((item): item is { name: string; value: number } => item !== null) // Remove nulls
+          .filter((item): item is { name: string; value: number } => item !== null) // Type guard
           .sort((a, b) => b.value - a.value); // Sort by value descending
   }, [portfolioData, totalPortfolioValueUsd]);
 
@@ -1042,7 +1049,7 @@ export default function Dashboard() {
         );
     }
 
-    const chartSize = 150;
+    const chartSize = 150; // Diameter of the pie chart
 
     return (
         <div className="flex flex-col items-center gap-2">
@@ -1052,10 +1059,10 @@ export default function Dashboard() {
                         cursor={false}
                         content={({ active, payload }) => {
                              if (active && payload && payload.length) {
-                                const data = payload[0].payload; // Changed from payload[0] to payload[0].payload
-                                if (!data) return null; // Check if data exists
+                                const data = payload[0].payload; // Access the payload object
+                                if (!data) return null;
                                 const value = data?.value !== undefined ? data.value : 0;
-                                const totalValue = totalPortfolioValueUsd || 1;
+                                const totalValue = totalPortfolioValueUsd || 1; // Avoid division by zero
                                 return (
                                   <div className="rounded-lg border bg-background p-2 text-xs shadow-sm">
                                     <div className="font-medium">{data.name}</div>
@@ -1076,10 +1083,10 @@ export default function Dashboard() {
                         nameKey="name"
                         cx="50%"
                         cy="50%"
-                        outerRadius={chartSize / 2 - 5} // Adjust radius
-                        innerRadius={chartSize / 2 - 25} // Make it a donut chart
+                        outerRadius={chartSize / 2 - 5} // Slightly smaller to fit stroke
+                        innerRadius={chartSize / 2 - 25} // Donut hole
                         strokeWidth={2}
-                        paddingAngle={1} // Add some padding between segments
+                        paddingAngle={1} // Small gap between slices
                     >
                         {pieChartData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={PIE_CHART_COLORS[index % PIE_CHART_COLORS.length]} stroke={PIE_CHART_COLORS[index % PIE_CHART_COLORS.length]}/>
@@ -1097,21 +1104,18 @@ export default function Dashboard() {
     );
 };
 
-
-  // --- JSX Structure ---
   return (
     <SidebarProvider>
        <Sidebar side="left" collapsible="icon" variant="sidebar">
          {/* Sidebar Header: Logo */}
          <SidebarHeader>
-           {/* Replace with your logo */}
            <Link href="/" className="flex items-center gap-2 p-2">
              <TrendingUp className="h-6 w-6 text-primary" />
              <span className="font-semibold text-lg group-data-[collapsible=icon]:hidden">KriptoPilot</span>
            </Link>
          </SidebarHeader>
 
-         {/* Main Navigation */}
+         {/* Sidebar Content: Navigation Menu */}
          <SidebarContent>
            <SidebarMenu>
              <SidebarMenuItem>
@@ -1130,7 +1134,7 @@ export default function Dashboard() {
 
              <SidebarMenuItem>
                <SidebarMenuButton href="#strategies" tooltip="Stratejiler">
-                 <BrainCircuit />
+                 <BrainCircuit /> {/* Updated Icon */}
                  <span>Stratejiler</span>
                </SidebarMenuButton>
                <SidebarMenuSub>
@@ -1146,24 +1150,10 @@ export default function Dashboard() {
                  <span>Bot Pariteleri</span>
                </SidebarMenuButton>
              </SidebarMenuItem>
-
-             <SidebarMenuItem>
-               <SidebarMenuButton href="#trade-history" tooltip="İşlem Geçmişi">
-                 <History />
-                 <span>İşlem Geçmişi</span>
-               </SidebarMenuButton>
-             </SidebarMenuItem>
-
-             <SidebarMenuItem>
-               <SidebarMenuButton href="#logs" tooltip="Log Kayıtları">
-                 <FileText />
-                 <span>Log Kayıtları</span>
-               </SidebarMenuButton>
-             </SidebarMenuItem>
            </SidebarMenu>
          </SidebarContent>
 
-         {/* Footer: Settings */}
+         {/* Sidebar Footer: Settings */}
          <SidebarFooter>
            <Separator />
            <SidebarMenu>
@@ -1179,10 +1169,10 @@ export default function Dashboard() {
 
       {/* Main Content Area */}
       <SidebarInset className="flex flex-col p-4 md:p-6">
-        {/* Top Bar: Pair/Interval Selection, Bot Control */}
+        {/* Top Control Bar: Pair/Interval Selection, Bot Status */}
         <Card className="mb-4 md:mb-6">
           <CardContent className="flex flex-col md:flex-row items-center justify-between p-4 gap-4">
-            {/* Pair and Interval Selection */}
+            {/* Pair and Interval Selectors */}
             <div className="flex flex-wrap items-center gap-4">
               <Select value={selectedPair} onValueChange={setSelectedPair}>
                 <SelectTrigger className="w-full md:w-[180px]">
@@ -1195,7 +1185,7 @@ export default function Dashboard() {
                     ) : availablePairs.length > 0 ? (
                       availablePairs.map((pair) => (
                         <SelectItem key={pair.symbol} value={pair.symbol}>
-                          {pair.baseAsset}/{pair.quoteAsset}
+                          {pair.baseAsset}/{pair.quoteAsset} {/* Display like BTC/USDT */}
                         </SelectItem>
                       ))
                     ) : (
@@ -1210,12 +1200,9 @@ export default function Dashboard() {
                   <SelectValue placeholder="Aralık" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="1m">1m</SelectItem>
-                  <SelectItem value="5m">5m</SelectItem>
-                  <SelectItem value="15m">15m</SelectItem>
-                  <SelectItem value="1h">1h</SelectItem>
-                  <SelectItem value="4h">4h</SelectItem>
-                  <SelectItem value="1d">1d</SelectItem>
+                  {['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d', '3d', '1w', '1M'].map(interval => (
+                    <SelectItem key={interval} value={interval}>{interval}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -1225,7 +1212,7 @@ export default function Dashboard() {
               <span className={cn(
                 "text-sm font-medium px-2 py-1 rounded",
                 botStatus === 'running' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800',
-                'dark:bg-opacity-20',
+                'dark:bg-opacity-20', // For better dark mode visibility
                 botStatus === 'running' ? 'dark:bg-green-800/30 dark:text-green-300' : 'dark:bg-red-800/30 dark:text-red-300'
               )}>
                 Bot: {botStatus === 'running' ? 'Çalışıyor' : 'Durdu'}
@@ -1238,6 +1225,7 @@ export default function Dashboard() {
                       size="sm"
                       onClick={toggleBotStatus}
                       variant={botStatus === 'running' ? 'destructive' : 'default'}
+                      // Disable start if no active valid environment, or no strategies/pairs selected, or telegram not validated
                       disabled={botStatus === 'stopped' && (!activeApiEnvironment || validationStatus[activeApiEnvironment] !== 'valid' || validationStatus.telegramToken !== 'valid' || validationStatus.telegramChatId !== 'valid' || activeStrategies.length === 0 || selectedPairsForBot.length === 0)}
                     >
                       {botStatus === 'running' ? <Pause className="mr-1 h-4 w-4" /> : <Play className="mr-1 h-4 w-4" />}
@@ -1245,6 +1233,7 @@ export default function Dashboard() {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
+                    {/* Dynamic tooltip message based on why start might be disabled */}
                     {!activeApiEnvironment ? "Botu başlatmak için bir API ortamını doğrulayın." :
                       validationStatus[activeApiEnvironment] !== 'valid' ? `Botu başlatmak için ${activeApiEnvironment.replace('_',' ').toUpperCase()} API anahtarlarını doğrulayın.` :
                         (validationStatus.telegramToken !== 'valid' || validationStatus.telegramChatId !== 'valid') ? "Botu başlatmak için Telegram ayarlarını doğrulayın." :
@@ -1259,17 +1248,17 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Main Chart and Side Panel (Tabs) */}
+        {/* Main Grid: Chart, Portfolio/History/Logs */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 flex-1">
-          {/* Chart Area */}
+          {/* Chart Card */}
           <Card className="lg:col-span-2">
             <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
                  <div className="flex flex-col">
                     <CardTitle className="text-lg font-semibold">
-                       {selectedPair ? `${selectedPair.replace('USDT', '/USDT')}` : "Grafik"}
+                       {selectedPair ? `${selectedPair.replace('USDT', '/USDT')}` : "Grafik"} {/* Simple formatting for USDT pairs */}
                        {loadingCandles && <Loader2 className="ml-2 h-4 w-4 animate-spin inline-block" />}
                     </CardTitle>
-                     {/* Display OHLC data */}
+                     {/* Display OHL C values of the latest candle */}
                      {candleData.length > 0 && !loadingCandles && (
                          <div className="text-xs text-muted-foreground mt-1 flex flex-wrap gap-x-3 gap-y-1">
                              <span>A: <span className="font-mono">{formatNumberClientSide(candleData[candleData.length - 1]?.open, { maximumFractionDigits: Math.max(2, String(candleData[candleData.length -1]?.open ?? '0').split('.')[1]?.length || 0) })}</span></span>
@@ -1283,7 +1272,7 @@ export default function Dashboard() {
                    {selectedInterval} {activeApiEnvironment && `(${activeApiEnvironment.replace('_', ' ').toUpperCase()})`}
                  </CardDescription>
             </CardHeader>
-            <CardContent className="h-[400px] p-2 pt-0">
+            <CardContent className="h-[400px] p-2 pt-0"> {/* Adjusted padding */}
               {loadingCandles ? (
                 <div className="flex items-center justify-center h-full">
                   <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -1291,9 +1280,9 @@ export default function Dashboard() {
                 </div>
               ) : candleData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={candleData} margin={{ top: 5, right: 5, left: -25, bottom: 5 }}>
-                     {/* Define gradient */}
+                  <ComposedChart data={candleData} margin={{ top: 5, right: 5, left: -25, bottom: 5 }}> {/* Adjusted margins */}
                      <defs>
+                         {/* Gradient for area chart fill */}
                          <linearGradient id="chartGradientUp" x1="0" y1="0" x2="0" y2="1">
                              <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.8} />
                              <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0.1} />
@@ -1305,53 +1294,55 @@ export default function Dashboard() {
                      </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                     <XAxis
-                      dataKey="closeTime"
-                      tickFormatter={(value) => formatTimestamp(value, 'short')} // Use short format for ticks
+                      dataKey="closeTime" // Use closeTime for x-axis
+                      tickFormatter={(value) => formatTimestamp(value, 'short')} // Format timestamp
                       tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
                       axisLine={false}
                       tickLine={false}
-                      interval="preserveStartEnd" // Show first and last ticks clearly
-                       tickCount={6} // Limit number of ticks
+                      interval="preserveStartEnd" // Better tick distribution
+                       tickCount={6} // Approximate number of ticks
                     />
                     <YAxis
-                      yAxisId="left"
+                      yAxisId="left" // For price
                       orientation="left"
-                      tickFormatter={(value) => formatNumberClientSide(value, { notation: 'compact', maximumFractionDigits: 2 })} // Use formatting function
+                      tickFormatter={(value) => formatNumberClientSide(value, { notation: 'compact', maximumFractionDigits: 2 })}
                       tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
                       axisLine={false}
                       tickLine={false}
-                      domain={['dataMin - dataMin * 0.01', 'dataMax + dataMax * 0.01']} // Add padding
+                      domain={['dataMin - dataMin * 0.01', 'dataMax + dataMax * 0.01']} // Dynamic domain with padding
                     />
                     <YAxis
-                      yAxisId="right"
+                      yAxisId="right" // For volume
                       orientation="right"
-                       tickFormatter={(value) => formatNumberClientSide(value, { notation: 'compact', maximumFractionDigits: 1 })} // Use formatting function
+                       tickFormatter={(value) => formatNumberClientSide(value, { notation: 'compact', maximumFractionDigits: 1 })}
                       tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
                       axisLine={false}
                       tickLine={false}
-                      width={40} // Give volume axis some space
-                      domain={[0, 'dataMax * 4']} // Scale volume axis dynamically (increased multiplier)
+                      width={40} // Space for volume labels
+                      domain={[0, 'dataMax * 4']} // Give volume more space, adjust multiplier as needed
                     />
-                    <TooltipProvider>
+                    <TooltipProvider> {/* Required for custom tooltip with shadcn */}
                       <ChartTooltip content={<ChartTooltipContent />} cursor={{ fill: 'hsl(var(--accent))', fillOpacity: 0.3 }} />
                     </TooltipProvider>
+                    {/* Area chart for price */}
                     <Area
                       yAxisId="left"
                       type="monotone"
                       dataKey="close"
-                      stroke={chartColor} // Use dynamic color based on trend
+                      stroke={chartColor} // Dynamic color based on trend
                       fillOpacity={1}
-                      fill={chartColor === 'hsl(var(--chart-1))' ? "url(#chartGradientUp)" : "url(#chartGradientDown)"} // Dynamic gradient
+                      fill={chartColor === 'hsl(var(--chart-1))' ? "url(#chartGradientUp)" : "url(#chartGradientDown)"}
                       strokeWidth={2}
                       name="Kapanış"
-                      dot={false}
+                      dot={false} // Hide dots on the line
                     />
+                    {/* Bar chart for volume */}
                     <Bar
                       yAxisId="right"
                       dataKey="volume"
-                      fill="hsl(var(--muted))"
+                      fill="hsl(var(--muted))" // Muted color for volume bars
                       name="Hacim"
-                      barSize={5} // Make volume bars thinner
+                      barSize={5} // Adjust bar size
                     />
                   </ComposedChart>
                 </ResponsiveContainer>
@@ -1363,16 +1354,15 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-
-          {/* Side Panel: Portfolio, History, Logs */}
+          {/* Tabs: Portfolio, History, Logs */}
           <Card className="lg:col-span-1">
-            <CardContent className="p-0">
+            <CardContent className="p-0"> {/* Remove default padding to make TabsList flush */}
               <Tabs defaultValue="portfolio" className="w-full">
-                <TabsList className="grid w-full grid-cols-3 rounded-t-lg rounded-b-none p-0 h-auto">
+                <TabsList className="grid w-full grid-cols-3 rounded-t-lg rounded-b-none p-0 h-auto"> {/* Remove padding, rounded bottom */}
                   <TabsTrigger value="portfolio" className="rounded-tl-md rounded-tr-none rounded-b-none py-2">
                     <Wallet className="h-4 w-4 mr-1" /> Portföy
                   </TabsTrigger>
-                  <TabsTrigger value="history" className="rounded-none py-2">
+                  <TabsTrigger value="history" className="rounded-none py-2"> {/* No rounding */}
                     <History className="h-4 w-4 mr-1" /> Geçmiş
                   </TabsTrigger>
                   <TabsTrigger value="logs" className="rounded-tr-md rounded-tl-none rounded-b-none py-2">
@@ -1381,7 +1371,7 @@ export default function Dashboard() {
                 </TabsList>
 
                 {/* Portfolio Tab */}
-                <TabsContent value="portfolio" className="p-4 max-h-[400px] overflow-y-auto">
+                <TabsContent value="portfolio" className="p-4 max-h-[400px] overflow-y-auto"> {/* Add padding back here */}
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-base font-medium">
                       Portföy {activeApiEnvironment && ` (${activeApiEnvironment.replace('_',' ').toUpperCase()})`}
@@ -1389,13 +1379,12 @@ export default function Dashboard() {
                     {loadingPortfolio && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
                   </div>
 
-                  {/* Portfolio Summary & Pie Chart */}
-                  <div className="mb-4 p-4 bg-muted/50 rounded-lg">
+                  {/* Portfolio Pie Chart */}
+                  <div className="mb-4 p-4 bg-muted/50 rounded-lg"> {/* Slightly different background for pie chart section */}
                      <PortfolioPieChart />
                   </div>
 
-                  {/* Portfolio Error Display */}
-                  {portfolioError && !loadingPortfolio && (
+                  {portfolioError && !loadingPortfolio && ( // Display error if any
                     <Alert variant="destructive" className="mb-4">
                         <AlertCircle className="h-4 w-4" />
                         <AlertTitle>Portföy Yüklenemedi</AlertTitle>
@@ -1409,7 +1398,7 @@ export default function Dashboard() {
                     </Alert>
                   )}
 
-                  {!activeApiEnvironment && !loadingPortfolio && !portfolioError && (
+                  {!activeApiEnvironment && !loadingPortfolio && !portfolioError && ( // Prompt to select environment
                     <Alert variant="default" className="mb-4">
                       <AlertCircle className="h-4 w-4" />
                       <AlertTitle>API Ortamı Seçilmedi</AlertTitle>
@@ -1418,7 +1407,6 @@ export default function Dashboard() {
                       </AlertDescription>
                     </Alert>
                   )}
-
 
                   <Table>
                     <TableHeader>
@@ -1436,16 +1424,15 @@ export default function Dashboard() {
                             <Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Yükleniyor...
                           </TableCell>
                         </TableRow>
-                      ) : portfolioData.length > 0 && !portfolioError ? ( // Only show data if no error
+                      ) : portfolioData.length > 0 && !portfolioError ? (
                         portfolioData.map((balance) => <PortfolioRow key={balance.asset} balance={balance} />)
                       ) : (
                         <TableRow>
                           <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
-                            {/* Message depends on whether there was an error or just no data */}
-                            {portfolioError ? "Veri yüklenemedi." :
-                              !activeApiEnvironment ? "Aktif API ortamı seçilmedi." :
-                                (activeApiEnvironment && validationStatus[activeApiEnvironment] !== 'valid' && !portfolioError) ? `${activeApiEnvironment.replace('_',' ').toUpperCase()} API anahtarları doğrulanmamış.` :
-                                  portfolioData.length === 0 && !loadingPortfolio ? "Portföy boş." :
+                            {portfolioError ? "Veri yüklenemedi." : // General error
+                              !activeApiEnvironment ? "Aktif API ortamı seçilmedi." : // No active environment
+                                (activeApiEnvironment && validationStatus[activeApiEnvironment] !== 'valid' && !portfolioError) ? `${activeApiEnvironment.replace('_',' ').toUpperCase()} API anahtarları doğrulanmamış.` : // Active env not validated
+                                  portfolioData.length === 0 && !loadingPortfolio ? "Portföy boş." : // Empty portfolio
                                     "Portföy verisi bekleniyor..."}
                           </TableCell>
                         </TableRow>
@@ -1487,7 +1474,7 @@ export default function Dashboard() {
                 {/* Logs Tab */}
                 <TabsContent value="logs" className="p-4 max-h-[400px] overflow-y-auto">
                   <h3 className="text-base font-medium mb-2">Log Kayıtları ({dynamicLogData.length})</h3>
-                  <ScrollArea className="h-[340px]">
+                  <ScrollArea className="h-[340px]"> {/* Ensure scroll area has a defined height */}
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -1534,14 +1521,15 @@ export default function Dashboard() {
           </Card>
         </div>
 
-        {/* Configuration Sections */}
+        {/* Settings, Strategy Management, Bot Pairs */}
         <div className="mt-4 md:mt-6 grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-          {/* Settings Section */}
+          {/* API & Telegram Settings Card */}
           <Card id="settings">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Settings className="h-5 w-5" />
                 API &amp; Telegram Ayarları
+                {/* Display active environment badge */}
                 {activeApiEnvironment && (
                   <span className="text-xs font-normal px-1.5 py-0.5 rounded bg-primary/10 text-primary">Aktif: {activeApiEnvironment.replace('_',' ').toUpperCase()}</span>
                 )}
@@ -1550,11 +1538,11 @@ export default function Dashboard() {
                 Binance API anahtarlarınızı farklı ortamlar (Spot, Futures, Testnet) için girin ve doğrulayın. Doğrulama başarılı olursa, ilgili anahtar seti portföy ve işlem işlemleri için aktif hale gelir. Telegram bildirimleri için bot token ve chat ID'nizi girin.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-6"> {/* Increased spacing for better separation */}
 
-              {/* API Key Sections */}
+              {/* Loop through Binance API environments */}
               {(['spot', 'futures', 'testnet_spot', 'testnet_futures'] as const).map((env: ApiEnvironment) => (
-                 <div key={env} className="space-y-2 p-3 border rounded bg-muted/20">
+                 <div key={env} className="space-y-2 p-3 border rounded bg-muted/20"> {/* Group each env in a bordered box */}
                     <Label className="flex items-center gap-1.5">
                       Binance {env.replace('_', ' ').toUpperCase()} API
                       <ValidationIcon status={validationStatus[env]} />
@@ -1562,14 +1550,14 @@ export default function Dashboard() {
                     </Label>
                     <div className="flex flex-col md:flex-row gap-2">
                       <Input
-                        type="password"
+                        type="password" // Use password type for sensitive fields
                         placeholder={`${env.replace('_', ' ').toUpperCase()} API Key`}
                         value={apiKeys[env].key}
                         onChange={(e) => handleApiKeyChange(e, env, 'key')}
                         className="flex-1"
                       />
                       <Input
-                        type="password"
+                        type="password" // Use password type
                         placeholder={`${env.replace('_', ' ').toUpperCase()} Secret Key`}
                         value={apiKeys[env].secret}
                         onChange={(e) => handleApiKeyChange(e, env, 'secret')}
@@ -1599,7 +1587,7 @@ export default function Dashboard() {
                   </div>
               ))}
 
-               {/* Separator */}
+              {/* Separator */}
               <Separator />
 
               {/* Telegram Bot */}
@@ -1609,13 +1597,13 @@ export default function Dashboard() {
                   <ValidationIcon status={validationStatus.telegramToken === 'valid' && validationStatus.telegramChatId === 'valid' ? 'valid' : validationStatus.telegramToken === 'invalid' || validationStatus.telegramChatId === 'invalid' ? 'invalid' : validationStatus.telegramToken === 'pending' || validationStatus.telegramChatId === 'pending' ? 'pending' : 'not_checked'} />
                   {(validationStatus.telegramToken === 'valid' && validationStatus.telegramChatId === 'valid') && <span className="text-xs text-green-600">(Geçerli)</span>}
                 </Label>
-                <div className="flex flex-col md:flex-row gap-2 items-start">
-                  <div className="flex-1 space-y-2">
+                <div className="flex flex-col md:flex-row gap-2 items-start"> {/* Align items to start for better layout */}
+                  <div className="flex-1 space-y-2"> {/* Inputs take full width available */}
                     <Input
                       placeholder="Telegram Bot Token Girin"
                       value={apiKeys.telegram.token}
                       onChange={(e) => handleApiKeyChange(e, 'telegram', 'token')}
-                      type="password"
+                      type="password" // Use password type
                     />
                     <Input
                       placeholder="Telegram Grup/Kullanıcı ID Girin"
@@ -1623,8 +1611,8 @@ export default function Dashboard() {
                       onChange={(e) => handleApiKeyChange(e, 'telegram', 'chatId')}
                     />
                   </div>
-                  <TooltipProvider>
-                    <div className="flex gap-2">
+                  <TooltipProvider> {/* Wrap buttons in TooltipProvider */}
+                    <div className="flex gap-2"> {/* Group validation buttons */}
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
@@ -1665,9 +1653,9 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Strategies Sections combined in Tabs */}
-          <Card id="strategies" className="row-span-1 md:row-span-2">
-            <CardContent className="p-0">
+          {/* Strategy Management, Backtesting, Risk Card (using Tabs) */}
+          <Card id="strategies" className="row-span-1 md:row-span-2"> {/* Allow card to span more rows if needed */}
+            <CardContent className="p-0"> {/* Remove parent padding for Tabs */}
               <Tabs defaultValue="manage" className="w-full">
                 <TabsList className="grid w-full grid-cols-3 rounded-t-lg rounded-b-none p-0 h-auto">
                   <TabsTrigger value="manage" className="rounded-tl-md rounded-tr-none rounded-b-none py-2">
@@ -1692,7 +1680,7 @@ export default function Dashboard() {
                           Yeni Strateji (AI)
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="sm:max-w-[600px]">
+                      <DialogContent className="sm:max-w-[600px]"> {/* Wider dialog for more content */}
                         <DialogHeader>
                           <DialogTitle>Yeni Ticaret Stratejisi Tanımla (AI)</DialogTitle>
                           <DialogDescription>
@@ -1708,7 +1696,7 @@ export default function Dashboard() {
                             <Label htmlFor="strategy-description" className="text-right">Kısa Açıklama</Label>
                             <Input id="strategy-description" value={defineStrategyParams.description} onChange={(e) => handleDefineStrategyParamChange(e, 'description')} placeholder="Stratejinin ana fikri." className="col-span-3" />
                           </div>
-                          <div className="grid grid-cols-4 items-start gap-4">
+                          <div className="grid grid-cols-4 items-start gap-4"> {/* Use items-start for Textarea */}
                             <Label htmlFor="strategy-prompt" className="text-right pt-2">Detaylı Strateji İstemi (Prompt)</Label>
                             <div className="col-span-3 space-y-1">
                               <Textarea id="strategy-prompt" value={defineStrategyParams.prompt} onChange={(e) => handleDefineStrategyParamChange(e, 'prompt')} placeholder="AI için detaylı alım/satım kuralları, indikatörler ve parametreler... Örn: 'RSI(14) 35 altına düştüğünde VE Hacim son 10 mumun ortalamasının 1.5 katından fazlaysa AL. RSI(14) 70 üzerine çıktığında veya %3 Stop-Loss tetiklendiğinde SAT.'" className="min-h-[150px]" />
@@ -1730,7 +1718,7 @@ export default function Dashboard() {
                   </div>
                   <p className="text-sm text-muted-foreground">Çalıştırmak istediğiniz stratejileri seçin veya AI ile yenilerini oluşturun.</p>
 
-                  {/* Active Strategies Display */}
+                  {/* Accordion for Active and Available Strategies */}
                   <Accordion type="single" collapsible defaultValue="available-strategies">
                     <AccordionItem value="active-strategies">
                       <AccordionTrigger>Aktif Stratejiler ({activeStrategies.length})</AccordionTrigger>
@@ -1758,10 +1746,10 @@ export default function Dashboard() {
                     <AccordionItem value="available-strategies">
                       <AccordionTrigger>Mevcut Stratejiler ({definedStrategies.length})</AccordionTrigger>
                       <AccordionContent>
-                        <ScrollArea className="h-[250px] pr-3">
+                        <ScrollArea className="h-[250px] pr-3"> {/* Added padding-right for scrollbar */}
                           <div className="space-y-2">
                             {definedStrategies.map((strategy) => (
-                              <div key={strategy.id} className="flex items-center gap-2 p-2 border rounded-md bg-card">
+                              <div key={strategy.id} className="flex items-center gap-2 p-2 border rounded-md bg-card"> {/* Enhanced styling */}
                                 <Checkbox
                                   id={`strategy-${strategy.id}`}
                                   checked={activeStrategies.includes(strategy.id)}
@@ -1773,7 +1761,7 @@ export default function Dashboard() {
                                       <TooltipTrigger asChild>
                                         <label htmlFor={`strategy-${strategy.id}`} className="text-sm font-medium cursor-pointer flex items-center gap-1">
                                           {strategy.name}
-                                          {strategy.id.startsWith('ai_') && <Info className="h-3 w-3 text-blue-500" />}
+                                          {strategy.id.startsWith('ai_') && <Info className="h-3 w-3 text-blue-500" />} {/* AI badge */}
                                         </label>
                                       </TooltipTrigger>
                                       <TooltipContent>
@@ -1822,7 +1810,7 @@ export default function Dashboard() {
                             {/* <div className="p-2"><Input placeholder="Parite ara..." onChange={(e) => { /* Implement search filtering logic */ }}/></div> */}
                             {loadingPairs ? (
                               <SelectItem value="loading" disabled>Yükleniyor...</SelectItem>
-                            ) : allAvailablePairs.length > 0 ? ( /* Use all pairs for backtest */
+                            ) : allAvailablePairs.length > 0 ? ( // Use allAvailablePairs for backtesting
                               allAvailablePairs.map((pair) => (
                                 <SelectItem key={pair.symbol} value={pair.symbol}>{pair.symbol}</SelectItem>
                               ))
@@ -1840,11 +1828,9 @@ export default function Dashboard() {
                           <SelectValue placeholder="Aralık Seçin" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="5m">5m</SelectItem>
-                          <SelectItem value="15m">15m</SelectItem>
-                          <SelectItem value="1h">1h</SelectItem>
-                          <SelectItem value="4h">4h</SelectItem>
-                          <SelectItem value="1d">1d</SelectItem>
+                          {['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d', '3d', '1w', '1M'].map(interval => (
+                             <SelectItem key={interval} value={interval}>{interval}</SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -1866,7 +1852,7 @@ export default function Dashboard() {
                     {isBacktesting ? 'Test Çalışıyor...' : 'Testi Başlat'}
                   </Button>
 
-                  {/* Backtest Results */}
+                  {/* Backtest Results Card */}
                   <Card className="mt-4">
                     <CardHeader>
                       <CardTitle className="text-base">Test Sonuçları</CardTitle>
@@ -1929,17 +1915,17 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Bot Pairs Section */}
+          {/* Bot Pairs Selection Card */}
           <Card id="bot-pairs">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <List className="h-5 w-5" />
                 Bot İçin Parite Seçimi
               </CardTitle>
-              <CardDescription>Botun işlem yapmasını istediğiniz pariteleri seçin (En popüler {availablePairs.length} USDT paritesi listelenmiştir).</CardDescription>
+              <CardDescription>Botun işlem yapmasını istediğiniz pariteleri seçin (En popüler {availablePairs.length} parite listelenmiştir).</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Selected Pairs Display */}
+              {/* Display selected pairs */}
               <div>
                 <Label>Seçili Pariteler ({selectedPairsForBot.length})</Label>
                 <div className="mt-1 flex flex-wrap gap-1 p-2 border rounded-md min-h-[40px] bg-muted/50">
@@ -1957,7 +1943,7 @@ export default function Dashboard() {
                   )}
                 </div>
               </div>
-              {/* Available Pairs Selection */}
+              {/* Checkbox list of available pairs */}
               <div>
                 <Label>Mevcut Popüler Pariteler ({availablePairs.length})</Label>
                 <ScrollArea className="h-[200px] mt-1 border rounded-md">
@@ -1984,6 +1970,7 @@ export default function Dashboard() {
                     </div>
                   )}
                 </ScrollArea>
+                {/* Select/Deselect All Buttons */}
                 <div className="mt-2 flex gap-2">
                   <Button size="sm" variant="outline" onClick={() => setSelectedPairsForBot(availablePairs.map(p => p.symbol))}>Tümünü Seç</Button>
                   <Button size="sm" variant="outline" onClick={() => setSelectedPairsForBot([])}>Temizle</Button>
