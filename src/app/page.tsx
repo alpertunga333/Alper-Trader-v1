@@ -364,7 +364,7 @@ export default function Dashboard() {
     fetchCandleData();
   }, [selectedPair, selectedInterval, activeApiEnvironment]); // Re-fetch if environment changes
 
-
+  const activeEnvValidationStatus = activeApiEnvironment ? validationStatus[activeApiEnvironment] : undefined;
   React.useEffect(() => {
       const fetchPortfolio = async () => {
           if (!activeApiEnvironment) {
@@ -482,7 +482,7 @@ export default function Dashboard() {
         setLoadingPortfolio(false);
       }
    // eslint-disable-next-line react-hooks/exhaustive-deps
-   }, [activeApiEnvironment, validationStatus[activeApiEnvironment!]]); // Depend on the specific validation status of the active env
+   }, [activeApiEnvironment, activeEnvValidationStatus]);
 
 
   // --- Handlers ---
@@ -1106,7 +1106,6 @@ export default function Dashboard() {
   return (
     <SidebarProvider>
        <Sidebar side="left" collapsible="icon" variant="sidebar">
-         {/* Sidebar Header: Logo */}
          <SidebarHeader>
            <Link href="/" className="flex items-center gap-2 p-2">
              <TrendingUp className="h-6 w-6 text-primary" />
@@ -1114,7 +1113,6 @@ export default function Dashboard() {
            </Link>
          </SidebarHeader>
 
-         {/* Sidebar Content: Navigation Menu */}
          <SidebarContent>
            <SidebarMenu>
              <SidebarMenuItem>
@@ -1133,7 +1131,7 @@ export default function Dashboard() {
 
              <SidebarMenuItem>
                <SidebarMenuButton href="#strategies" tooltip="Stratejiler">
-                 <BrainCircuit /> {/* Updated Icon */}
+                 <BrainCircuit />
                  <span>Stratejiler</span>
                </SidebarMenuButton>
                <SidebarMenuSub>
@@ -1152,7 +1150,6 @@ export default function Dashboard() {
            </SidebarMenu>
          </SidebarContent>
 
-         {/* Sidebar Footer: Settings */}
          <SidebarFooter>
            <Separator />
            <SidebarMenu>
@@ -1166,12 +1163,9 @@ export default function Dashboard() {
          </SidebarFooter>
        </Sidebar>
 
-      {/* Main Content Area */}
       <SidebarInset className="flex flex-col p-4 md:p-6">
-        {/* Top Control Bar: Pair/Interval Selection, Bot Status */}
         <Card className="mb-4 md:mb-6">
           <CardContent className="flex flex-col md:flex-row items-center justify-between p-4 gap-4">
-            {/* Pair and Interval Selectors */}
             <div className="flex flex-wrap items-center gap-4">
               <Select value={selectedPair} onValueChange={setSelectedPair}>
                 <SelectTrigger className="w-full md:w-[180px]">
@@ -1184,7 +1178,7 @@ export default function Dashboard() {
                     ) : availablePairs.length > 0 ? (
                       availablePairs.map((pair) => (
                         <SelectItem key={pair.symbol} value={pair.symbol}>
-                          {pair.baseAsset}/{pair.quoteAsset} {/* Display like BTC/USDT */}
+                          {pair.baseAsset}/{pair.quoteAsset}
                         </SelectItem>
                       ))
                     ) : (
@@ -1206,12 +1200,11 @@ export default function Dashboard() {
               </Select>
             </div>
 
-            {/* Bot Status and Control */}
             <div className="flex items-center gap-2">
               <span className={cn(
                 "text-sm font-medium px-2 py-1 rounded",
                 botStatus === 'running' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800',
-                'dark:bg-opacity-20', // For better dark mode visibility
+                'dark:bg-opacity-20', 
                 botStatus === 'running' ? 'dark:bg-green-800/30 dark:text-green-300' : 'dark:bg-red-800/30 dark:text-red-300'
               )}>
                 Bot: {botStatus === 'running' ? 'Çalışıyor' : 'Durdu'}
@@ -1224,7 +1217,6 @@ export default function Dashboard() {
                       size="sm"
                       onClick={toggleBotStatus}
                       variant={botStatus === 'running' ? 'destructive' : 'default'}
-                      // Disable start if no active valid environment, or no strategies/pairs selected, or telegram not validated
                       disabled={botStatus === 'stopped' && (!activeApiEnvironment || validationStatus[activeApiEnvironment] !== 'valid' || validationStatus.telegramToken !== 'valid' || validationStatus.telegramChatId !== 'valid' || activeStrategies.length === 0 || selectedPairsForBot.length === 0)}
                     >
                       {botStatus === 'running' ? <Pause className="mr-1 h-4 w-4" /> : <Play className="mr-1 h-4 w-4" />}
@@ -1232,7 +1224,6 @@ export default function Dashboard() {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    {/* Dynamic tooltip message based on why start might be disabled */}
                     {!activeApiEnvironment ? "Botu başlatmak için bir API ortamını doğrulayın." :
                       validationStatus[activeApiEnvironment] !== 'valid' ? `Botu başlatmak için ${activeApiEnvironment.replace('_',' ').toUpperCase()} API anahtarlarını doğrulayın.` :
                         (validationStatus.telegramToken !== 'valid' || validationStatus.telegramChatId !== 'valid') ? "Botu başlatmak için Telegram ayarlarını doğrulayın." :
@@ -1247,17 +1238,14 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Main Grid: Chart, Portfolio/History/Logs */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 flex-1">
-          {/* Chart Card */}
           <Card className="lg:col-span-2">
             <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
                  <div className="flex flex-col">
                     <CardTitle className="text-lg font-semibold">
-                       {selectedPair ? `${selectedPair.replace('USDT', '/USDT')}` : "Grafik"} {/* Simple formatting for USDT pairs */}
+                       {selectedPair ? `${selectedPair.replace('USDT', '/USDT')}` : "Grafik"}
                        {loadingCandles && <Loader2 className="ml-2 h-4 w-4 animate-spin inline-block" />}
                     </CardTitle>
-                     {/* Display OHL C values of the latest candle */}
                      {candleData.length > 0 && !loadingCandles && (
                          <div className="text-xs text-muted-foreground mt-1 flex flex-wrap gap-x-3 gap-y-1">
                              <span>A: <span className="font-mono">{formatNumberClientSide(candleData[candleData.length - 1]?.open, { maximumFractionDigits: Math.max(2, String(candleData[candleData.length -1]?.open ?? '0').split('.')[1]?.length || 0) })}</span></span>
@@ -1271,7 +1259,7 @@ export default function Dashboard() {
                    {selectedInterval} {activeApiEnvironment && `(${activeApiEnvironment.replace('_', ' ').toUpperCase()})`}
                  </CardDescription>
             </CardHeader>
-            <CardContent className="h-[400px] p-2 pt-0"> {/* Adjusted padding */}
+            <CardContent className="h-[400px] p-2 pt-0">
               {loadingCandles ? (
                 <div className="flex items-center justify-center h-full">
                   <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -1279,9 +1267,8 @@ export default function Dashboard() {
                 </div>
               ) : candleData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={candleData} margin={{ top: 5, right: 5, left: -25, bottom: 5 }}> {/* Adjusted margins */}
+                  <ComposedChart data={candleData} margin={{ top: 5, right: 5, left: -25, bottom: 5 }}>
                      <defs>
-                         {/* Gradient for area chart fill */}
                          <linearGradient id="chartGradientUp" x1="0" y1="0" x2="0" y2="1">
                              <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.8} />
                              <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0.1} />
@@ -1293,55 +1280,53 @@ export default function Dashboard() {
                      </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                     <XAxis
-                      dataKey="closeTime" // Use closeTime for x-axis
-                      tickFormatter={(value) => formatTimestamp(value, 'short')} // Format timestamp
+                      dataKey="closeTime" 
+                      tickFormatter={(value) => formatTimestamp(value, 'short')} 
                       tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
                       axisLine={false}
                       tickLine={false}
-                      interval="preserveStartEnd" // Better tick distribution
-                       tickCount={6} // Approximate number of ticks
+                      interval="preserveStartEnd" 
+                       tickCount={6} 
                     />
                     <YAxis
-                      yAxisId="left" // For price
+                      yAxisId="left" 
                       orientation="left"
                       tickFormatter={(value) => formatNumberClientSide(value, { notation: 'compact', maximumFractionDigits: 2 })}
                       tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
                       axisLine={false}
                       tickLine={false}
-                      domain={['dataMin - dataMin * 0.01', 'dataMax + dataMax * 0.01']} // Dynamic domain with padding
+                      domain={['dataMin - dataMin * 0.01', 'dataMax + dataMax * 0.01']} 
                     />
                     <YAxis
-                      yAxisId="right" // For volume
+                      yAxisId="right" 
                       orientation="right"
                        tickFormatter={(value) => formatNumberClientSide(value, { notation: 'compact', maximumFractionDigits: 1 })}
                       tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
                       axisLine={false}
                       tickLine={false}
-                      width={40} // Space for volume labels
-                      domain={[0, 'dataMax * 4']} // Give volume more space, adjust multiplier as needed
+                      width={40} 
+                      domain={[0, 'dataMax * 4']} 
                     />
-                    <TooltipProvider> {/* Required for custom tooltip with shadcn */}
+                    <TooltipProvider> 
                       <ChartTooltip content={<ChartTooltipContent />} cursor={{ fill: 'hsl(var(--accent))', fillOpacity: 0.3 }} />
                     </TooltipProvider>
-                    {/* Area chart for price */}
                     <Area
                       yAxisId="left"
                       type="monotone"
                       dataKey="close"
-                      stroke={chartColor} // Dynamic color based on trend
+                      stroke={chartColor} 
                       fillOpacity={1}
                       fill={chartColor === 'hsl(var(--chart-1))' ? "url(#chartGradientUp)" : "url(#chartGradientDown)"}
                       strokeWidth={2}
                       name="Kapanış"
-                      dot={false} // Hide dots on the line
+                      dot={false} 
                     />
-                    {/* Bar chart for volume */}
                     <Bar
                       yAxisId="right"
                       dataKey="volume"
-                      fill="hsl(var(--muted))" // Muted color for volume bars
+                      fill="hsl(var(--muted))" 
                       name="Hacim"
-                      barSize={5} // Adjust bar size
+                      barSize={5} 
                     />
                   </ComposedChart>
                 </ResponsiveContainer>
@@ -1353,15 +1338,14 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Tabs: Portfolio, History, Logs */}
           <Card className="lg:col-span-1">
-            <CardContent className="p-0"> {/* Remove default padding to make TabsList flush */}
+            <CardContent className="p-0"> 
               <Tabs defaultValue="portfolio" className="w-full">
-                <TabsList className="grid w-full grid-cols-3 rounded-t-lg rounded-b-none p-0 h-auto"> {/* Remove padding, rounded bottom */}
+                <TabsList className="grid w-full grid-cols-3 rounded-t-lg rounded-b-none p-0 h-auto"> 
                   <TabsTrigger value="portfolio" className="rounded-tl-md rounded-tr-none rounded-b-none py-2">
                     <Wallet className="h-4 w-4 mr-1" /> Portföy
                   </TabsTrigger>
-                  <TabsTrigger value="history" className="rounded-none py-2"> {/* No rounding */}
+                  <TabsTrigger value="history" className="rounded-none py-2"> 
                     <History className="h-4 w-4 mr-1" /> Geçmiş
                   </TabsTrigger>
                   <TabsTrigger value="logs" className="rounded-tr-md rounded-tl-none rounded-b-none py-2">
@@ -1369,8 +1353,7 @@ export default function Dashboard() {
                   </TabsTrigger>
                 </TabsList>
 
-                {/* Portfolio Tab */}
-                <TabsContent value="portfolio" className="p-4 max-h-[400px] overflow-y-auto"> {/* Add padding back here */}
+                <TabsContent value="portfolio" className="p-4 max-h-[400px] overflow-y-auto"> 
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-base font-medium">
                       Portföy {activeApiEnvironment && ` (${activeApiEnvironment.replace('_',' ').toUpperCase()})`}
@@ -1378,12 +1361,11 @@ export default function Dashboard() {
                     {loadingPortfolio && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
                   </div>
 
-                  {/* Portfolio Pie Chart */}
-                  <div className="mb-4 p-4 bg-muted/50 rounded-lg"> {/* Slightly different background for pie chart section */}
+                  <div className="mb-4 p-4 bg-muted/50 rounded-lg"> 
                      <PortfolioPieChart />
                   </div>
 
-                  {portfolioError && !loadingPortfolio && ( // Display error if any
+                  {portfolioError && !loadingPortfolio && ( 
                     <Alert variant="destructive" className="mb-4">
                         <AlertCircle className="h-4 w-4" />
                         <AlertTitle>Portföy Yüklenemedi</AlertTitle>
@@ -1397,7 +1379,7 @@ export default function Dashboard() {
                     </Alert>
                   )}
 
-                  {!activeApiEnvironment && !loadingPortfolio && !portfolioError && ( // Prompt to select environment
+                  {!activeApiEnvironment && !loadingPortfolio && !portfolioError && ( 
                     <Alert variant="default" className="mb-4">
                       <AlertCircle className="h-4 w-4" />
                       <AlertTitle>API Ortamı Seçilmedi</AlertTitle>
@@ -1428,10 +1410,10 @@ export default function Dashboard() {
                       ) : (
                         <TableRow>
                           <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
-                            {portfolioError ? "Veri yüklenemedi." : // General error
-                              !activeApiEnvironment ? "Aktif API ortamı seçilmedi." : // No active environment
-                                (activeApiEnvironment && validationStatus[activeApiEnvironment] !== 'valid' && !portfolioError) ? `${activeApiEnvironment.replace('_',' ').toUpperCase()} API anahtarları doğrulanmamış.` : // Active env not validated
-                                  portfolioData.length === 0 && !loadingPortfolio ? "Portföy boş." : // Empty portfolio
+                            {portfolioError ? "Veri yüklenemedi." : 
+                              !activeApiEnvironment ? "Aktif API ortamı seçilmedi." : 
+                                (activeApiEnvironment && validationStatus[activeApiEnvironment] !== 'valid' && !portfolioError) ? `${activeApiEnvironment.replace('_',' ').toUpperCase()} API anahtarları doğrulanmamış.` : 
+                                  portfolioData.length === 0 && !loadingPortfolio ? "Portföy boş." : 
                                     "Portföy verisi bekleniyor..."}
                           </TableCell>
                         </TableRow>
@@ -1440,7 +1422,6 @@ export default function Dashboard() {
                   </Table>
                 </TabsContent>
 
-                {/* Trade History Tab */}
                 <TabsContent value="history" className="p-4 max-h-[400px] overflow-y-auto">
                   <h3 className="text-base font-medium mb-2">İşlem Geçmişi {activeApiEnvironment && ` (${activeApiEnvironment.replace('_',' ').toUpperCase()})`} (Yakında)</h3>
                   <p className="text-sm text-muted-foreground mb-4">Binance API üzerinden son işlemleriniz burada listelenecektir.</p>
@@ -1470,10 +1451,9 @@ export default function Dashboard() {
                   </Table>
                 </TabsContent>
 
-                {/* Logs Tab */}
                 <TabsContent value="logs" className="p-4 max-h-[400px] overflow-y-auto">
                   <h3 className="text-base font-medium mb-2">Log Kayıtları ({dynamicLogData.length})</h3>
-                  <ScrollArea className="h-[340px]"> {/* Ensure scroll area has a defined height */}
+                  <ScrollArea className="h-[340px]"> 
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -1520,15 +1500,12 @@ export default function Dashboard() {
           </Card>
         </div>
 
-        {/* Settings, Strategy Management, Bot Pairs */}
         <div className="mt-4 md:mt-6 grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-          {/* API & Telegram Settings Card */}
           <Card id="settings">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Settings className="h-5 w-5" />
                 API &amp; Telegram Ayarları
-                {/* Display active environment badge */}
                 {activeApiEnvironment && (
                   <span className="text-xs font-normal px-1.5 py-0.5 rounded bg-primary/10 text-primary">Aktif: {activeApiEnvironment.replace('_',' ').toUpperCase()}</span>
                 )}
@@ -1537,11 +1514,10 @@ export default function Dashboard() {
                 Binance API anahtarlarınızı farklı ortamlar (Spot, Futures, Testnet) için girin ve doğrulayın. Doğrulama başarılı olursa, ilgili anahtar seti portföy ve işlem işlemleri için aktif hale gelir. Telegram bildirimleri için bot token ve chat ID'nizi girin.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6"> {/* Increased spacing for better separation */}
+            <CardContent className="space-y-6"> 
 
-              {/* Loop through Binance API environments */}
               {(['spot', 'futures', 'testnet_spot', 'testnet_futures'] as const).map((env: ApiEnvironment) => (
-                 <div key={env} className="space-y-2 p-3 border rounded bg-muted/20"> {/* Group each env in a bordered box */}
+                 <div key={env} className="space-y-2 p-3 border rounded bg-muted/20"> 
                     <Label className="flex items-center gap-1.5">
                       Binance {env.replace('_', ' ').toUpperCase()} API
                       <ValidationIcon status={validationStatus[env]} />
@@ -1549,14 +1525,14 @@ export default function Dashboard() {
                     </Label>
                     <div className="flex flex-col md:flex-row gap-2">
                       <Input
-                        type="password" // Use password type for sensitive fields
+                        type="password" 
                         placeholder={`${env.replace('_', ' ').toUpperCase()} API Key`}
                         value={apiKeys[env].key}
                         onChange={(e) => handleApiKeyChange(e, env, 'key')}
                         className="flex-1"
                       />
                       <Input
-                        type="password" // Use password type
+                        type="password" 
                         placeholder={`${env.replace('_', ' ').toUpperCase()} Secret Key`}
                         value={apiKeys[env].secret}
                         onChange={(e) => handleApiKeyChange(e, env, 'secret')}
@@ -1586,23 +1562,21 @@ export default function Dashboard() {
                   </div>
               ))}
 
-              {/* Separator */}
               <Separator />
 
-              {/* Telegram Bot */}
               <div className="space-y-2">
                 <Label className="flex items-center gap-1.5">
                   Telegram Bot Entegrasyonu
                   <ValidationIcon status={validationStatus.telegramToken === 'valid' && validationStatus.telegramChatId === 'valid' ? 'valid' : validationStatus.telegramToken === 'invalid' || validationStatus.telegramChatId === 'invalid' ? 'invalid' : validationStatus.telegramToken === 'pending' || validationStatus.telegramChatId === 'pending' ? 'pending' : 'not_checked'} />
                   {(validationStatus.telegramToken === 'valid' && validationStatus.telegramChatId === 'valid') && <span className="text-xs text-green-600">(Geçerli)</span>}
                 </Label>
-                <div className="flex flex-col md:flex-row gap-2 items-start"> {/* Align items to start for better layout */}
-                  <div className="flex-1 space-y-2"> {/* Inputs take full width available */}
+                <div className="flex flex-col md:flex-row gap-2 items-start"> 
+                  <div className="flex-1 space-y-2"> 
                     <Input
                       placeholder="Telegram Bot Token Girin"
                       value={apiKeys.telegram.token}
                       onChange={(e) => handleApiKeyChange(e, 'telegram', 'token')}
-                      type="password" // Use password type
+                      type="password" 
                     />
                     <Input
                       placeholder="Telegram Grup/Kullanıcı ID Girin"
@@ -1610,8 +1584,8 @@ export default function Dashboard() {
                       onChange={(e) => handleApiKeyChange(e, 'telegram', 'chatId')}
                     />
                   </div>
-                  <TooltipProvider> {/* Wrap buttons in TooltipProvider */}
-                    <div className="flex gap-2"> {/* Group validation buttons */}
+                  <TooltipProvider> 
+                    <div className="flex gap-2"> 
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
@@ -1652,9 +1626,8 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Strategy Management, Backtesting, Risk Card (using Tabs) */}
-          <Card id="strategies" className="row-span-1 md:row-span-2"> {/* Allow card to span more rows if needed */}
-            <CardContent className="p-0"> {/* Remove parent padding for Tabs */}
+          <Card id="strategies" className="row-span-1 md:row-span-2"> 
+            <CardContent className="p-0"> 
               <Tabs defaultValue="manage" className="w-full">
                 <TabsList className="grid w-full grid-cols-3 rounded-t-lg rounded-b-none p-0 h-auto">
                   <TabsTrigger value="manage" className="rounded-tl-md rounded-tr-none rounded-b-none py-2">
@@ -1668,7 +1641,6 @@ export default function Dashboard() {
                   </TabsTrigger>
                 </TabsList>
 
-                {/* Strategy Management Tab */}
                 <TabsContent value="manage" className="p-4 space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-base font-medium">Strateji Yönetimi</h3>
@@ -1679,7 +1651,7 @@ export default function Dashboard() {
                           Yeni Strateji (AI)
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="sm:max-w-[600px]"> {/* Wider dialog for more content */}
+                      <DialogContent className="sm:max-w-[600px]"> 
                         <DialogHeader>
                           <DialogTitle>Yeni Ticaret Stratejisi Tanımla (AI)</DialogTitle>
                           <DialogDescription>
@@ -1695,7 +1667,7 @@ export default function Dashboard() {
                             <Label htmlFor="strategy-description" className="text-right">Kısa Açıklama</Label>
                             <Input id="strategy-description" value={defineStrategyParams.description} onChange={(e) => handleDefineStrategyParamChange(e, 'description')} placeholder="Stratejinin ana fikri." className="col-span-3" />
                           </div>
-                          <div className="grid grid-cols-4 items-start gap-4"> {/* Use items-start for Textarea */}
+                          <div className="grid grid-cols-4 items-start gap-4"> 
                             <Label htmlFor="strategy-prompt" className="text-right pt-2">Detaylı Strateji İstemi (Prompt)</Label>
                             <div className="col-span-3 space-y-1">
                               <Textarea id="strategy-prompt" value={defineStrategyParams.prompt} onChange={(e) => handleDefineStrategyParamChange(e, 'prompt')} placeholder="AI için detaylı alım/satım kuralları, indikatörler ve parametreler... Örn: 'RSI(14) 35 altına düştüğünde VE Hacim son 10 mumun ortalamasının 1.5 katından fazlaysa AL. RSI(14) 70 üzerine çıktığında veya %3 Stop-Loss tetiklendiğinde SAT.'" className="min-h-[150px]" />
@@ -1717,7 +1689,6 @@ export default function Dashboard() {
                   </div>
                   <p className="text-sm text-muted-foreground">Çalıştırmak istediğiniz stratejileri seçin veya AI ile yenilerini oluşturun.</p>
 
-                  {/* Accordion for Active and Available Strategies */}
                   <Accordion type="single" collapsible defaultValue="available-strategies">
                     <AccordionItem value="active-strategies">
                       <AccordionTrigger>Aktif Stratejiler ({activeStrategies.length})</AccordionTrigger>
@@ -1745,10 +1716,10 @@ export default function Dashboard() {
                     <AccordionItem value="available-strategies">
                       <AccordionTrigger>Mevcut Stratejiler ({definedStrategies.length})</AccordionTrigger>
                       <AccordionContent>
-                        <ScrollArea className="h-[250px] pr-3"> {/* Added padding-right for scrollbar */}
+                        <ScrollArea className="h-[250px] pr-3"> 
                           <div className="space-y-2">
                             {definedStrategies.map((strategy) => (
-                              <div key={strategy.id} className="flex items-center gap-2 p-2 border rounded-md bg-card"> {/* Enhanced styling */}
+                              <div key={strategy.id} className="flex items-center gap-2 p-2 border rounded-md bg-card"> 
                                 <Checkbox
                                   id={`strategy-${strategy.id}`}
                                   checked={activeStrategies.includes(strategy.id)}
@@ -1760,7 +1731,7 @@ export default function Dashboard() {
                                       <TooltipTrigger asChild>
                                         <label htmlFor={`strategy-${strategy.id}`} className="text-sm font-medium cursor-pointer flex items-center gap-1">
                                           {strategy.name}
-                                          {strategy.id.startsWith('ai_') && <Info className="h-3 w-3 text-blue-500" />} {/* AI badge */}
+                                          {strategy.id.startsWith('ai_') && <Info className="h-3 w-3 text-blue-500" />} 
                                         </label>
                                       </TooltipTrigger>
                                       <TooltipContent>
@@ -1780,7 +1751,6 @@ export default function Dashboard() {
                   </Accordion>
                 </TabsContent>
 
-                {/* Backtesting Tab */}
                 <TabsContent value="backtest" className="p-4 space-y-4">
                   <h3 className="text-base font-medium">Geriye Dönük Strateji Testi (Spot Verisi)</h3>
                   <p className="text-sm text-muted-foreground">Seçtiğiniz stratejiyi geçmiş Spot verileri üzerinde test ederek potansiyel performansını değerlendirin. Sonuçlar geleceği garanti etmez. Testler AI tarafından simüle edilir.</p>
@@ -1806,10 +1776,9 @@ export default function Dashboard() {
                         </SelectTrigger>
                         <SelectContent>
                           <ScrollArea className="h-[300px]">
-                            {/* <div className="p-2"><Input placeholder="Parite ara..." onChange={(e) => { /* Implement search filtering logic */ }}/></div> */}
                             {loadingPairs ? (
                               <SelectItem value="loading" disabled>Yükleniyor...</SelectItem>
-                            ) : allAvailablePairs.length > 0 ? ( // Use allAvailablePairs for backtesting
+                            ) : allAvailablePairs.length > 0 ? ( 
                               allAvailablePairs.map((pair) => (
                                 <SelectItem key={pair.symbol} value={pair.symbol}>{pair.symbol}</SelectItem>
                               ))
@@ -1851,7 +1820,6 @@ export default function Dashboard() {
                     {isBacktesting ? 'Test Çalışıyor...' : 'Testi Başlat'}
                   </Button>
 
-                  {/* Backtest Results Card */}
                   <Card className="mt-4">
                     <CardHeader>
                       <CardTitle className="text-base">Test Sonuçları</CardTitle>
@@ -1888,7 +1856,6 @@ export default function Dashboard() {
                   </Card>
                 </TabsContent>
 
-                {/* Risk Management Tab */}
                 <TabsContent value="risk" className="p-4 space-y-4">
                   <h3 className="text-base font-medium">Risk Yönetimi (Zarar Durdur / Kar Al)</h3>
                   <p className="text-sm text-muted-foreground">Her işlem için otomatik Zarar Durdur (Stop-Loss) ve Kar Al (Take-Profit) yüzdeleri belirleyin. Bu ayarlar, çalışan stratejilere uygulanacaktır. (Geliştirme aşamasında)</p>
@@ -1914,7 +1881,6 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Bot Pairs Selection Card */}
           <Card id="bot-pairs">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -1924,7 +1890,6 @@ export default function Dashboard() {
               <CardDescription>Botun işlem yapmasını istediğiniz pariteleri seçin (En popüler {availablePairs.length} parite listelenmiştir).</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Display selected pairs */}
               <div>
                 <Label>Seçili Pariteler ({selectedPairsForBot.length})</Label>
                 <div className="mt-1 flex flex-wrap gap-1 p-2 border rounded-md min-h-[40px] bg-muted/50">
@@ -1942,7 +1907,6 @@ export default function Dashboard() {
                   )}
                 </div>
               </div>
-              {/* Checkbox list of available pairs */}
               <div>
                 <Label>Mevcut Popüler Pariteler ({availablePairs.length})</Label>
                 <ScrollArea className="h-[200px] mt-1 border rounded-md">
@@ -1969,7 +1933,6 @@ export default function Dashboard() {
                     </div>
                   )}
                 </ScrollArea>
-                {/* Select/Deselect All Buttons */}
                 <div className="mt-2 flex gap-2">
                   <Button size="sm" variant="outline" onClick={() => setSelectedPairsForBot(availablePairs.map(p => p.symbol))}>Tümünü Seç</Button>
                   <Button size="sm" variant="outline" onClick={() => setSelectedPairsForBot([])}>Temizle</Button>
