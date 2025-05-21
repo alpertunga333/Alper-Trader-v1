@@ -267,7 +267,7 @@ export default function Dashboard() {
     const fetchPairs = async () => {
       setLoadingPairs(true);
       setPortfolioError(null);
-      addLog('INFO', 'Fetching available trading pairs from Binance Spot...');
+      addLog('INFO', 'Fetching available trading pairs from Binance...');
       try {
         // Determine if we should fetch from testnet based on activeApiEnvironment
         // For initial pair loading, default to live spot if no environment is active yet.
@@ -282,14 +282,18 @@ export default function Dashboard() {
           .filter(s => s.status === 'TRADING' && (isFuturesForPairs ? true : s.isSpotTradingAllowed)) // For futures, allow all trading; for spot, check spot trading
           .sort((a, b) => a.symbol.localeCompare(b.symbol));
 
-        // Prioritize USDT pairs, then BUSD, then others for "popular" list
+        // Prioritize USDT pairs for "popular" list
         const usdtPairs = tradingPairs.filter(p => p.quoteAsset === 'USDT');
-        const busdPairs = tradingPairs.filter(p => p.quoteAsset === 'BUSD' && !usdtPairs.some(up => up.symbol === p.symbol));
-        const otherPairs = tradingPairs.filter(p => p.quoteAsset !== 'USDT' && p.quoteAsset !== 'BUSD');
-        
-        let popularPairs = [...usdtPairs, ...busdPairs];
+        // Then BUSD if not enough USDT pairs
+        let popularPairs = [...usdtPairs];
         if (popularPairs.length < 100) {
-            popularPairs = [...popularPairs, ...otherPairs.slice(0, 100 - popularPairs.length)];
+            const busdPairs = tradingPairs.filter(p => p.quoteAsset === 'BUSD' && !usdtPairs.some(up => up.symbol === p.symbol));
+            popularPairs = [...popularPairs, ...busdPairs];
+        }
+        // Then other pairs if still not enough
+        if (popularPairs.length < 100) {
+            const otherPairs = tradingPairs.filter(p => p.quoteAsset !== 'USDT' && p.quoteAsset !== 'BUSD' && !popularPairs.some(pp => pp.symbol === p.symbol));
+            popularPairs = [...popularPairs, ...otherPairs];
         }
         popularPairs = popularPairs.slice(0,100);
 
@@ -304,15 +308,6 @@ export default function Dashboard() {
           addLog('INFO', `Successfully fetched ${tradingPairs.length} total pairs. Displaying top ${popularPairs.length} pairs from ${envLabel}. Default pair set to ${defaultPair.symbol}.`);
         } else if (popularPairs.length === 0) {
            addLog('WARN', `No popular trading pairs found or fetched from ${envLabel}.`);
-           // Fallback to showing all pairs if no USDT pairs found (limit still applied)
-           const limitedAllPairs = tradingPairs.slice(0, 100);
-           setAvailablePairs(limitedAllPairs);
-           if (limitedAllPairs.length > 0 && !selectedPair) {
-             const defaultPair = limitedAllPairs.find(p => p.symbol === 'BTCUSDT') || limitedAllPairs[0];
-             setSelectedPair(defaultPair.symbol);
-             setBacktestParams(prev => ({ ...prev, pair: defaultPair.symbol }));
-             addLog('INFO', `No specific popular pairs found. Displaying first ${limitedAllPairs.length} pairs from ${envLabel}. Default pair set to ${defaultPair.symbol}.`);
-           }
         }
          addLog('INFO', `Available pairs count for bot selection: ${popularPairs.length}`);
       } catch (err) {
@@ -364,7 +359,10 @@ export default function Dashboard() {
     fetchCandleData();
   }, [selectedPair, selectedInterval, activeApiEnvironment]); // Re-fetch if environment changes
 
-  const activeEnvValidationStatus = activeApiEnvironment ? validationStatus[activeApiEnvironment] : undefined;
+  const activeEnvValidationStatus = React.useMemo(() => {
+    return activeApiEnvironment ? validationStatus[activeApiEnvironment] : undefined;
+  }, [activeApiEnvironment, validationStatus]);
+
   React.useEffect(() => {
       const fetchPortfolio = async () => {
           if (!activeApiEnvironment) {
@@ -420,7 +418,7 @@ export default function Dashboard() {
                    const stablecoins = ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI']; // Add more as needed
                    const tryEurRate = { TRY: 0.03, EUR: 1.08 }; // Example rates to USD
                    const prices: Record<string, number> = { // Very rough placeholder prices
-                      BTC: 65000, ETH: 3500, SOL: 150, BNB: 600, ADA: 0.45, XRP: 0.5, DOGE: 0.15, SHIB: 0.000025
+                      BTC: 65000, ETH: 3500, SOL: 150, BNB: 600, ADA: 0.45, XRP: 0.5, DOGE: 0.15, SHIB: 0.000025,
                       // Add other common assets if needed
                    };
 
@@ -488,12 +486,12 @@ export default function Dashboard() {
   // --- Handlers ---
   const toggleBotStatus = async () => {
      const newStatus = botStatus === 'running' ? 'stopped' : 'running';
+     const envLabel = activeApiEnvironment ? activeApiEnvironment.replace('_', ' ').toUpperCase() : 'Bilinmeyen Ortam';
 
      if (newStatus === 'running') {
-         // Check for active and validated API environment
          if (!activeApiEnvironment || validationStatus[activeApiEnvironment] !== 'valid') {
-             toast({ title: "API Doğrulaması Gerekli", description: `Lütfen aktif ortam (${activeApiEnvironment?.replace('_',' ').toUpperCase() || 'Yok'}) için API anahtarlarını doğrulayın.`, variant: "destructive" });
-              addLog('WARN', `Bot start prevented: Active API environment (${activeApiEnvironment || 'None'}) not validated.`);
+             toast({ title: "API Doğrulaması Gerekli", description: `Lütfen aktif ortam (${envLabel}) için API anahtarlarını doğrulayın.`, variant: "destructive" });
+             addLog('WARN', `Bot start prevented: Active API environment (${envLabel}) not validated.`);
              return;
          }
         if (selectedPairsForBot.length === 0) {
@@ -506,54 +504,43 @@ export default function Dashboard() {
             addLog('WARN', 'Bot start prevented: No strategies selected.');
             return;
         }
-        // Check Telegram validation
         if (validationStatus.telegramToken !== 'valid' || validationStatus.telegramChatId !== 'valid') {
             toast({ title: "Telegram Doğrulaması Gerekli", description: "Lütfen geçerli Telegram bot token ve chat ID'sini doğrulayın.", variant: "destructive" });
             addLog('WARN', 'Bot start prevented: Telegram not validated.');
             return;
         }
 
-        setBotStatus('running');
+        setBotStatus('running'); // Optimistically set to running
         const strategies = activeStrategies.map(id => definedStrategies.find(s=>s.id===id)?.name).filter(Boolean);
-        const envLabel = activeApiEnvironment!.replace('_', ' ').toUpperCase();
         toast({ title: `Bot Başlatılıyor...`, description: `Ortam: ${envLabel}. Pariteler: ${selectedPairsForBot.join(', ')}. Stratejiler: ${strategies.join(', ')}.` });
         addLog('INFO', `Bot starting... Env: ${envLabel}, Pairs: ${selectedPairsForBot.join(', ') || 'None'}. Strategies: ${strategies.join(', ') || 'None'}.`);
 
         let strategyStartSuccessCount = 0;
         let strategyStartFailCount = 0;
 
-        // Iterate over selected pairs and strategies to "start" them
         for (const pair of selectedPairsForBot) {
             for (const strategyId of activeStrategies) {
                 const strategy = definedStrategies.find(s => s.id === strategyId);
                 if (strategy) {
                     try {
-                        // This is where you'd call the actual live trading initiation logic
-                        // For now, we use the placeholder `runStrategy` server action
-                        console.log(`Attempting to run strategy ${strategy.name} on ${pair} in ${envLabel}`);
                         addLog('INFO', `Attempting to start strategy '${strategy.name}' on ${pair} (${envLabel})...`);
-
                         const runParams: RunParams = {
                             strategy,
                             pair,
-                            interval: selectedInterval, // Use the globally selected interval for now
+                            interval: selectedInterval,
                             stopLossPercent: stopLoss ? parseFloat(stopLoss) : undefined,
                             takeProfitPercent: takeProfit ? parseFloat(takeProfit) : undefined,
-                            environment: activeApiEnvironment!, // Pass the validated active environment
+                            environment: activeApiEnvironment!,
                         };
-
-                        // Call the server action
-                        const result: RunResult = await runStrategy(runParams); // `runStrategy` is a server action
-
+                        const result: RunResult = await runStrategy(runParams);
                         addLog('STRATEGY_START', `Strategy '${strategy.name}' on ${pair} (${envLabel}) status: ${result.status}. ${result.message || ''}`);
-                        if(result.status.toLowerCase() !== 'error') { // Assuming 'Error' status means failure
+                        if(result.status.toLowerCase() !== 'error') {
                             strategyStartSuccessCount++;
                         } else {
                             strategyStartFailCount++;
                         }
                     } catch (error) {
                         strategyStartFailCount++;
-                        console.error(`Error starting strategy ${strategy.name} on ${pair} in ${envLabel}:`, error);
                         const message = error instanceof Error ? error.message : "Bilinmeyen hata";
                         toast({ title: "Bot Strateji Hatası", description: `${strategy.name} - ${pair} (${envLabel}): Başlatılamadı: ${message}`, variant: "destructive" });
                         addLog('ERROR', `Failed to start strategy '${strategy.name}' on ${pair} (${envLabel}): ${message}`);
@@ -567,42 +554,74 @@ export default function Dashboard() {
 
         addLog('INFO', `Strategy start attempt complete. Success: ${strategyStartSuccessCount}, Failed: ${strategyStartFailCount}.`);
 
-        // Send Telegram notification via Server Action
-        try {
-            const successMsg = strategyStartSuccessCount > 0 ? `${strategyStartSuccessCount} strateji başarıyla başlatıldı.` : '';
-            const failMsg = strategyStartFailCount > 0 ? `${strategyStartFailCount} strateji başlatılamadı.` : '';
-            const telegramResult = await sendTelegramMessageAction(apiKeys.telegram.token, apiKeys.telegram.chatId, `✅ KriptoPilot bot (${envLabel}) ${selectedPairsForBot.length} paritede aktif. ${successMsg} ${failMsg}`);
-            if (telegramResult.success) {
-              addLog('TELEGRAM', 'Bot start notification sent.');
-            } else {
-              addLog('TELEGRAM_ERROR', `Bot start notification failed: ${telegramResult.message}`);
+        if (strategyStartSuccessCount === 0 && strategyStartFailCount > 0) {
+            setBotStatus('stopped'); // Revert status if all failed
+            toast({
+                title: "Bot Başlatılamadı",
+                description: `Tüm stratejiler başlatılırken hata oluştu (${strategyStartFailCount} hata). Lütfen logları kontrol edin.`,
+                variant: "destructive"
+            });
+            addLog('ERROR', `Bot completely failed to start. All ${strategyStartFailCount} strategy initializations failed.`);
+        } else if (strategyStartFailCount > 0) {
+            toast({
+                title: "Kısmi Başlatma",
+                description: `${strategyStartSuccessCount} strateji başlatıldı, ${strategyStartFailCount} başlatılamadı. Detaylar için logları inceleyin.`,
+                variant: "default"
+            });
+            addLog('WARN', `Bot started with partial success. Success: ${strategyStartSuccessCount}, Failed: ${strategyStartFailCount}.`);
+        } else if (strategyStartSuccessCount > 0 && strategyStartFailCount === 0) {
+             // All good, bot status remains 'running'
+             toast({ title: `Bot Başarıyla Başlatıldı`, description: `${strategyStartSuccessCount} strateji ${envLabel} ortamında aktif.`});
+        }
+
+
+        // Send Telegram notification only if bot is confirmed running (at least one strategy started)
+        // and if botStatus wasn't reverted to 'stopped'.
+        if (botStatus === 'running' && strategyStartSuccessCount > 0) {
+            try {
+                let telegramMessageText = '';
+                if (strategyStartSuccessCount > 0 && strategyStartFailCount === 0) {
+                    telegramMessageText = `✅ KriptoPilot bot (${envLabel}) ${selectedPairsForBot.length} paritede ${strategyStartSuccessCount} strateji ile tamamen aktif.`;
+                } else if (strategyStartSuccessCount > 0 && strategyStartFailCount > 0) {
+                    telegramMessageText = `⚠️ KriptoPilot bot (${envLabel}) ${selectedPairsForBot.length} paritede kısmen aktif. Başarılı: ${strategyStartSuccessCount}, Başarısız: ${strategyStartFailCount} strateji.`;
+                }
+                // No message if strategyStartSuccessCount is 0 because bot status would be 'stopped'
+
+                if (telegramMessageText) { // Only send if there's a message to send
+                    const telegramResult = await sendTelegramMessageAction(apiKeys.telegram.token, apiKeys.telegram.chatId, telegramMessageText);
+                    if (telegramResult.success) {
+                      addLog('TELEGRAM', 'Bot start notification sent.');
+                    } else {
+                      addLog('TELEGRAM_ERROR', `Bot start notification failed: ${telegramResult.message}`);
+                    }
+                }
+            } catch (error) {
+                const errorMsg = error instanceof Error ? error.message : "Bilinmeyen hata";
+                console.error("Error sending Telegram start message:", error);
+                addLog('TELEGRAM_ERROR', `Bot start notification failed: ${errorMsg}`);
             }
-        } catch (error) {
-            const errorMsg = error instanceof Error ? error.message : "Bilinmeyen hata";
-            console.error("Error sending Telegram start message:", error);
-            addLog('TELEGRAM_ERROR', `Bot start notification failed: ${errorMsg}`);
         }
 
     } else { // Bot is stopping
         setBotStatus('stopped');
-        const envLabel = activeApiEnvironment ? activeApiEnvironment.replace('_', ' ').toUpperCase() : 'Tümü'; // Or specific environment
         toast({ title: 'Bot Durduruldu.', description: `Aktif ortam: ${envLabel}` });
         addLog('INFO', `Bot stopping process initiated for environment ${envLabel}.`);
         // Placeholder for actual stop logic (e.g., cancel orders, stop monitoring)
         console.log(`Stopping bot for environment ${envLabel}... (Placeholder: actual stop logic needed)`);
 
-        // Send Telegram notification via Server Action
-        try {
-            const telegramResult = await sendTelegramMessageAction(apiKeys.telegram.token, apiKeys.telegram.chatId, `🛑 KriptoPilot bot (${envLabel}) durduruldu.`);
-            if (telegramResult.success) {
-              addLog('TELEGRAM', 'Bot stop notification sent.');
-            } else {
-              addLog('TELEGRAM_ERROR', `Bot stop notification failed: ${telegramResult.message}`);
+        if (validationStatus.telegramToken === 'valid' && validationStatus.telegramChatId === 'valid') {
+            try {
+                const telegramResult = await sendTelegramMessageAction(apiKeys.telegram.token, apiKeys.telegram.chatId, `🛑 KriptoPilot bot (${envLabel}) durduruldu.`);
+                if (telegramResult.success) {
+                  addLog('TELEGRAM', 'Bot stop notification sent.');
+                } else {
+                  addLog('TELEGRAM_ERROR', `Bot stop notification failed: ${telegramResult.message}`);
+                }
+            } catch (error) {
+                const errorMsg = error instanceof Error ? error.message : "Bilinmeyen hata";
+                console.error("Error sending Telegram stop message:", error);
+                addLog('TELEGRAM_ERROR', `Bot stop notification failed: ${errorMsg}`);
             }
-        } catch (error) {
-            const errorMsg = error instanceof Error ? error.message : "Bilinmeyen hata";
-            console.error("Error sending Telegram stop message:", error);
-            addLog('TELEGRAM_ERROR', `Bot stop notification failed: ${errorMsg}`);
         }
     }
   };
@@ -749,10 +768,11 @@ export default function Dashboard() {
     try {
       // First, validate the Chat ID structure/existence using the server action
       const validationResult = await validateTelegramChatIdAction(apiKeys.telegram.token, apiKeys.telegram.chatId);
-      setValidationStatus(prev => ({ ...prev, telegramChatId: validationResult.isValid ? 'valid' : 'invalid' }));
+      
 
       // If validation through sendChatAction was successful, try sending a test message
       if (validationResult.isValid) {
+        setValidationStatus(prev => ({ ...prev, telegramChatId: 'valid' }));
         addLog('INFO', `Telegram Chat ID ${apiKeys.telegram.chatId} validation successful. Sending test message...`);
         const messageResult = await sendTelegramMessageAction(apiKeys.telegram.token, apiKeys.telegram.chatId, "✅ KriptoPilot Telegram bağlantısı başarıyla doğrulandı!");
 
@@ -765,15 +785,17 @@ export default function Dashboard() {
             });
         } else {
             // Chat ID might be valid (e.g., exists) but bot might be blocked or message fails for other reasons
+             setValidationStatus(prev => ({ ...prev, telegramChatId: 'invalid' })); // Consider it invalid if test message fails
             addLog('TELEGRAM_ERROR', `Test message failed to send: ${messageResult.message}`);
             toast({
               title: "Chat ID Doğrulandı, Mesaj Hatası",
-              description: `Chat ID geçerli, ancak test mesajı gönderilemedi: ${messageResult.message || 'Bilinmeyen hata.'}`,
-              variant: "destructive", // Still an issue if test message fails
+              description: `Chat ID geçerli, ancak test mesajı gönderilemedi: ${messageResult.message || 'Bilinmeyen hata.'} Lütfen botun sohbete eklendiğinden ve mesaj gönderme izni olduğundan emin olun.`,
+              variant: "destructive", 
             });
         }
       } else {
          // Chat ID validation itself failed (e.g., "chat not found")
+         setValidationStatus(prev => ({ ...prev, telegramChatId: 'invalid' }));
          addLog('ERROR', `Telegram Chat ID Validation: ${validationResult.message}`);
          toast({ title: "Telegram Chat ID Geçersiz", description: validationResult.message, variant: "destructive" });
       }
@@ -869,7 +891,7 @@ export default function Dashboard() {
         setBacktestResult({ errorMessage: `Eksik parametreler: ${missingParams}.`, totalTrades: 0, winningTrades: 0, losingTrades: 0, winRate: 0, totalPnl: 0, totalPnlPercent: 0, maxDrawdown: 0 });
         addLog('BACKTEST_ERROR', `Backtest failed: Missing parameters - ${missingParams}.`);
         setIsBacktesting(false);
-        return
+        return;
     }
     // Validate date range
     if (new Date(backtestParams.startDate) >= new Date(backtestParams.endDate)) {
@@ -1217,7 +1239,16 @@ export default function Dashboard() {
                       size="sm"
                       onClick={toggleBotStatus}
                       variant={botStatus === 'running' ? 'destructive' : 'default'}
-                      disabled={botStatus === 'stopped' && (!activeApiEnvironment || validationStatus[activeApiEnvironment] !== 'valid' || validationStatus.telegramToken !== 'valid' || validationStatus.telegramChatId !== 'valid' || activeStrategies.length === 0 || selectedPairsForBot.length === 0)}
+                      disabled={
+                        botStatus === 'stopped' && (
+                          !activeApiEnvironment ||
+                          validationStatus[activeApiEnvironment] !== 'valid' ||
+                          validationStatus.telegramToken !== 'valid' ||
+                          validationStatus.telegramChatId !== 'valid' ||
+                          activeStrategies.length === 0 ||
+                          selectedPairsForBot.length === 0
+                        )
+                      }
                     >
                       {botStatus === 'running' ? <Pause className="mr-1 h-4 w-4" /> : <Play className="mr-1 h-4 w-4" />}
                       {botStatus === 'running' ? 'Durdur' : 'Başlat'}
@@ -1225,11 +1256,11 @@ export default function Dashboard() {
                   </TooltipTrigger>
                   <TooltipContent>
                     {!activeApiEnvironment ? "Botu başlatmak için bir API ortamını doğrulayın." :
-                      validationStatus[activeApiEnvironment] !== 'valid' ? `Botu başlatmak için ${activeApiEnvironment.replace('_',' ').toUpperCase()} API anahtarlarını doğrulayın.` :
+                      validationStatus[activeApiEnvironment!] !== 'valid' ? `Botu başlatmak için ${activeApiEnvironment!.replace('_',' ').toUpperCase()} API anahtarlarını doğrulayın.` :
                         (validationStatus.telegramToken !== 'valid' || validationStatus.telegramChatId !== 'valid') ? "Botu başlatmak için Telegram ayarlarını doğrulayın." :
                           botStatus === 'stopped' && activeStrategies.length === 0 ? "Botu başlatmak için en az bir strateji seçin." :
                             botStatus === 'stopped' && selectedPairsForBot.length === 0 ? "Botu başlatmak için en az bir parite seçin." :
-                              botStatus === 'running' ? `Botu (${activeApiEnvironment.replace('_',' ').toUpperCase()}) durdur.` : `Botu (${activeApiEnvironment.replace('_',' ').toUpperCase()}) başlat.`
+                              botStatus === 'running' ? `Botu (${activeApiEnvironment!.replace('_',' ').toUpperCase()}) durdur.` : `Botu (${activeApiEnvironment!.replace('_',' ').toUpperCase()}) başlat.`
                     }
                   </TooltipContent>
                 </Tooltip>
@@ -1706,7 +1737,7 @@ export default function Dashboard() {
                                     <CloseIcon className="h-3 w-3" />
                                   </Button>
                                 </div>
-                              )
+                              );
                             })}
                           </div>
                         )}
