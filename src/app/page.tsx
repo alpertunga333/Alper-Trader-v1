@@ -605,8 +605,7 @@ export default function Dashboard() {
             addLog('TELEGRAM_ERROR', `Bot stop notification failed: ${errorMsg}`);
         }
     }
-};
-
+  };
 
   const handleStrategyToggle = (strategyId: string) => {
     setActiveStrategies((prev) => {
@@ -1102,7 +1101,7 @@ export default function Dashboard() {
              </div>
         </div>
     );
-};
+  };
 
   return (
     <SidebarProvider>
