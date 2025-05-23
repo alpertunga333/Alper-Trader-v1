@@ -1,11 +1,11 @@
+
 // src/actions/binanceActions.ts
 'use server';
 
 import { getAccountBalances as fetchBalancesFromBinance } from '@/services/binance';
 import type { Balance } from '@/services/binance';
 import { fetchSecureApiKey, fetchSecureSecretKey } from '@/lib/secure-api'; // Import secure fetch functions
-
-type ApiEnvironment = 'spot' | 'futures' | 'testnet_spot' | 'testnet_futures';
+import type { ApiEnvironment } from '@/ai/types/strategy-types'; // Ensure ApiEnvironment is imported
 
 interface ActionResult {
     success: boolean;
@@ -41,9 +41,10 @@ export async function fetchAccountBalancesAction(
         }
 
         const isTestnet = environment.includes('testnet');
+        const isFutures = environment.includes('futures'); // Correctly determine if it's a futures environment
 
-        // Call the Binance service function with securely retrieved keys and isTestnet flag
-        const balances = await fetchBalancesFromBinance(apiKey, secretKey, isTestnet);
+        // Call the Binance service function with securely retrieved keys and both flags
+        const balances = await fetchBalancesFromBinance(apiKey, secretKey, isTestnet, isFutures);
         console.log(`Server Action: Successfully fetched ${balances.length} balances for ${envLabel}.`);
         return { success: true, balances };
 
