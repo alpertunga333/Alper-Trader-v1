@@ -80,6 +80,7 @@ import {
   Cell,
   Line,
   Area,
+  Pie,
 } from 'recharts';
 import {
   Settings,
@@ -217,34 +218,39 @@ const Candlestick = (props: any) => {
       low === undefined || high === undefined || open === undefined || close === undefined) {
     return null;
   }
-  const isUp = close > open;
+  const isUp = close >= open; // Changed to >= to handle candles where open equals close
 
-  // Wick line
+  // Wick line coordinates
   const wickX = x + width / 2;
+  const highY = props.yAxis.scale(high);
+  const lowY = props.yAxis.scale(low);
 
   // Body coordinates
-  const bodyY = isUp ? y + height : y; // If up, body starts at y + height (close), else at y (open)
-                                     // Recharts 'y' is the top of the bar. For up candles, top is 'close'. For down, top is 'open'.
-                                     // Height is |open - close| scaled.
+  // Recharts 'y' is the top of the bar. Height is |open - close| scaled.
+  // For up candles, top of body is 'close'. For down, top of body is 'open'.
+  const bodyTopY = props.yAxis.scale(isUp ? close : open);
+  const bodyBottomY = props.yAxis.scale(isUp ? open : close);
+  const bodyHeight = Math.abs(bodyTopY - bodyBottomY);
 
-  const actualBodyY = Math.min(props.yAxis.scale(open), props.yAxis.scale(close));
-  const actualBodyHeight = Math.abs(props.yAxis.scale(open) - props.yAxis.scale(close));
+  // Ensure bodyHeight is at least 1 to be visible if open and close are very close
+  const actualBodyHeight = bodyHeight > 0 ? bodyHeight : 1;
+  const actualBodyY = Math.min(bodyTopY, bodyBottomY);
 
 
   return (
     <g strokeWidth="1" shapeRendering="crispEdges">
       {/* Wick */}
       <line
-        x1={wickX} y1={props.yAxis.scale(high)}
-        x2={wickX} y2={props.yAxis.scale(low)}
-        stroke={fill}
+        x1={wickX} y1={highY}
+        x2={wickX} y2={lowY}
+        stroke={fill} // Wick color matches candle body color
       />
       {/* Body */}
       <rect
         x={x}
         y={actualBodyY}
         width={width}
-        height={actualBodyHeight > 0 ? actualBodyHeight : 1} // Ensure height is at least 1px to be visible
+        height={actualBodyHeight}
         fill={fill}
       />
     </g>
@@ -372,33 +378,17 @@ export default function Dashboard() {
         setPortfolioError(null);
         addLog('INFO', 'Fetching available trading pairs from Binance...');
         try {
-            const isTestnetForPairDisplay = activeApiEnvironment ? (activeApiEnvironment === 'testnet_spot' || activeApiEnvironment === 'testnet_futures') : false;
-            const isFuturesForPairDisplay = activeApiEnvironment ? (activeApiEnvironment === 'futures' || activeApiEnvironment === 'testnet_futures') : false;
-            const envLabelForDisplay = activeApiEnvironment?.replace('_', ' ').toUpperCase() || 'Spot (Default)';
-
-            addLog('INFO', `Fetching pairs from ${envLabelForDisplay} for general display.`);
+            // Always fetch from SPOT for the most comprehensive list for backtesting.
+            const spotInfo = await getExchangeInfo(false, false); // isTestnet=false, isFutures=false for SPOT
             
-            const info = await getExchangeInfo(isTestnetForPairDisplay, isFuturesForPairDisplay);
-            
-            const allTradingPairs = info.symbols
-                .filter(s => s.status === 'TRADING' && (isFuturesForPairDisplay ? true : s.isSpotTradingAllowed))
+            allAvailablePairsStore = spotInfo.symbols
+                .filter(s => s.status === 'TRADING' && s.isSpotTradingAllowed)
                 .sort((a, b) => a.symbol.localeCompare(b.symbol));
-
-             // Fetch all pairs from SPOT for backtesting dropdown, regardless of active env
-            if (activeApiEnvironment !== 'spot' && activeApiEnvironment !== 'testnet_spot' && (!allAvailablePairsStore || allAvailablePairsStore.length === 0)) {
-                 addLog('INFO', `Fetching additional pairs from Spot for backtesting dropdown.`);
-                 const spotInfo = await getExchangeInfo(false, false); // isTestnet=false, isFutures=false for SPOT
-                 allAvailablePairsStore = spotInfo.symbols
-                    .filter(s => s.status === 'TRADING' && s.isSpotTradingAllowed)
-                    .sort((a, b) => a.symbol.localeCompare(b.symbol));
-            } else if (allAvailablePairsStore.length === 0) { // If current env is Spot or store is empty
-                 allAvailablePairsStore = allTradingPairs;
-            }
+            
             setAllPairsForBacktest(allAvailablePairsStore);
 
-
-            // Filter the user-defined list against what's available and trading on the current display environment
-            const activeUserDefinedPairs = allTradingPairs.filter(exchangePair =>
+            // Filter the user-defined list against what's available and trading on SPOT
+            const activeUserDefinedPairs = allAvailablePairsStore.filter(exchangePair =>
                 userDefinedPairSymbols.includes(exchangePair.symbol)
             );
             setAvailablePairsForBot(activeUserDefinedPairs);
@@ -407,16 +397,25 @@ export default function Dashboard() {
                 const defaultPair = activeUserDefinedPairs.find(p => p.symbol === 'BTCUSDT') || activeUserDefinedPairs[0];
                 setSelectedPair(defaultPair.symbol);
                 setBacktestParams(prev => ({ ...prev, pair: defaultPair.symbol }));
-                addLog('INFO', `Successfully fetched ${allTradingPairs.length} total pairs from ${envLabelForDisplay}. Using ${activeUserDefinedPairs.length} user-defined pairs. Default pair set to ${defaultPair.symbol}.`);
+                addLog('INFO', `Successfully fetched ${allAvailablePairsStore.length} total Spot pairs. Using ${activeUserDefinedPairs.length} user-defined pairs for bot selection. Default pair set to ${defaultPair.symbol}.`);
             } else if (activeUserDefinedPairs.length === 0) {
-                addLog('WARN', `None of the user-defined pairs are currently trading or available on ${envLabelForDisplay}. Total pairs from ${envLabelForDisplay}: ${allTradingPairs.length}.`);
-                if (allTradingPairs.length > 0 && !selectedPair) { 
-                    setSelectedPair(allTradingPairs[0].symbol);
-                    setBacktestParams(prev => ({ ...prev, pair: allTradingPairs[0].symbol}));
-                    addLog('INFO', `Defaulting to first available pair from ${envLabelForDisplay}: ${allTradingPairs[0].symbol}`);
+                addLog('WARN', `None of the user-defined pairs are currently trading or available on Binance Spot. Total Spot pairs: ${allAvailablePairsStore.length}.`);
+                if (allAvailablePairsStore.length > 0 && !selectedPair) { 
+                    setSelectedPair(allAvailablePairsStore[0].symbol);
+                    setBacktestParams(prev => ({ ...prev, pair: allAvailablePairsStore[0].symbol}));
+                    addLog('INFO', `Defaulting to first available pair from Spot: ${allAvailablePairsStore[0].symbol}`);
                 }
+            } else if (selectedPair && !activeUserDefinedPairs.find(p => p.symbol === selectedPair) && allAvailablePairsStore.length > 0) {
+                // If current selectedPair is not in the filtered user list, reset to default from user list or general list
+                const newDefault = activeUserDefinedPairs.find(p => p.symbol === 'BTCUSDT') || activeUserDefinedPairs[0] || allAvailablePairsStore[0];
+                if (newDefault) {
+                  setSelectedPair(newDefault.symbol);
+                  setBacktestParams(prev => ({ ...prev, pair: newDefault.symbol }));
+                  addLog('INFO', `Current selected pair ${selectedPair} not in user-defined list, reset to ${newDefault.symbol}.`);
+                }
+                addLog('INFO', `Displaying ${activeUserDefinedPairs.length} user-defined pairs for bot (active on Spot). Total Spot pairs: ${allAvailablePairsStore.length}.`);
             } else {
-                 addLog('INFO', `Displaying ${activeUserDefinedPairs.length} user-defined pairs active on ${envLabelForDisplay}. Total pairs from ${envLabelForDisplay}: ${allTradingPairs.length}.`);
+                 addLog('INFO', `Displaying ${activeUserDefinedPairs.length} user-defined pairs for bot (active on Spot). Total Spot pairs: ${allAvailablePairsStore.length}.`);
             }
 
         } catch (err) {
@@ -431,7 +430,7 @@ export default function Dashboard() {
     };
     fetchPairs();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeApiEnvironment]);
+  }, []);
 
 
   React.useEffect(() => {
@@ -456,9 +455,8 @@ export default function Dashboard() {
             const latestCandle = data[data.length - 1];
             setLatestCandleInfo(latestCandle);
 
-            // Calculate price change based on the first candle in the current dataset (approx. 24h if interval allows)
-            if (data.length > 1) { // Need at least two points to compare
-                const firstCandleInPeriod = data[0]; // Compare with the start of the fetched period
+            if (data.length > 1) {
+                const firstCandleInPeriod = data[0]; 
                 const change = latestCandle.close - firstCandleInPeriod.close;
                 const percent = firstCandleInPeriod.close !== 0 ? (change / firstCandleInPeriod.close) * 100 : 0;
                 setPriceChangeInfo({
@@ -536,11 +534,11 @@ export default function Dashboard() {
                    const stablecoins = ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI']; 
                    const tryEurRate = { TRY: 0.03, EUR: 1.08 }; 
                    const prices: Record<string, number> = { 
-                      BTC: latestCandleInfo && selectedPair.startsWith('BTC') ? latestCandleInfo.close : 65000, // Use live price if BTC is selected
-                      ETH: latestCandleInfo && selectedPair.startsWith('ETH') ? latestCandleInfo.close : 3500,
-                      SOL: latestCandleInfo && selectedPair.startsWith('SOL') ? latestCandleInfo.close : 150,
-                      BNB: latestCandleInfo && selectedPair.startsWith('BNB') ? latestCandleInfo.close : 600,
-                       ADA: 0.45, XRP: 0.5, DOGE: 0.15, SHIB: 0.000025,
+                      BTC: latestCandleInfo && selectedPair.startsWith('BTC') && !selectedPair.endsWith('BTC') ? latestCandleInfo.close : (prices['BTC'] || 65000),
+                      ETH: latestCandleInfo && selectedPair.startsWith('ETH') && !selectedPair.endsWith('ETH') ? latestCandleInfo.close : (prices['ETH'] || 3500),
+                      SOL: latestCandleInfo && selectedPair.startsWith('SOL') && !selectedPair.endsWith('SOL') ? latestCandleInfo.close : (prices['SOL'] || 150),
+                      BNB: latestCandleInfo && selectedPair.startsWith('BNB') && !selectedPair.endsWith('BNB') ? latestCandleInfo.close : (prices['BNB'] || 600),
+                       ADA: prices['ADA'] || 0.45, XRP: prices['XRP'] || 0.5, DOGE: prices['DOGE'] || 0.15, SHIB: prices['SHIB'] || 0.000025,
                    };
 
                    filteredBalances.forEach(b => {
@@ -596,7 +594,7 @@ export default function Dashboard() {
         setLoadingPortfolio(false);
       }
    // eslint-disable-next-line react-hooks/exhaustive-deps
-   }, [activeApiEnvironment, activeEnvValidationStatus, latestCandleInfo]); // Added latestCandleInfo for portfolio value estimation
+   }, [activeApiEnvironment, activeEnvValidationStatus, latestCandleInfo, selectedPair]);
 
 
   // --- Handlers ---
@@ -670,11 +668,12 @@ export default function Dashboard() {
 
         addLog('INFO', `Strategy start attempt complete. Success: ${strategyStartSuccessCount}, Failed: ${strategyStartFailCount}.`);
 
-        let finalBotStatus = 'running'; // Assume running unless all fail
+        let finalBotStatus = 'running'; 
         let telegramMessageText = '';
 
         if (strategyStartSuccessCount === 0 && strategyStartFailCount > 0) {
             finalBotStatus = 'stopped'; 
+            setBotStatus('stopped'); // Update UI immediately
             toast({
                 title: "Bot Başlatılamadı",
                 description: `Tüm stratejiler başlatılırken hata oluştu (${strategyStartFailCount} hata). Lütfen logları kontrol edin.`,
@@ -1123,11 +1122,11 @@ export default function Dashboard() {
       const stablecoins = ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI'];
       const tryEurRate = { TRY: 0.03, EUR: 1.08 }; 
       const prices: Record<string, number> = {
-        BTC: latestCandleInfo && selectedPair.startsWith('BTC') ? latestCandleInfo.close : 65000,
-        ETH: latestCandleInfo && selectedPair.startsWith('ETH') ? latestCandleInfo.close : 3500,
-        SOL: latestCandleInfo && selectedPair.startsWith('SOL') ? latestCandleInfo.close : 150,
-        BNB: latestCandleInfo && selectedPair.startsWith('BNB') ? latestCandleInfo.close : 600,
-        ADA: 0.45, XRP: 0.5, DOGE: 0.15, SHIB: 0.000025
+        BTC: latestCandleInfo && selectedPair.startsWith('BTC') && !selectedPair.endsWith('BTC') ? latestCandleInfo.close : (prices['BTC'] || 65000),
+        ETH: latestCandleInfo && selectedPair.startsWith('ETH') && !selectedPair.endsWith('ETH') ? latestCandleInfo.close : (prices['ETH'] || 3500),
+        SOL: latestCandleInfo && selectedPair.startsWith('SOL') && !selectedPair.endsWith('SOL') ? latestCandleInfo.close : (prices['SOL'] || 150),
+        BNB: latestCandleInfo && selectedPair.startsWith('BNB') && !selectedPair.endsWith('BNB') ? latestCandleInfo.close : (prices['BNB'] || 600),
+        ADA: prices['ADA'] || 0.45, XRP: prices['XRP'] || 0.5, DOGE: prices['DOGE'] || 0.15, SHIB: prices['SHIB'] || 0.000025
      }; 
 
       return portfolioData
@@ -1407,7 +1406,7 @@ export default function Dashboard() {
                     </div>
                  ) : candleData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart data={candleData} syncId="marketDataSync" margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                         <ComposedChart data={candleData} syncId="marketDataSync" margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.2} vertical={false}/>
                             <XAxis
                                 dataKey="closeTime"
@@ -1427,7 +1426,7 @@ export default function Dashboard() {
                              <TooltipProvider>
                                 <ChartTooltip content={<ChartTooltipContent />} cursor={{ stroke: 'hsl(var(--accent-foreground))', strokeWidth: 0.5, strokeDasharray: '3 3' }}/>
                              </TooltipProvider>
-                            <Bar yAxisId="price" dataKey="close" strokeWidth={0}>
+                            <Bar yAxisId="price" dataKey="open" strokeWidth={0}>
                                 {candleData.map((entry, index) => (
                                     <Cell key={`cell-candle-${index}`} shape={<Candlestick />} fill={entry.close >= entry.open ? 'hsl(var(--chart-1))' : 'hsl(var(--destructive))'} />
                                 ))}
@@ -1994,3 +1993,4 @@ export default function Dashboard() {
     </SidebarProvider>
   );
 }
+
