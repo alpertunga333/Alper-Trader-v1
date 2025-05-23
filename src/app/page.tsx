@@ -145,8 +145,8 @@ const initialCandleData: Candle[] = [];
 // Placeholder: Replace with actual trade history fetching if implemented
 const tradeHistoryData: any[] = []; // Example: Placeholder for trade history
 
-// Will be populated by API
-let allAvailablePairs: SymbolInfo[] = [];
+// Will be populated by API, used for backtesting dropdown.
+let allAvailablePairsStore: SymbolInfo[] = [];
 
 
 // --- Updated Initial Strategies (Total 30) ---
@@ -198,6 +198,15 @@ const PIE_CHART_COLORS = [
   "hsl(200, 80%, 50%)", // Sky
 ];
 
+// User-defined list of pairs for the bot selection
+const userDefinedPairSymbols: string[] = [
+    'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT', 'AVAXUSDT',
+    'SHIBUSDT', 'DOTUSDT', 'LINKUSDT', 'TRXUSDT', 'MATICUSDT', 'LTCUSDT', 'BCHUSDT', 'NEARUSDT',
+    'PEPEUSDT', 'WIFUSDT', 'ICPUSDT', 'UNIUSDT', 'ETCUSDT', 'APTUSDT', 'FILUSDT', 'OPUSDT',
+    'ARBUSDT', 'XLMUSDT', 'HBARUSDT', 'VETUSDT', 'GRTUSDT', 'RNDRUSDT', 'IMXUSDT', 'TIAUSDT',
+    'SUIUSDT', 'SEIUSDT', 'BONKUSDT', 'JUPUSDT', 'PYTHUSDT'
+];
+
 
 // ----- API Validation Types -----
 type ValidationStatus = 'pending' | 'valid' | 'invalid' | 'not_checked';
@@ -211,7 +220,8 @@ export default function Dashboard() {
   const [activeStrategies, setActiveStrategies] = React.useState<string[]>([]);
   const [stopLoss, setStopLoss] = React.useState<string>('');
   const [takeProfit, setTakeProfit] = React.useState<string>('');
-  const [availablePairs, setAvailablePairs] = React.useState<SymbolInfo[]>([]);
+  const [availablePairsForBot, setAvailablePairsForBot] = React.useState<SymbolInfo[]>([]); // For bot selection UI
+  const [allPairsForBacktest, setAllPairsForBacktest] = React.useState<SymbolInfo[]>([]); // For backtesting dropdown
   const [candleData, setCandleData] = React.useState<Candle[]>(initialCandleData);
   const [portfolioData, setPortfolioData] = React.useState<Balance[]>([]);
   const [totalPortfolioValueUsd, setTotalPortfolioValueUsd] = React.useState<number | null>(null);
@@ -314,62 +324,57 @@ export default function Dashboard() {
 
   React.useEffect(() => {
     const fetchPairs = async () => {
-      setLoadingPairs(true);
-      setPortfolioError(null);
-      addLog('INFO', 'Fetching available trading pairs from Binance...');
-      try {
-        const isTestnetForPairs = activeApiEnvironment === 'testnet_spot' || activeApiEnvironment === 'testnet_futures';
-        const isFuturesForPairs = activeApiEnvironment === 'futures' || activeApiEnvironment === 'testnet_futures';
-        const envLabel = activeApiEnvironment?.replace('_', ' ').toUpperCase() || 'Spot';
+        setLoadingPairs(true);
+        setPortfolioError(null);
+        addLog('INFO', 'Fetching available trading pairs from Binance...');
+        try {
+            const isTestnetForPairs = activeApiEnvironment === 'testnet_spot' || activeApiEnvironment === 'testnet_futures';
+            const isFuturesForPairs = activeApiEnvironment === 'futures' || activeApiEnvironment === 'testnet_futures';
+            const envLabel = activeApiEnvironment?.replace('_', ' ').toUpperCase() || 'Spot';
 
-        addLog('INFO', `Fetching pairs from ${envLabel} environment.`);
-        const info = await getExchangeInfo(isTestnetForPairs, isFuturesForPairs);
-        
-        const tradingPairs = info.symbols
-          .filter(s => s.status === 'TRADING' && (isFuturesForPairs ? true : s.isSpotTradingAllowed))
-          .sort((a, b) => a.symbol.localeCompare(b.symbol));
+            addLog('INFO', `Fetching pairs from ${envLabel} environment.`);
+            const info = await getExchangeInfo(isTestnetForPairs, isFuturesForPairs);
+            
+            const allTradingPairs = info.symbols
+                .filter(s => s.status === 'TRADING' && (isFuturesForPairs ? true : s.isSpotTradingAllowed))
+                .sort((a, b) => a.symbol.localeCompare(b.symbol));
 
-        const usdtPairs = tradingPairs.filter(p => p.quoteAsset === 'USDT');
-        let popularPairs = [...usdtPairs];
-        
-        const targetPairCount = 50;
+            allAvailablePairsStore = allTradingPairs; // Store all pairs for backtesting
+            setAllPairsForBacktest(allTradingPairs);
 
-        if (popularPairs.length < targetPairCount) {
-            const busdPairs = tradingPairs.filter(p => p.quoteAsset === 'BUSD' && !popularPairs.some(up => up.symbol === p.symbol));
-            popularPairs = [...popularPairs, ...busdPairs];
-        }
-        if (popularPairs.length < targetPairCount) {
-            const otherStablePairs = tradingPairs.filter(p => ['USDC', 'TUSD', 'DAI', 'TRY', 'EUR'].includes(p.quoteAsset) && !popularPairs.some(pp => pp.symbol === p.symbol));
-            popularPairs = [...popularPairs, ...otherStablePairs];
-        }
-        if (popularPairs.length < targetPairCount) { // Fill with any other pairs if still not enough
-            const otherPairs = tradingPairs.filter(p => !popularPairs.some(pp => pp.symbol === p.symbol));
-            popularPairs = [...popularPairs, ...otherPairs];
-        }
-        
-        popularPairs = popularPairs.slice(0, targetPairCount);
-        
-        allAvailablePairs = tradingPairs; // Still keep all fetched pairs for backtesting selector
-        setAvailablePairs(popularPairs); // Set the top 50 for bot selection
 
-        if (popularPairs.length > 0 && !selectedPair) {
-          const defaultPair = popularPairs.find(p => p.symbol === 'BTCUSDT') || popularPairs[0];
-          setSelectedPair(defaultPair.symbol);
-          setBacktestParams(prev => ({ ...prev, pair: defaultPair.symbol }));
-          addLog('INFO', `Successfully fetched ${tradingPairs.length} total pairs. Displaying top ${popularPairs.length} pairs from ${envLabel}. Default pair set to ${defaultPair.symbol}.`);
-        } else if (popularPairs.length === 0) {
-           addLog('WARN', `No popular trading pairs found or fetched from ${envLabel}.`);
+            // Filter the user-defined list against what's available and trading
+            const activeUserDefinedPairs = allTradingPairs.filter(exchangePair =>
+                userDefinedPairSymbols.includes(exchangePair.symbol)
+            );
+
+            setAvailablePairsForBot(activeUserDefinedPairs);
+
+            if (activeUserDefinedPairs.length > 0 && !selectedPair) {
+                const defaultPair = activeUserDefinedPairs.find(p => p.symbol === 'BTCUSDT') || activeUserDefinedPairs[0];
+                setSelectedPair(defaultPair.symbol);
+                setBacktestParams(prev => ({ ...prev, pair: defaultPair.symbol }));
+                addLog('INFO', `Successfully fetched ${allTradingPairs.length} total pairs. Displaying ${activeUserDefinedPairs.length} user-defined pairs active on ${envLabel}. Default pair set to ${defaultPair.symbol}.`);
+            } else if (activeUserDefinedPairs.length === 0) {
+                addLog('WARN', `None of the user-defined pairs are currently trading or available on ${envLabel}. Total pairs fetched: ${allTradingPairs.length}.`);
+                if (allTradingPairs.length > 0 && !selectedPair) { // Fallback to first available pair if user list is empty/inactive
+                    setSelectedPair(allTradingPairs[0].symbol);
+                    setBacktestParams(prev => ({ ...prev, pair: allTradingPairs[0].symbol}));
+                    addLog('INFO', `Defaulting to first available pair from exchange: ${allTradingPairs[0].symbol}`);
+                }
+            } else {
+                 addLog('INFO', `Displaying ${activeUserDefinedPairs.length} user-defined pairs active on ${envLabel}. Total pairs fetched: ${allTradingPairs.length}.`);
+            }
+
+        } catch (err) {
+            console.error("Failed to fetch exchange info:", err);
+            const errorMsg = err instanceof Error ? err.message : "Bilinmeyen bir hata oluştu.";
+            setPortfolioError(`Parite verileri yüklenemedi: ${errorMsg}`);
+            addLog('ERROR', `Failed to fetch exchange info: ${errorMsg}`);
+            toast({ title: "Hata", description: `Binance pariteleri alınamadı: ${errorMsg}`, variant: "destructive" });
+        } finally {
+            setLoadingPairs(false);
         }
-         addLog('INFO', `Available pairs count for bot selection: ${popularPairs.length}`);
-      } catch (err) {
-        console.error("Failed to fetch exchange info:", err);
-        const errorMsg = err instanceof Error ? err.message : "Bilinmeyen bir hata oluştu.";
-        setPortfolioError(`Parite verileri yüklenemedi: ${errorMsg}`);
-        addLog('ERROR', `Failed to fetch exchange info: ${errorMsg}`);
-        toast({ title: "Hata", description: `Binance pariteleri alınamadı: ${errorMsg}`, variant: "destructive" });
-      } finally {
-        setLoadingPairs(false);
-      }
     };
     fetchPairs();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -516,7 +521,7 @@ export default function Dashboard() {
         setLoadingPortfolio(false);
       }
    // eslint-disable-next-line react-hooks/exhaustive-deps
-   }, [activeApiEnvironment, activeEnvValidationStatus]); // activeEnvValidationStatus will trigger when validationStatus[activeApiEnvironment] changes
+   }, [activeApiEnvironment, activeEnvValidationStatus]);
 
 
   // --- Handlers ---
@@ -599,15 +604,15 @@ export default function Dashboard() {
             });
             addLog('ERROR', `Bot completely failed to start. All ${strategyStartFailCount} strategy initializations failed.`);
         } else if (strategyStartFailCount > 0) {
-             // Bot status remains 'running' because some might have started, or to allow individual retries if implemented
+            setBotStatus('running'); // Bot status remains 'running' because some might have started
             toast({
                 title: "Kısmi Başlatma",
                 description: `${strategyStartSuccessCount} strateji başlatıldı, ${strategyStartFailCount} başlatılamadı. Detaylar için logları inceleyin.`,
-                variant: "default" // Changed from "warning" to "default" or "destructive" as per previous
+                variant: "default" 
             });
             addLog('WARN', `Bot started with partial success. Success: ${strategyStartSuccessCount}, Failed: ${strategyStartFailCount}.`);
-            if(strategyStartSuccessCount === 0) setBotStatus('stopped'); // If ALL failed but some were attempted, reflect stopped.
         } else if (strategyStartSuccessCount > 0 && strategyStartFailCount === 0) {
+             setBotStatus('running');
              toast({ title: `Bot Başarıyla Başlatıldı`, description: `${strategyStartSuccessCount} strateji ${envLabel} ortamında aktif.`});
         }
 
@@ -634,7 +639,10 @@ export default function Dashboard() {
                 console.error("Error sending Telegram start message:", error);
                 addLog('TELEGRAM_ERROR', `Bot start notification failed: ${errorMsg}`);
             }
+        } else if (strategyStartSuccessCount === 0) { // Ensure bot status is stopped if no strategy started
+            setBotStatus('stopped');
         }
+
 
     } else { 
         setBotStatus('stopped');
@@ -1209,14 +1217,14 @@ export default function Dashboard() {
             <div className="flex flex-wrap items-center gap-4">
               <Select value={selectedPair} onValueChange={setSelectedPair}>
                 <SelectTrigger className="w-full md:w-[180px]">
-                  <SelectValue placeholder={loadingPairs ? "Yükleniyor..." : (availablePairs.length === 0 ? "Parite Yok" : "Parite Seç")} />
+                  <SelectValue placeholder={loadingPairs ? "Yükleniyor..." : (availablePairsForBot.length === 0 ? "Parite Yok" : "Parite Seç")} />
                 </SelectTrigger>
                 <SelectContent>
                   <ScrollArea className="h-[300px]">
                     {loadingPairs ? (
                       <SelectItem value="loading" disabled>Yükleniyor...</SelectItem>
-                    ) : availablePairs.length > 0 ? (
-                      availablePairs.map((pair) => (
+                    ) : availablePairsForBot.length > 0 ? (
+                      availablePairsForBot.map((pair) => (
                         <SelectItem key={pair.symbol} value={pair.symbol}>
                           {pair.baseAsset}/{pair.quoteAsset}
                         </SelectItem>
@@ -1741,14 +1749,14 @@ export default function Dashboard() {
                       <Label htmlFor="backtest-pair">Parite</Label>
                       <Select value={backtestParams.pair} onValueChange={(v) => handleBacktestSelectChange(v, 'pair')}>
                         <SelectTrigger id="backtest-pair">
-                          <SelectValue placeholder={loadingPairs ? "Yükleniyor..." : (allAvailablePairs.length === 0 ? "Parite Yok" : "Parite Seç")} />
+                          <SelectValue placeholder={loadingPairs ? "Yükleniyor..." : (allPairsForBacktest.length === 0 ? "Parite Yok" : "Parite Seç")} />
                         </SelectTrigger>
                         <SelectContent>
                           <ScrollArea className="h-[300px]">
                             {loadingPairs ? (
                               <SelectItem value="loading" disabled>Yükleniyor...</SelectItem>
-                            ) : allAvailablePairs.length > 0 ? ( 
-                              allAvailablePairs.map((pair) => (
+                            ) : allPairsForBacktest.length > 0 ? ( 
+                              allPairsForBacktest.map((pair) => (
                                 <SelectItem key={pair.symbol} value={pair.symbol}>{pair.symbol}</SelectItem>
                               ))
                             ) : (
@@ -1856,7 +1864,7 @@ export default function Dashboard() {
                 <List className="h-5 w-5" />
                 Bot İçin Parite Seçimi
               </CardTitle>
-              <CardDescription>Botun işlem yapmasını istediğiniz pariteleri seçin (En popüler {availablePairs.length} parite listelenmiştir).</CardDescription>
+              <CardDescription>Botun işlem yapmasını istediğiniz pariteleri seçin (Belirtilen {availablePairsForBot.length} parite listelenmiştir).</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
@@ -1877,15 +1885,15 @@ export default function Dashboard() {
                 </div>
               </div>
               <div>
-                <Label>Mevcut Popüler Pariteler ({availablePairs.length})</Label>
+                <Label>Kullanılabilir Tanımlı Pariteler ({availablePairsForBot.length})</Label>
                 <ScrollArea className="h-[200px] mt-1 border rounded-md">
                   {loadingPairs ? (
                     <div className="p-4 text-center text-muted-foreground">
                       <Loader2 className="h-5 w-5 animate-spin inline mr-2" /> Yükleniyor...
                     </div>
-                  ) : availablePairs.length > 0 ? (
+                  ) : availablePairsForBot.length > 0 ? (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 p-2">
-                      {availablePairs.map((pair) => (
+                      {availablePairsForBot.map((pair) => (
                         <div key={pair.symbol} className="flex items-center gap-1">
                           <Checkbox
                             id={`pair-${pair.symbol}`}
@@ -1898,12 +1906,12 @@ export default function Dashboard() {
                     </div>
                   ) : (
                     <div className="p-4 text-center text-muted-foreground">
-                      Parite bulunamadı veya yüklenemedi.
+                      Tanımlı paritelerden hiçbiri aktif değil veya yüklenemedi.
                     </div>
                   )}
                 </ScrollArea>
                 <div className="mt-2 flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => setSelectedPairsForBot(availablePairs.map(p => p.symbol))}>Tümünü Seç</Button>
+                  <Button size="sm" variant="outline" onClick={() => setSelectedPairsForBot(availablePairsForBot.map(p => p.symbol))}>Tümünü Seç</Button>
                   <Button size="sm" variant="outline" onClick={() => setSelectedPairsForBot([])}>Temizle</Button>
                 </div>
               </div>
@@ -1914,3 +1922,4 @@ export default function Dashboard() {
     </SidebarProvider>
   );
 }
+
