@@ -331,21 +331,26 @@ export default function Dashboard() {
 
         const usdtPairs = tradingPairs.filter(p => p.quoteAsset === 'USDT');
         let popularPairs = [...usdtPairs];
-        if (popularPairs.length < 100) {
-            const busdPairs = tradingPairs.filter(p => p.quoteAsset === 'BUSD' && !usdtPairs.some(up => up.symbol === p.symbol));
-            popularPairs = [...popularPairs, ...busdPairs].slice(0, 100);
+        
+        const targetPairCount = 50;
+
+        if (popularPairs.length < targetPairCount) {
+            const busdPairs = tradingPairs.filter(p => p.quoteAsset === 'BUSD' && !popularPairs.some(up => up.symbol === p.symbol));
+            popularPairs = [...popularPairs, ...busdPairs];
         }
-        if (popularPairs.length < 100) {
+        if (popularPairs.length < targetPairCount) {
             const otherStablePairs = tradingPairs.filter(p => ['USDC', 'TUSD', 'DAI', 'TRY', 'EUR'].includes(p.quoteAsset) && !popularPairs.some(pp => pp.symbol === p.symbol));
-            popularPairs = [...popularPairs, ...otherStablePairs].slice(0,100);
+            popularPairs = [...popularPairs, ...otherStablePairs];
         }
-        if (popularPairs.length < 100) { // Fill with any other pairs if still not 100
+        if (popularPairs.length < targetPairCount) { // Fill with any other pairs if still not enough
             const otherPairs = tradingPairs.filter(p => !popularPairs.some(pp => pp.symbol === p.symbol));
-            popularPairs = [...popularPairs, ...otherPairs].slice(0, 100);
+            popularPairs = [...popularPairs, ...otherPairs];
         }
         
-        allAvailablePairs = tradingPairs;
-        setAvailablePairs(popularPairs);
+        popularPairs = popularPairs.slice(0, targetPairCount);
+        
+        allAvailablePairs = tradingPairs; // Still keep all fetched pairs for backtesting selector
+        setAvailablePairs(popularPairs); // Set the top 50 for bot selection
 
         if (popularPairs.length > 0 && !selectedPair) {
           const defaultPair = popularPairs.find(p => p.symbol === 'BTCUSDT') || popularPairs[0];
@@ -594,18 +599,20 @@ export default function Dashboard() {
             });
             addLog('ERROR', `Bot completely failed to start. All ${strategyStartFailCount} strategy initializations failed.`);
         } else if (strategyStartFailCount > 0) {
-            // Bot stays 'running' because some strategies started
+             // Bot status remains 'running' because some might have started, or to allow individual retries if implemented
             toast({
                 title: "Kısmi Başlatma",
                 description: `${strategyStartSuccessCount} strateji başlatıldı, ${strategyStartFailCount} başlatılamadı. Detaylar için logları inceleyin.`,
-                variant: "default" 
+                variant: "default" // Changed from "warning" to "default" or "destructive" as per previous
             });
             addLog('WARN', `Bot started with partial success. Success: ${strategyStartSuccessCount}, Failed: ${strategyStartFailCount}.`);
+            if(strategyStartSuccessCount === 0) setBotStatus('stopped'); // If ALL failed but some were attempted, reflect stopped.
         } else if (strategyStartSuccessCount > 0 && strategyStartFailCount === 0) {
              toast({ title: `Bot Başarıyla Başlatıldı`, description: `${strategyStartSuccessCount} strateji ${envLabel} ortamında aktif.`});
         }
 
-        if (botStatus === 'running' && strategyStartSuccessCount > 0) { // Check botStatus again, in case it was reverted
+        // Send Telegram message only if the bot is meaningfully running
+        if (botStatus === 'running' && strategyStartSuccessCount > 0) { 
             try {
                 let telegramMessageText = '';
                 if (strategyStartSuccessCount > 0 && strategyStartFailCount === 0) {
