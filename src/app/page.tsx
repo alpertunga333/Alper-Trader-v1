@@ -71,8 +71,6 @@ import {
 import {
   LineChart,
   Line,
-  AreaChart,
-  Area,
   BarChart,
   Bar,
   XAxis,
@@ -200,12 +198,12 @@ const PIE_CHART_COLORS = [
 
 // User-defined list of pairs for the bot selection
 const userDefinedPairSymbols: string[] = [
-    'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT', 'AVAXUSDT',
-    'SHIBUSDT', 'DOTUSDT', 'LINKUSDT', 'TRXUSDT', 'MATICUSDT', 'LTCUSDT', 'BCHUSDT', 'NEARUSDT',
-    'PEPEUSDT', 'WIFUSDT', 'ICPUSDT', 'UNIUSDT', 'ETCUSDT', 'APTUSDT', 'FILUSDT', 'OPUSDT',
-    'ARBUSDT', 'XLMUSDT', 'HBARUSDT', 'VETUSDT', 'GRTUSDT', 'RNDRUSDT', 'IMXUSDT', 'TIAUSDT',
-    'SUIUSDT', 'SEIUSDT', 'BONKUSDT', 'JUPUSDT', 'PYTHUSDT'
-];
+    'BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT', 'DOGE/USDT', 'ADA/USDT', 'AVAX/USDT',
+    'SHIB/USDT', 'DOT/USDT', 'LINK/USDT', 'TRX/USDT', 'MATIC/USDT', 'LTC/USDT', 'BCH/USDT', 'NEAR/USDT',
+    'PEPE/USDT', 'WIF/USDT', 'ICP/USDT', 'UNI/USDT', 'ETC/USDT', 'APT/USDT', 'FIL/USDT', 'OP/USDT',
+    'ARBUSDT', 'XLM/USDT', 'HBAR/USDT', 'VET/USDT', 'GRT/USDT', 'RNDR/USDT', 'IMX/USDT', 'TIA/USDT',
+    'SUI/USDT', 'SEI/USDT', 'BONK/USDT', 'JUP/USDT', 'PYTH/USDT'
+].map(p => p.replace('/', '')); // Ensure no slashes for API calls
 
 
 // ----- API Validation Types -----
@@ -268,6 +266,9 @@ export default function Dashboard() {
 
   const [activeApiEnvironment, setActiveApiEnvironment] = React.useState<ApiEnvironment | null>(null);
 
+  const [lastPrice, setLastPrice] = React.useState<string | null>(null);
+  const [priceChangeInfo, setPriceChangeInfo] = React.useState<{percent: number; color: string} | null>(null);
+
 
   // --- Helper Functions ---
   const addLog = (type: string, message: string) => {
@@ -328,22 +329,37 @@ export default function Dashboard() {
         setPortfolioError(null);
         addLog('INFO', 'Fetching available trading pairs from Binance...');
         try {
-            const isTestnetForPairs = activeApiEnvironment === 'testnet_spot' || activeApiEnvironment === 'testnet_futures';
-            const isFuturesForPairs = activeApiEnvironment === 'futures' || activeApiEnvironment === 'testnet_futures';
-            const envLabel = activeApiEnvironment?.replace('_', ' ').toUpperCase() || 'Spot';
+            // For displaying pairs, we will default to SPOT if no environment is active,
+            // or use the active environment if one is set.
+            // Backtesting will always use SPOT, regardless of active environment.
+            const isTestnetForPairDisplay = activeApiEnvironment ? (activeApiEnvironment === 'testnet_spot' || activeApiEnvironment === 'testnet_futures') : false;
+            const isFuturesForPairDisplay = activeApiEnvironment ? (activeApiEnvironment === 'futures' || activeApiEnvironment === 'testnet_futures') : false;
+            const envLabelForDisplay = activeApiEnvironment?.replace('_', ' ').toUpperCase() || 'Spot (Default)';
 
-            addLog('INFO', `Fetching pairs from ${envLabel} environment.`);
-            const info = await getExchangeInfo(isTestnetForPairs, isFuturesForPairs);
+            addLog('INFO', `Fetching pairs from ${envLabelForDisplay} for general display and bot selection.`);
+            
+            // Fetch all pairs from the (potentially active) environment
+            const info = await getExchangeInfo(isTestnetForPairDisplay, isFuturesForPairDisplay);
             
             const allTradingPairs = info.symbols
-                .filter(s => s.status === 'TRADING' && (isFuturesForPairs ? true : s.isSpotTradingAllowed))
+                .filter(s => s.status === 'TRADING' && (isFuturesForPairDisplay ? true : s.isSpotTradingAllowed))
                 .sort((a, b) => a.symbol.localeCompare(b.symbol));
 
-            allAvailablePairsStore = allTradingPairs; // Store all pairs for backtesting
-            setAllPairsForBacktest(allTradingPairs);
+            // Store all pairs fetched from SPOT for backtesting dropdown
+            // If the current active environment is not SPOT, we make another call to get SPOT pairs
+            if (activeApiEnvironment !== 'spot' && activeApiEnvironment !== 'testnet_spot') {
+                 addLog('INFO', `Fetching additional pairs from Spot for backtesting dropdown.`);
+                 const spotInfo = await getExchangeInfo(false, false); // isTestnet=false, isFutures=false for SPOT
+                 allAvailablePairsStore = spotInfo.symbols
+                    .filter(s => s.status === 'TRADING' && s.isSpotTradingAllowed)
+                    .sort((a, b) => a.symbol.localeCompare(b.symbol));
+            } else {
+                 allAvailablePairsStore = allTradingPairs; // If current env is Spot, use its pairs
+            }
+            setAllPairsForBacktest(allAvailablePairsStore);
 
 
-            // Filter the user-defined list against what's available and trading
+            // Filter the user-defined list against what's available and trading on the current display environment
             const activeUserDefinedPairs = allTradingPairs.filter(exchangePair =>
                 userDefinedPairSymbols.includes(exchangePair.symbol)
             );
@@ -353,17 +369,17 @@ export default function Dashboard() {
             if (activeUserDefinedPairs.length > 0 && !selectedPair) {
                 const defaultPair = activeUserDefinedPairs.find(p => p.symbol === 'BTCUSDT') || activeUserDefinedPairs[0];
                 setSelectedPair(defaultPair.symbol);
-                setBacktestParams(prev => ({ ...prev, pair: defaultPair.symbol }));
-                addLog('INFO', `Successfully fetched ${allTradingPairs.length} total pairs. Displaying ${activeUserDefinedPairs.length} user-defined pairs active on ${envLabel}. Default pair set to ${defaultPair.symbol}.`);
+                setBacktestParams(prev => ({ ...prev, pair: defaultPair.symbol })); // Default backtest pair too
+                addLog('INFO', `Successfully fetched ${allTradingPairs.length} total pairs from ${envLabelForDisplay}. Displaying ${activeUserDefinedPairs.length} user-defined pairs. Default pair set to ${defaultPair.symbol}.`);
             } else if (activeUserDefinedPairs.length === 0) {
-                addLog('WARN', `None of the user-defined pairs are currently trading or available on ${envLabel}. Total pairs fetched: ${allTradingPairs.length}.`);
-                if (allTradingPairs.length > 0 && !selectedPair) { // Fallback to first available pair if user list is empty/inactive
+                addLog('WARN', `None of the user-defined pairs are currently trading or available on ${envLabelForDisplay}. Total pairs from ${envLabelForDisplay}: ${allTradingPairs.length}.`);
+                if (allTradingPairs.length > 0 && !selectedPair) { 
                     setSelectedPair(allTradingPairs[0].symbol);
                     setBacktestParams(prev => ({ ...prev, pair: allTradingPairs[0].symbol}));
-                    addLog('INFO', `Defaulting to first available pair from exchange: ${allTradingPairs[0].symbol}`);
+                    addLog('INFO', `Defaulting to first available pair from ${envLabelForDisplay}: ${allTradingPairs[0].symbol}`);
                 }
             } else {
-                 addLog('INFO', `Displaying ${activeUserDefinedPairs.length} user-defined pairs active on ${envLabel}. Total pairs fetched: ${allTradingPairs.length}.`);
+                 addLog('INFO', `Displaying ${activeUserDefinedPairs.length} user-defined pairs active on ${envLabelForDisplay}. Total pairs from ${envLabelForDisplay}: ${allTradingPairs.length}.`);
             }
 
         } catch (err) {
@@ -378,7 +394,7 @@ export default function Dashboard() {
     };
     fetchPairs();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeApiEnvironment]);
+  }, [activeApiEnvironment]); // Re-fetch if activeApiEnvironment changes
 
 
   React.useEffect(() => {
@@ -386,9 +402,11 @@ export default function Dashboard() {
       if (!selectedPair) return;
       setLoadingCandles(true);
       setCandleData([]); 
+      setLastPrice(null);
+      setPriceChangeInfo(null);
 
-      const isTestnet = activeApiEnvironment === 'testnet_spot' || activeApiEnvironment === 'testnet_futures';
-      const isFutures = activeApiEnvironment === 'futures' || activeApiEnvironment === 'testnet_futures';
+      const isTestnet = activeApiEnvironment ? (activeApiEnvironment === 'testnet_spot' || activeApiEnvironment === 'testnet_futures') : false; // Default to live if no active env
+      const isFutures = activeApiEnvironment ? (activeApiEnvironment === 'futures' || activeApiEnvironment === 'testnet_futures') : false; // Default to spot if no active env
       const envLabel = activeApiEnvironment?.replace('_', ' ').toUpperCase() || 'Spot (Default)';
       addLog('INFO', `Fetching candlestick data for ${selectedPair} (${selectedInterval}) from ${envLabel}...`);
 
@@ -399,6 +417,20 @@ export default function Dashboard() {
             addLog('WARN', `No candlestick data returned for ${selectedPair} (${selectedInterval}) from ${envLabel}.`);
           } else {
             addLog('INFO', `Successfully fetched ${data.length} candles for ${selectedPair} (${selectedInterval}) from ${envLabel}.`);
+            const latestCandle = data[data.length - 1];
+            setLastPrice(formatNumberClientSide(latestCandle.close, { maximumFractionDigits: Math.max(2, String(latestCandle.close).split('.')[1]?.length || 0) }));
+
+            if (data.length >= 2) {
+                const referenceCandle = data[0];
+                if (referenceCandle && referenceCandle.close > 0) {
+                    const change = latestCandle.close - referenceCandle.close;
+                    const percent = (change / referenceCandle.close) * 100;
+                    setPriceChangeInfo({
+                        percent: percent,
+                        color: percent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                    });
+                }
+            }
           }
       } catch (err) {
         console.error(`Failed to fetch candlestick data for ${selectedPair} (${envLabel}):`, err);
@@ -464,15 +496,17 @@ export default function Dashboard() {
 
                    let estimatedTotal = 0;
                    const stablecoins = ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI']; 
-                   const tryEurRate = { TRY: 0.03, EUR: 1.08 }; 
+                   const tryEurRate = { TRY: 0.03, EUR: 1.08 }; // Placeholder, fetch real rates if needed
+                   // These prices are extremely rough placeholders and should be fetched from an API for accuracy
                    const prices: Record<string, number> = { 
                       BTC: 65000, ETH: 3500, SOL: 150, BNB: 600, ADA: 0.45, XRP: 0.5, DOGE: 0.15, SHIB: 0.000025,
+                      // Add other common assets here
                    };
 
                    filteredBalances.forEach(b => {
                       const totalAmount = parseFloat(b.free) + parseFloat(b.locked);
                       if (stablecoins.includes(b.asset)) {
-                          estimatedTotal += totalAmount; 
+                          estimatedTotal += totalAmount; // Assume 1:1 for USD-pegged stables
                       } else if (b.asset === 'TRY' && tryEurRate.TRY) {
                           estimatedTotal += totalAmount * tryEurRate.TRY;
                       } else if (b.asset === 'EUR' && tryEurRate.EUR) {
@@ -480,6 +514,8 @@ export default function Dashboard() {
                       } else if (prices[b.asset]) {
                          estimatedTotal += totalAmount * prices[b.asset];
                       }
+                      // Note: Assets not in `prices` or stablecoins/TRY/EUR won't be included in total value.
+                      // For a real app, fetch prices for all assets, e.g., via ASSET/USDT pairs.
                    });
                   setTotalPortfolioValueUsd(estimatedTotal);
                   addLog('INFO', `Estimated total portfolio value (${envLabel}): ~$${estimatedTotal.toFixed(2)} USD`);
@@ -507,9 +543,10 @@ export default function Dashboard() {
           }
       };
 
-      if (activeApiEnvironment && validationStatus[activeApiEnvironment] === 'valid') {
+      const currentValidationStatus = activeApiEnvironment ? validationStatus[activeApiEnvironment] : 'not_checked';
+      if (activeApiEnvironment && currentValidationStatus === 'valid') {
         fetchPortfolio();
-      } else if (activeApiEnvironment && validationStatus[activeApiEnvironment] !== 'valid') {
+      } else if (activeApiEnvironment && currentValidationStatus !== 'valid') {
         setPortfolioData([]);
         setTotalPortfolioValueUsd(null);
         setPortfolioError(`Lütfen aktif ortam (${activeApiEnvironment.replace('_',' ').toUpperCase()}) için API anahtarlarını doğrulayın.`);
@@ -521,7 +558,7 @@ export default function Dashboard() {
         setLoadingPortfolio(false);
       }
    // eslint-disable-next-line react-hooks/exhaustive-deps
-   }, [activeApiEnvironment, activeEnvValidationStatus]);
+   }, [activeApiEnvironment, activeEnvValidationStatus]); // Use activeEnvValidationStatus
 
 
   // --- Handlers ---
@@ -551,6 +588,7 @@ export default function Dashboard() {
             return;
         }
 
+        // Set bot status to running optimistically BEFORE calling strategies
         setBotStatus('running'); 
         const strategies = activeStrategies.map(id => definedStrategies.find(s=>s.id===id)?.name).filter(Boolean);
         toast({ title: `Bot Başlatılıyor...`, description: `Ortam: ${envLabel}. Pariteler: ${selectedPairsForBot.join(', ')}. Stratejiler: ${strategies.join(', ')}.` });
@@ -595,52 +633,49 @@ export default function Dashboard() {
 
         addLog('INFO', `Strategy start attempt complete. Success: ${strategyStartSuccessCount}, Failed: ${strategyStartFailCount}.`);
 
+        let finalBotStatus = botStatus; // Keep current 'running' status unless all fail
+        let telegramMessageText = '';
+
         if (strategyStartSuccessCount === 0 && strategyStartFailCount > 0) {
-            setBotStatus('stopped'); 
+            finalBotStatus = 'stopped'; // All strategies failed, so bot is stopped
             toast({
                 title: "Bot Başlatılamadı",
                 description: `Tüm stratejiler başlatılırken hata oluştu (${strategyStartFailCount} hata). Lütfen logları kontrol edin.`,
                 variant: "destructive"
             });
             addLog('ERROR', `Bot completely failed to start. All ${strategyStartFailCount} strategy initializations failed.`);
+            // No "started" Telegram message if all failed
         } else if (strategyStartFailCount > 0) {
-            setBotStatus('running'); // Bot status remains 'running' because some might have started
+            // Bot status remains 'running' because some might have started
             toast({
                 title: "Kısmi Başlatma",
                 description: `${strategyStartSuccessCount} strateji başlatıldı, ${strategyStartFailCount} başlatılamadı. Detaylar için logları inceleyin.`,
                 variant: "default" 
             });
             addLog('WARN', `Bot started with partial success. Success: ${strategyStartSuccessCount}, Failed: ${strategyStartFailCount}.`);
+            telegramMessageText = `⚠️ KriptoPilot bot (${envLabel}) ${selectedPairsForBot.length} paritede kısmen aktif. Başarılı: ${strategyStartSuccessCount}, Başarısız: ${strategyStartFailCount} strateji.`;
         } else if (strategyStartSuccessCount > 0 && strategyStartFailCount === 0) {
-             setBotStatus('running');
+             // Bot status remains 'running'
              toast({ title: `Bot Başarıyla Başlatıldı`, description: `${strategyStartSuccessCount} strateji ${envLabel} ortamında aktif.`});
+             telegramMessageText = `✅ KriptoPilot bot (${envLabel}) ${selectedPairsForBot.length} paritede ${strategyStartSuccessCount} strateji ile tamamen aktif.`;
         }
+        
+        setBotStatus(finalBotStatus); // Set the final bot status
 
-        // Send Telegram message only if the bot is meaningfully running
-        if (botStatus === 'running' && strategyStartSuccessCount > 0) { 
+        // Send Telegram message only if the bot is meaningfully running (at least one strategy started)
+        if (finalBotStatus === 'running' && telegramMessageText) { 
             try {
-                let telegramMessageText = '';
-                if (strategyStartSuccessCount > 0 && strategyStartFailCount === 0) {
-                    telegramMessageText = `✅ KriptoPilot bot (${envLabel}) ${selectedPairsForBot.length} paritede ${strategyStartSuccessCount} strateji ile tamamen aktif.`;
-                } else if (strategyStartSuccessCount > 0 && strategyStartFailCount > 0) {
-                    telegramMessageText = `⚠️ KriptoPilot bot (${envLabel}) ${selectedPairsForBot.length} paritede kısmen aktif. Başarılı: ${strategyStartSuccessCount}, Başarısız: ${strategyStartFailCount} strateji.`;
-                }
-                
-                if (telegramMessageText) { 
-                    const telegramResult = await sendTelegramMessageAction(apiKeys.telegram.token, apiKeys.telegram.chatId, telegramMessageText);
-                    if (telegramResult.success) {
-                      addLog('TELEGRAM', 'Bot start notification sent.');
-                    } else {
-                      addLog('TELEGRAM_ERROR', `Bot start notification failed: ${telegramResult.message}`);
-                    }
+                const telegramResult = await sendTelegramMessageAction(apiKeys.telegram.token, apiKeys.telegram.chatId, telegramMessageText);
+                if (telegramResult.success) {
+                  addLog('TELEGRAM', 'Bot start notification sent.');
+                } else {
+                  addLog('TELEGRAM_ERROR', `Bot start notification failed: ${telegramResult.message}`);
                 }
             } catch (error) {
                 const errorMsg = error instanceof Error ? error.message : "Bilinmeyen hata";
                 console.error("Error sending Telegram start message:", error);
                 addLog('TELEGRAM_ERROR', `Bot start notification failed: ${errorMsg}`);
             }
-        } else if (strategyStartSuccessCount === 0) { // Ensure bot status is stopped if no strategy started
-            setBotStatus('stopped');
         }
 
 
@@ -648,6 +683,7 @@ export default function Dashboard() {
         setBotStatus('stopped');
         toast({ title: 'Bot Durduruldu.', description: `Aktif ortam: ${envLabel}` });
         addLog('INFO', `Bot stopping process initiated for environment ${envLabel}.`);
+        // In a real app, you'd signal background tasks to stop here.
         console.log(`Stopping bot for environment ${envLabel}... (Placeholder: actual stop logic needed)`);
 
         if (validationStatus.telegramToken === 'valid' && validationStatus.telegramChatId === 'valid') {
@@ -1008,27 +1044,29 @@ export default function Dashboard() {
   const ChartTooltipContent = ({ active, payload, label }: any) => {
       if (active && payload && payload.length) {
         const dataPoint = payload[0].payload;
-        const pricePayload = payload.find((p: any) => p.dataKey === 'close'); 
+        // const pricePayload = payload.find((p: any) => p.dataKey === 'close'); // Not used directly but good for reference
         const volumePayload = payload.find((p: any) => p.dataKey === 'volume');
 
         if (!dataPoint) return null;
 
-         const timeLabel = formatTimestamp(label); 
-         const price = pricePayload?.value !== undefined ? formatNumberClientSide(pricePayload.value, { style: 'currency', currency: 'USD', maximumFractionDigits: Math.max(2, String(pricePayload.value ?? '0').split('.')[1]?.length || 0) }) : 'N/A';
-         const volume = volumePayload?.value !== undefined ? formatNumberClientSide(volumePayload.value, { notation: 'compact', maximumFractionDigits: 1 }) : 'N/A';
-         const open = dataPoint.open !== undefined ? formatNumberClientSide(dataPoint.open, { style: 'currency', currency: 'USD', maximumFractionDigits: Math.max(2, String(dataPoint.open).split('.')[1]?.length || 0) }) : 'N/A';
-         const high = dataPoint.high !== undefined ? formatNumberClientSide(dataPoint.high, { style: 'currency', currency: 'USD', maximumFractionDigits: Math.max(2, String(dataPoint.high).split('.')[1]?.length || 0) }) : 'N/A';
-         const low = dataPoint.low !== undefined ? formatNumberClientSide(dataPoint.low, { style: 'currency', currency: 'USD', maximumFractionDigits: Math.max(2, String(dataPoint.low).split('.')[1]?.length || 0) }) : 'N/A';
-         const close = dataPoint.close !== undefined ? formatNumberClientSide(dataPoint.close, { style: 'currency', currency: 'USD', maximumFractionDigits: Math.max(2, String(dataPoint.close).split('.')[1]?.length || 0) }) : 'N/A';
+         const timeLabel = formatTimestamp(label, 'full'); 
+         const open = dataPoint.open !== undefined ? formatNumberClientSide(dataPoint.open, { maximumFractionDigits: Math.max(2, String(dataPoint.open).split('.')[1]?.length || 0) }) : 'N/A';
+         const high = dataPoint.high !== undefined ? formatNumberClientSide(dataPoint.high, { maximumFractionDigits: Math.max(2, String(dataPoint.high).split('.')[1]?.length || 0) }) : 'N/A';
+         const low = dataPoint.low !== undefined ? formatNumberClientSide(dataPoint.low, { maximumFractionDigits: Math.max(2, String(dataPoint.low).split('.')[1]?.length || 0) }) : 'N/A';
+         const close = dataPoint.close !== undefined ? formatNumberClientSide(dataPoint.close, { maximumFractionDigits: Math.max(2, String(dataPoint.close).split('.')[1]?.length || 0) }) : 'N/A';
+         const volume = volumePayload?.value !== undefined ? formatNumberClientSide(volumePayload.value, { notation: 'compact', maximumFractionDigits: 2 }) : 'N/A';
+
 
         return (
-          <div className="custom-tooltip p-2 bg-card border border-border rounded shadow-lg text-card-foreground text-xs">
-            <p className="label font-bold mb-1">{`${selectedPair} - ${timeLabel}`}</p>
-            <p><span className="font-medium">Kapanış:</span> {price}</p>
-            <p><span className="font-medium">Açılış:</span> {open}</p>
-            <p><span className="font-medium">Yüksek:</span> {high}</p>
-            <p><span className="font-medium">Düşük:</span> {low}</p>
-             <p><span className="font-medium">Hacim:</span> {volume}</p>
+          <div className="custom-tooltip p-2.5 bg-background/90 border border-border rounded-lg shadow-xl text-card-foreground text-xs backdrop-blur-sm">
+            <p className="label font-semibold text-sm mb-1.5">{`${selectedPair} - ${timeLabel}`}</p>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+                <span className="font-medium text-muted-foreground">Açılış:</span><span className="text-right">{open}</span>
+                <span className="font-medium text-muted-foreground">Yüksek:</span><span className="text-right">{high}</span>
+                <span className="font-medium text-muted-foreground">Düşük:</span><span className="text-right">{low}</span>
+                <span className="font-medium text-muted-foreground">Kapanış:</span><span className="text-right">{close}</span>
+                <span className="font-medium text-muted-foreground">Hacim:</span><span className="text-right">{volume}</span>
+            </div>
           </div>
         );
       }
@@ -1050,20 +1088,16 @@ export default function Dashboard() {
     }
   };
 
-  const chartColor = React.useMemo(() => {
-      if (!candleData || candleData.length < 2) return "hsl(var(--chart-1))"; 
-      const firstClose = candleData[0].close;
-      const lastClose = candleData[candleData.length - 1].close;
-      return lastClose >= firstClose ? 'hsl(var(--chart-1))' : 'hsl(var(--destructive))'; 
-  }, [candleData]);
 
   const pieChartData = React.useMemo(() => {
       if (!portfolioData || !totalPortfolioValueUsd || totalPortfolioValueUsd === 0) return [];
 
       const stablecoins = ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI'];
-      const tryEurRate = { TRY: 0.03, EUR: 1.08 };
+      const tryEurRate = { TRY: 0.03, EUR: 1.08 }; // Placeholder
+      // These prices are extremely rough placeholders and should be fetched from an API for accuracy
       const prices: Record<string, number> = {
         BTC: 65000, ETH: 3500, SOL: 150, BNB: 600, ADA: 0.45, XRP: 0.5, DOGE: 0.15, SHIB: 0.000025
+        // Add other common assets here
      }; 
 
       return portfolioData
@@ -1071,7 +1105,7 @@ export default function Dashboard() {
               const totalAmount = parseFloat(balance.free) + parseFloat(balance.locked);
               let valueUsd = 0;
               if (stablecoins.includes(balance.asset)) {
-                  valueUsd = totalAmount; 
+                  valueUsd = totalAmount; // Assume 1:1 for USD-pegged stables
               } else if (balance.asset === 'TRY' && tryEurRate.TRY) {
                   valueUsd = totalAmount * tryEurRate.TRY;
               } else if (balance.asset === 'EUR' && tryEurRate.EUR) {
@@ -1079,12 +1113,16 @@ export default function Dashboard() {
               } else if (prices[balance.asset]) {
                   valueUsd = totalAmount * prices[balance.asset];
               } else {
+                  // For assets without direct USD price, try to find a pair like ASSET/USDT
+                  // This is a placeholder for a more complex price fetching logic
+                  // For now, we'll exclude them from the pie chart if no direct price is found
                   return null;
               }
+              // Only include assets that contribute more than a tiny fraction to the pie chart
               return valueUsd > 0.01 ? { name: balance.asset, value: valueUsd } : null;
           })
-          .filter((item): item is { name: string; value: number } => item !== null) 
-          .sort((a, b) => b.value - a.value); 
+          .filter((item): item is { name: string; value: number } => item !== null) // Type guard
+          .sort((a, b) => b.value - a.value); // Sort by value descending
   }, [portfolioData, totalPortfolioValueUsd]);
 
   const PortfolioPieChart = () => {
@@ -1096,7 +1134,7 @@ export default function Dashboard() {
         );
     }
 
-    const chartSize = 150; 
+    const chartSize = 150; // Diameter of the pie chart
 
     return (
         <div className="flex flex-col items-center gap-2">
@@ -1106,10 +1144,10 @@ export default function Dashboard() {
                         cursor={false}
                         content={({ active, payload }) => {
                              if (active && payload && payload.length) {
-                                const data = payload[0].payload; 
+                                const data = payload[0].payload; // Access the payload from the Pie's data entry
                                 if (!data) return null;
                                 const value = data?.value !== undefined ? data.value : 0;
-                                const totalValue = totalPortfolioValueUsd || 1; 
+                                const totalValue = totalPortfolioValueUsd || 1; // Avoid division by zero
                                 return (
                                   <div className="rounded-lg border bg-background p-2 text-xs shadow-sm">
                                     <div className="font-medium">{data.name}</div>
@@ -1130,10 +1168,10 @@ export default function Dashboard() {
                         nameKey="name"
                         cx="50%"
                         cy="50%"
-                        outerRadius={chartSize / 2 - 5} 
-                        innerRadius={chartSize / 2 - 25} 
+                        outerRadius={chartSize / 2 - 5} // Leave some space for stroke and labels
+                        innerRadius={chartSize / 2 - 25} // Doughnut effect
                         strokeWidth={2}
-                        paddingAngle={1} 
+                        paddingAngle={1} // Small gap between slices
                     >
                         {pieChartData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={PIE_CHART_COLORS[index % PIE_CHART_COLORS.length]} stroke={PIE_CHART_COLORS[index % PIE_CHART_COLORS.length]}/>
@@ -1297,22 +1335,26 @@ export default function Dashboard() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 flex-1">
           <Card className="lg:col-span-2">
-            <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-                 <div className="flex flex-col">
-                    <CardTitle className="text-lg font-semibold">
-                       {selectedPair ? `${selectedPair.replace('USDT', '/USDT')}` : "Grafik"}
-                       {loadingCandles && <Loader2 className="ml-2 h-4 w-4 animate-spin inline-block" />}
+             <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-2 sm:space-y-0 sm:space-x-4 pb-2 pt-4 px-4">
+                <div className="flex-grow">
+                    <CardTitle className="text-xl font-bold text-foreground">
+                        {selectedPair ? `${selectedPair.replace('USDT', '/USDT')}` : "Grafik Yükleniyor..."}
+                        {loadingCandles && <Loader2 className="ml-2 h-4 w-4 animate-spin inline-block text-muted-foreground" />}
                     </CardTitle>
-                     {candleData.length > 0 && !loadingCandles && (
-                         <div className="text-xs text-muted-foreground mt-1 flex flex-wrap gap-x-3 gap-y-1">
-                             <span>A: <span className="font-mono">{formatNumberClientSide(candleData[candleData.length - 1]?.open, { maximumFractionDigits: Math.max(2, String(candleData[candleData.length -1]?.open ?? '0').split('.')[1]?.length || 0) })}</span></span>
-                             <span>Y: <span className="font-mono">{formatNumberClientSide(candleData[candleData.length - 1]?.high, { maximumFractionDigits: Math.max(2, String(candleData[candleData.length -1]?.high ?? '0').split('.')[1]?.length || 0) })}</span></span>
-                             <span>D: <span className="font-mono">{formatNumberClientSide(candleData[candleData.length - 1]?.low, { maximumFractionDigits: Math.max(2, String(candleData[candleData.length -1]?.low ?? '0').split('.')[1]?.length || 0) })}</span></span>
-                             <span>K: <span className="font-mono">{formatNumberClientSide(candleData[candleData.length - 1]?.close, { maximumFractionDigits: Math.max(2, String(candleData[candleData.length -1]?.close ?? '0').split('.')[1]?.length || 0) })}</span></span>
-                         </div>
-                     )}
-                 </div>
-                 <CardDescription className="text-xs text-muted-foreground self-start pt-1 shrink-0">
+                    {lastPrice && !loadingCandles && (
+                        <div className="flex items-baseline gap-2 mt-1">
+                            <span className="text-2xl font-semibold text-foreground">{lastPrice}</span>
+                            {priceChangeInfo && (
+                                <span className={cn("text-sm font-medium", priceChangeInfo.color)}>
+                                    {priceChangeInfo.percent >= 0 ? '▲' : '▼'}
+                                    {formatNumberClientSide(Math.abs(priceChangeInfo.percent), { maximumFractionDigits: 2 })}%
+                                </span>
+                            )}
+                            <span className="text-xs text-muted-foreground">(veri seti başlangıcına göre)</span>
+                        </div>
+                    )}
+                </div>
+                <CardDescription className="text-xs text-muted-foreground self-start sm:self-center pt-1 shrink-0">
                    {selectedInterval} {activeApiEnvironment && `(${activeApiEnvironment.replace('_', ' ').toUpperCase()})`}
                  </CardDescription>
             </CardHeader>
@@ -1325,17 +1367,7 @@ export default function Dashboard() {
               ) : candleData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={candleData} margin={{ top: 5, right: 5, left: -25, bottom: 5 }}>
-                     <defs>
-                         <linearGradient id="chartGradientUp" x1="0" y1="0" x2="0" y2="1">
-                             <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.8} />
-                             <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0.1} />
-                         </linearGradient>
-                         <linearGradient id="chartGradientDown" x1="0" y1="0" x2="0" y2="1">
-                             <stop offset="5%" stopColor="hsl(var(--destructive))" stopOpacity={0.7} />
-                             <stop offset="95%" stopColor="hsl(var(--destructive))" stopOpacity={0.1} />
-                         </linearGradient>
-                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} vertical={false} />
                     <XAxis
                       dataKey="closeTime" 
                       tickFormatter={(value) => formatTimestamp(value, 'short')} 
@@ -1343,48 +1375,49 @@ export default function Dashboard() {
                       axisLine={false}
                       tickLine={false}
                       interval="preserveStartEnd" 
-                       tickCount={6} 
+                      tickCount={6} 
                     />
                     <YAxis
-                      yAxisId="left" 
+                      yAxisId="volume" 
                       orientation="left"
+                      tickFormatter={(value) => formatNumberClientSide(value, { notation: 'compact', maximumFractionDigits: 1 })}
+                      tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={45}
+                      domain={[0, 'dataMax * 4']} 
+                    />
+                     <YAxis
+                      yAxisId="price" 
+                      orientation="right"
                       tickFormatter={(value) => formatNumberClientSide(value, { notation: 'compact', maximumFractionDigits: 2 })}
                       tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
                       axisLine={false}
                       tickLine={false}
                       domain={['dataMin - dataMin * 0.01', 'dataMax + dataMax * 0.01']} 
                     />
-                    <YAxis
-                      yAxisId="right" 
-                      orientation="right"
-                       tickFormatter={(value) => formatNumberClientSide(value, { notation: 'compact', maximumFractionDigits: 1 })}
-                      tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                      axisLine={false}
-                      tickLine={false}
-                      width={40} 
-                      domain={[0, 'dataMax * 4']} 
-                    />
                     <TooltipProvider> 
-                      <ChartTooltip content={<ChartTooltipContent />} cursor={{ fill: 'hsl(var(--accent))', fillOpacity: 0.3 }} />
+                      <ChartTooltip content={<ChartTooltipContent />} cursor={{ fill: 'hsl(var(--accent))', fillOpacity: 0.2 }} />
                     </TooltipProvider>
-                    <Area
-                      yAxisId="left"
+                    <Line
+                      yAxisId="price"
                       type="monotone"
                       dataKey="close"
-                      stroke={chartColor} 
-                      fillOpacity={1}
-                      fill={chartColor === 'hsl(var(--chart-1))' ? "url(#chartGradientUp)" : "url(#chartGradientDown)"}
+                      stroke={"hsl(var(--primary))"} 
                       strokeWidth={2}
                       name="Kapanış"
                       dot={false} 
                     />
                     <Bar
-                      yAxisId="right"
+                      yAxisId="volume"
                       dataKey="volume"
-                      fill="hsl(var(--muted))" 
                       name="Hacim"
-                      barSize={5} 
-                    />
+                      barSize={6} 
+                    >
+                     {candleData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.close >= entry.open ? 'hsla(var(--chart-1), 0.6)' : 'hsla(var(--destructive), 0.5)'} />
+                      ))}
+                    </Bar>
                   </ComposedChart>
                 </ResponsiveContainer>
               ) : (
@@ -1864,7 +1897,7 @@ export default function Dashboard() {
                 <List className="h-5 w-5" />
                 Bot İçin Parite Seçimi
               </CardTitle>
-              <CardDescription>Botun işlem yapmasını istediğiniz pariteleri seçin (Belirtilen {availablePairsForBot.length} parite listelenmiştir).</CardDescription>
+              <CardDescription>Botun işlem yapmasını istediğiniz pariteleri seçin (Belirtilen {availablePairsForBot.length} kullanıcı tanımlı parite listelenmiştir).</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
@@ -1922,4 +1955,3 @@ export default function Dashboard() {
     </SidebarProvider>
   );
 }
-
