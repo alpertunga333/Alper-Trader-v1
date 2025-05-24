@@ -209,8 +209,8 @@ type ValidationStatus = 'pending' | 'valid' | 'invalid' | 'not_checked';
 
 // Custom Candlestick Shape Component
 const Candlestick = (props: any) => {
-  const { x, y, width, height, low, high, open, close, fill } = props;
-  // fill color is determined by <Cell> in Bar component
+  const { x, y, width, height, low, high, open, close, fill, stroke } = props;
+  // fill color is determined by <Cell> in Bar component for the body
   // low, high, open, close are from the original data payload
 
   // Ensure all necessary props are available
@@ -252,6 +252,7 @@ const Candlestick = (props: any) => {
         width={width}
         height={actualBodyHeight}
         fill={fill}
+        stroke={stroke || fill} // Use stroke prop if provided, otherwise fill
       />
     </g>
   );
@@ -533,13 +534,31 @@ export default function Dashboard() {
                    let estimatedTotal = 0;
                    const stablecoins = ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI']; 
                    const tryEurRate = { TRY: 0.03, EUR: 1.08 }; 
-                   const prices: Record<string, number> = { 
-                      BTC: latestCandleInfo && selectedPair.startsWith('BTC') && !selectedPair.endsWith('BTC') ? latestCandleInfo.close : (prices['BTC'] || 65000),
-                      ETH: latestCandleInfo && selectedPair.startsWith('ETH') && !selectedPair.endsWith('ETH') ? latestCandleInfo.close : (prices['ETH'] || 3500),
-                      SOL: latestCandleInfo && selectedPair.startsWith('SOL') && !selectedPair.endsWith('SOL') ? latestCandleInfo.close : (prices['SOL'] || 150),
-                      BNB: latestCandleInfo && selectedPair.startsWith('BNB') && !selectedPair.endsWith('BNB') ? latestCandleInfo.close : (prices['BNB'] || 600),
-                       ADA: prices['ADA'] || 0.45, XRP: prices['XRP'] || 0.5, DOGE: prices['DOGE'] || 0.15, SHIB: prices['SHIB'] || 0.000025,
+                   
+                   const basePrices: Record<string, number> = {
+                       BTC: 65000, ETH: 3500, SOL: 150, BNB: 600,
+                       ADA: 0.45, XRP: 0.5, DOGE: 0.15, SHIB: 0.000025,
+                       // Add other common assets if needed for fallback
                    };
+
+                   // Create a mutable copy for conditional updates
+                   const prices = { ...basePrices };
+
+                   if (latestCandleInfo && selectedPair) {
+                       const baseAsset = selectedPair.replace(/USDT$|BUSD$|TRY$|EUR$/, ''); // Simple way to get base asset
+                       if (prices.hasOwnProperty(baseAsset)) {
+                           prices[baseAsset] = latestCandleInfo.close;
+                       } else if (selectedPair.startsWith('BTC') && !selectedPair.endsWith('BTC') && prices.hasOwnProperty('BTC')) {
+                           prices['BTC'] = latestCandleInfo.close;
+                       } else if (selectedPair.startsWith('ETH') && !selectedPair.endsWith('ETH') && prices.hasOwnProperty('ETH')) {
+                           prices['ETH'] = latestCandleInfo.close;
+                       } else if (selectedPair.startsWith('SOL') && !selectedPair.endsWith('SOL') && prices.hasOwnProperty('SOL')) {
+                           prices['SOL'] = latestCandleInfo.close;
+                       } else if (selectedPair.startsWith('BNB') && !selectedPair.endsWith('BNB') && prices.hasOwnProperty('BNB')) {
+                           prices['BNB'] = latestCandleInfo.close;
+                       }
+                   }
+
 
                    filteredBalances.forEach(b => {
                       const totalAmount = parseFloat(b.free) + parseFloat(b.locked);
@@ -1121,13 +1140,28 @@ export default function Dashboard() {
 
       const stablecoins = ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI'];
       const tryEurRate = { TRY: 0.03, EUR: 1.08 }; 
-      const prices: Record<string, number> = {
-        BTC: latestCandleInfo && selectedPair.startsWith('BTC') && !selectedPair.endsWith('BTC') ? latestCandleInfo.close : (prices['BTC'] || 65000),
-        ETH: latestCandleInfo && selectedPair.startsWith('ETH') && !selectedPair.endsWith('ETH') ? latestCandleInfo.close : (prices['ETH'] || 3500),
-        SOL: latestCandleInfo && selectedPair.startsWith('SOL') && !selectedPair.endsWith('SOL') ? latestCandleInfo.close : (prices['SOL'] || 150),
-        BNB: latestCandleInfo && selectedPair.startsWith('BNB') && !selectedPair.endsWith('BNB') ? latestCandleInfo.close : (prices['BNB'] || 600),
-        ADA: prices['ADA'] || 0.45, XRP: prices['XRP'] || 0.5, DOGE: prices['DOGE'] || 0.15, SHIB: prices['SHIB'] || 0.000025
-     }; 
+      
+      const basePrices: Record<string, number> = {
+          BTC: 65000, ETH: 3500, SOL: 150, BNB: 600,
+          ADA: 0.45, XRP: 0.5, DOGE: 0.15, SHIB: 0.000025
+      };
+      
+      const prices = { ...basePrices };
+
+      if (latestCandleInfo && selectedPair) {
+          const baseAsset = selectedPair.replace(/USDT$|BUSD$|TRY$|EUR$/, '');
+          if (prices.hasOwnProperty(baseAsset)) {
+              prices[baseAsset] = latestCandleInfo.close;
+          } else if (selectedPair.startsWith('BTC') && !selectedPair.endsWith('BTC') && prices.hasOwnProperty('BTC')) {
+              prices['BTC'] = latestCandleInfo.close;
+          } else if (selectedPair.startsWith('ETH') && !selectedPair.endsWith('ETH') && prices.hasOwnProperty('ETH')) {
+              prices['ETH'] = latestCandleInfo.close;
+          } else if (selectedPair.startsWith('SOL') && !selectedPair.endsWith('SOL') && prices.hasOwnProperty('SOL')) {
+              prices['SOL'] = latestCandleInfo.close;
+          } else if (selectedPair.startsWith('BNB') && !selectedPair.endsWith('BNB') && prices.hasOwnProperty('BNB')) {
+              prices['BNB'] = latestCandleInfo.close;
+          }
+      }
 
       return portfolioData
           .map(balance => {
@@ -1387,10 +1421,10 @@ export default function Dashboard() {
                 </div>
                  {latestCandleInfo && !loadingCandles && (
                     <div className="text-xs text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5">
-                        <span>O: <span className="text-foreground/90">{formatNumberClientSide(latestCandleInfo.open)}</span></span>
-                        <span>H: <span className="text-foreground/90">{formatNumberClientSide(latestCandleInfo.high)}</span></span>
-                        <span>L: <span className="text-foreground/90">{formatNumberClientSide(latestCandleInfo.low)}</span></span>
-                        <span>C: <span className="text-foreground/90">{formatNumberClientSide(latestCandleInfo.close)}</span></span>
+                        <span>A: <span className="text-foreground/90">{formatNumberClientSide(latestCandleInfo.open)}</span></span>
+                        <span>Y: <span className="text-foreground/90">{formatNumberClientSide(latestCandleInfo.high)}</span></span>
+                        <span>D: <span className="text-foreground/90">{formatNumberClientSide(latestCandleInfo.low)}</span></span>
+                        <span>K: <span className="text-foreground/90">{formatNumberClientSide(latestCandleInfo.close)}</span></span>
                     </div>
                 )}
                  <CardDescription className="text-xs text-muted-foreground pt-1">
@@ -1993,4 +2027,3 @@ export default function Dashboard() {
     </SidebarProvider>
   );
 }
-
