@@ -1,3 +1,4 @@
+
 import crypto from 'crypto'; // Required for HMAC signing
 
 /**
@@ -17,9 +18,15 @@ export interface OrderParams {
    */
   type: 'MARKET' | 'LIMIT';
   /**
-   * The quantity to buy or sell.
+   * The quantity in base asset (e.g., BTC for BTCUSDT).
+   * Required for LIMIT orders. Optional for MARKET orders if quoteOrderQty is provided.
    */
-  quantity: number;
+  quantity?: number;
+  /**
+   * The quantity in quote asset (e.g., USDT for BTCUSDT).
+   * Optional for MARKET orders if quantity is provided. Not typically used for LIMIT orders.
+   */
+  quoteOrderQty?: number;
   /**
    * The price at which to buy or sell (required for LIMIT orders).
    */
@@ -55,19 +62,19 @@ export interface OrderResponse {
    */
   clientOrderId: string;
   /**
-   * The price of the order.
+   * The price of the order. For MARKET orders, this is the average filled price.
    */
   price: string;
    /**
-   * The original quantity of the order.
+   * The original quantity of the order (in base asset).
    */
   origQty: string;
   /**
-   * The executed quantity of the order.
+   * The executed quantity of the order (in base asset).
    */
   executedQty: string;
   /**
-   * The cumulative quote quantity.
+   * The cumulative quote quantity (total value in quote asset).
    */
   cummulativeQuoteQty: string;
   /**
@@ -82,8 +89,14 @@ export interface OrderResponse {
    * The side of the order.
    */
   side: string;
-  // Add other relevant fields from Binance response
   transactTime?: number;
+  fills?: Array<{ // Array of fill objects for detailed execution info
+    price: string;
+    qty: string;
+    commission: string;
+    commissionAsset: string;
+    tradeId: number;
+  }>;
 }
 
 
@@ -282,30 +295,39 @@ export async function placeOrder(
   console.log(`Placing Order on ${envLabel}:`, orderParams);
 
   const endpoint = isFutures ? '/fapi/v1/order' : '/api/v3/order';
-  const params: Record<string, string | number | undefined> = {
+  
+  // Validate order parameters
+  if (orderParams.type === 'MARKET' && orderParams.quantity === undefined && orderParams.quoteOrderQty === undefined) {
+    throw new Error('For MARKET orders, either quantity (base asset) or quoteOrderQty (quote asset) must be provided.');
+  }
+  if (orderParams.type === 'LIMIT') {
+    if (orderParams.quantity === undefined) {
+        throw new Error('For LIMIT orders, quantity (base asset) must be provided.');
+    }
+    if (orderParams.price === undefined) {
+        throw new Error('For LIMIT orders, price must be provided.');
+    }
+  }
+
+  const apiParams: Record<string, string | number | undefined> = {
     symbol: orderParams.symbol,
     side: orderParams.side,
     type: orderParams.type,
-    quantity: orderParams.quantity,
-    // Add price only for LIMIT orders
-    ...(orderParams.type === 'LIMIT' && { price: orderParams.price, timeInForce: 'GTC' }), // Good Till Cancelled for limit
-    // Add stopLoss/takeProfit if needed (requires different order types like STOP_MARKET, TAKE_PROFIT_MARKET)
-    // This basic example only handles MARKET and LIMIT
-     recvWindow: 5000, // Optional: Increase if timestamp errors occur
+    newOrderRespType: 'FULL', // To get detailed response including fills
+    ...(orderParams.quantity !== undefined && { quantity: orderParams.quantity }),
+    ...(orderParams.quoteOrderQty !== undefined && { quoteOrderQty: orderParams.quoteOrderQty }),
+    ...(orderParams.type === 'LIMIT' && orderParams.price !== undefined && { price: orderParams.price, timeInForce: 'GTC' }),
+    recvWindow: 5000,
   };
 
   try {
-     // **SECURITY:** Ensure this function is ONLY called from a secure server context (Server Action, API Route)
-     const response = await makeAuthenticatedRequest(endpoint, params, apiKey, secretKey, 'POST', isTestnet, isFutures);
-
-     // Map the response to your OrderResponse interface
-     // Note: Binance response structure might vary slightly between Spot and Futures. Adjust mapping if needed.
+     const response = await makeAuthenticatedRequest(endpoint, apiParams, apiKey, secretKey, 'POST', isTestnet, isFutures);
      return {
          orderId: response.orderId,
          status: response.status,
          symbol: response.symbol,
          clientOrderId: response.clientOrderId,
-         price: response.price,
+         price: response.price, // For MARKET order, this is avg fill price if newOrderRespType=FULL or RESULT
          origQty: response.origQty,
          executedQty: response.executedQty,
          cummulativeQuoteQty: response.cummulativeQuoteQty,
@@ -313,10 +335,11 @@ export async function placeOrder(
          type: response.type,
          side: response.side,
          transactTime: response.transactTime,
+         fills: response.fills, // Included due to newOrderRespType: 'FULL'
      };
   } catch (error) {
       console.error(`Error placing order on ${envLabel}:`, error);
-      throw error; // Re-throw to be handled by caller
+      throw error; 
   }
 }
 
@@ -341,27 +364,21 @@ export async function getAccountBalances(
    const envLabel = `${isTestnet ? 'Testnet ' : ''}${isFutures ? 'Futures' : 'Spot'}`;
    console.log(`Getting Account Balances from ${envLabel}`);
 
-   // Choose the correct endpoint based on futures or spot
-   const endpoint = isFutures ? '/fapi/v2/balance' : '/api/v3/account'; // Futures uses v2 balance, Spot uses v3 account
+   const endpoint = isFutures ? '/fapi/v2/balance' : '/api/v3/account'; 
 
    try {
-     // **SECURITY:** Ensure this function is ONLY called from a secure server context (Server Action, API Route)
-     // OR by another server action that passes user-provided keys for validation.
      const response = await makeAuthenticatedRequest(endpoint, { recvWindow: 5000 }, apiKey, secretKey, 'GET', isTestnet, isFutures);
 
      if (isFutures) {
-       // Futures balance response is an array of balance objects directly
        if (!Array.isArray(response)) {
            throw new Error(`Unexpected response format for Futures balance: ${JSON.stringify(response)}`);
        }
-       // Map Futures balance format (adjust field names if needed based on Binance docs)
        return response.map((b: any) => ({
          asset: b.asset,
-         free: b.availableBalance || b.balance, // Use availableBalance if present, otherwise balance
-         locked: (parseFloat(b.balance) - parseFloat(b.availableBalance || b.balance)).toFixed(8), // Calculate locked
+         free: b.availableBalance || b.balance, 
+         locked: (parseFloat(b.balance) - parseFloat(b.availableBalance || b.balance)).toFixed(8), 
        }));
      } else {
-       // Spot account response has a 'balances' array
        if (!response || !Array.isArray(response.balances)) {
            throw new Error(`Unexpected response format for Spot account: ${JSON.stringify(response)}`);
        }
@@ -373,7 +390,7 @@ export async function getAccountBalances(
      }
    } catch (error) {
      console.error(`Error fetching account balances from ${envLabel}:`, error);
-     throw error; // Re-throw for the caller (e.g., Server Action) to handle
+     throw error; 
    }
 }
 
@@ -394,23 +411,22 @@ export async function getCandlestickData(
   interval: string,
   isTestnet: boolean,
   isFutures: boolean = false,
-  limit: number = 100 // Default limit
+  limit: number = 100 
 ): Promise<Candle[]> {
   const envLabel = `${isTestnet ? 'Testnet ' : ''}${isFutures ? 'Futures' : 'Spot'}`;
   console.log(`Getting Candlestick Data from ${envLabel}: ${symbol}, ${interval}, Limit: ${limit}`);
   if (!symbol) {
     console.warn("getCandlestickData called without a symbol.");
-    return []; // Return empty array if no symbol is provided
+    return []; 
   }
 
   const maxLimit = isFutures ? 1500 : 1000;
   const actualLimit = Math.min(limit, maxLimit);
 
   const apiUrl = getApiUrl(isTestnet, isFutures);
-  // Use different klines endpoint for Futures
   const endpoint = isFutures ? `${apiUrl}/fapi/v1/klines` : `${apiUrl}/api/v3/klines`;
   const params = new URLSearchParams({
-    symbol: symbol.toUpperCase(), // Ensure symbol is uppercase
+    symbol: symbol.toUpperCase(), 
     interval: interval,
     limit: actualLimit.toString(),
   });
@@ -418,32 +434,28 @@ export async function getCandlestickData(
   try {
     const response = await fetch(`${endpoint}?${params.toString()}`);
     if (!response.ok) {
-        // Try parsing error response from Binance
         let errorMsg = `HTTP error! status: ${response.status}`;
         let errorCode = null;
         try {
             const errorData = await response.json();
             errorCode = errorData.code;
             errorMsg = `Binance API Error (klines, ${envLabel}): ${errorData.msg || errorMsg} (Code: ${errorCode || 'N/A'})`;
-             // Handle invalid symbol specifically (-1121 for spot/futures)
              if (errorCode === -1121) {
                 console.warn(`Invalid symbol: ${symbol} on ${envLabel}. Returning empty data.`);
                 return [];
              }
         } catch (parseError) {
-            // Ignore if error response is not JSON
         }
       throw new Error(errorMsg);
     }
 
-    const data: any[][] = await response.json(); // Response is array of arrays
+    const data: any[][] = await response.json(); 
 
     if (!Array.isArray(data)) {
        console.error(`Unexpected response format from Binance klines API (${envLabel}):`, data);
        throw new Error(`Invalid data received from Binance API (klines, ${envLabel}).`);
     }
 
-    // Map the raw array data to Candle objects
     return data.map((k: any[]): Candle => ({
       openTime: Number(k[0]),
       open: parseFloat(k[1]),
@@ -456,17 +468,15 @@ export async function getCandlestickData(
       numberOfTrades: Number(k[8]),
       takerBuyBaseAssetVolume: parseFloat(k[9]),
       takerBuyQuoteAssetVolume: parseFloat(k[10]),
-      ignore: parseFloat(k[11]), // Binance API includes this field
+      ignore: parseFloat(k[11]), 
     }));
 
   } catch (error) {
     console.error(`Error fetching candlestick data for ${symbol} (${interval}) from ${envLabel}:`, error);
-    // Re-throw the error or handle it based on application needs
-    // If it's a known error like invalid symbol, we might have already returned []
-     if (error instanceof Error && error.message.includes('-1121')) { // Check error code in message
-        return []; // Ensure empty array is returned for invalid symbols caught here
+     if (error instanceof Error && error.message.includes('-1121')) { 
+        return []; 
      }
-    throw error; // Re-throw other errors
+    throw error; 
   }
 }
 
@@ -484,7 +494,6 @@ export async function getExchangeInfo(isTestnet: boolean, isFutures: boolean = f
   console.log(`Getting Exchange Info from ${envLabel}`);
 
   const apiUrl = getApiUrl(isTestnet, isFutures);
-  // Use different exchangeInfo endpoint for Futures
   const endpoint = isFutures ? `${apiUrl}/fapi/v1/exchangeInfo` : `${apiUrl}/api/v3/exchangeInfo`;
 
   try {
@@ -500,22 +509,18 @@ export async function getExchangeInfo(isTestnet: boolean, isFutures: boolean = f
 
     const info = await response.json();
 
-    // Basic check to ensure symbols array exists
     if (!info || !Array.isArray(info.symbols)) {
        console.error(`Unexpected response format from Binance exchangeInfo API (${envLabel}):`, info);
        throw new Error(`Invalid data received from Binance API for exchange info (${envLabel}).`);
     }
 
-    // Map to our SymbolInfo structure, adapting for Futures/Spot differences
     const symbols: SymbolInfo[] = info.symbols.map((s: any) => ({
         symbol: s.symbol,
         status: s.status,
         baseAsset: s.baseAsset,
         quoteAsset: s.quoteAsset,
-        // Spot specific fields (check existence)
-        isSpotTradingAllowed: s.isSpotTradingAllowed ?? false, // Default to false if not present
+        isSpotTradingAllowed: s.isSpotTradingAllowed ?? false, 
         isMarginTradingAllowed: s.isMarginTradingAllowed,
-        // Futures specific fields (check existence)
         contractType: s.contractType,
         deliveryDate: s.deliveryDate,
     }));
@@ -523,8 +528,7 @@ export async function getExchangeInfo(isTestnet: boolean, isFutures: boolean = f
     return {
       timezone: info.timezone,
       serverTime: info.serverTime,
-      symbols: symbols.sort((a, b) => a.symbol.localeCompare(b.symbol)), // Sort symbols
-      // Map other needed fields like rateLimits if necessary
+      symbols: symbols.sort((a, b) => a.symbol.localeCompare(b.symbol)), 
     };
 
   } catch (error) {
@@ -532,3 +536,6 @@ export async function getExchangeInfo(isTestnet: boolean, isFutures: boolean = f
     throw new Error(`Failed to get exchange info from ${envLabel}: ${error instanceof Error ? error.message : error}`);
   }
 }
+
+
+    

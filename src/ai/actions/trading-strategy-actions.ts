@@ -1,3 +1,4 @@
+
 // src/ai/actions/trading-strategy-actions.ts
 'use server';
 
@@ -7,11 +8,12 @@
  */
 
 import { z } from 'zod';
-import { ai } from '@/ai/ai-instance'; // Assuming ai-instance is correctly set up
-import { getCandlestickData, placeOrder, Candle } from '@/services/binance'; // Assuming Candles are needed for backtest
-import type { BacktestParams, BacktestResult, RunParams, RunResult, DefineStrategyParams, DefineStrategyResult, Strategy, ApiEnvironment } from '@/ai/types/strategy-types'; // Added ApiEnvironment
+import { ai } from '@/ai/ai-instance'; 
+import { getCandlestickData, placeOrder, type Candle, type OrderParams, type OrderResponse } from '@/services/binance';
+import type { BacktestParams, BacktestResult, RunParams, RunResult, DefineStrategyParams, DefineStrategyResult, Strategy, ApiEnvironment } from '@/ai/types/strategy-types';
 import { BacktestParamsSchema, BacktestResultSchema, RunParamsSchema, RunResultSchema, DefineStrategyParamsSchema, DefineStrategyResultSchema, StrategySchema } from '@/ai/schemas/strategy-schemas';
-import { fetchSecureApiKey, fetchSecureSecretKey } from '@/lib/secure-api'; // Placeholder for secure key retrieval
+import { fetchSecureApiKey, fetchSecureSecretKey } from '@/lib/secure-api';
+import { sendTelegramMessageAction } from '@/actions/telegramActions'; // Import Telegram action
 
 // ----- Backtesting Action -----
 
@@ -23,7 +25,6 @@ import { fetchSecureApiKey, fetchSecureSecretKey } from '@/lib/secure-api'; // P
 export async function backtestStrategy(params: BacktestParams): Promise<BacktestResult> {
     console.log(`Server Action: Starting backtest for ${params.strategy.name} on ${params.pair} (Using Spot Data)`);
 
-    // Validate input using Zod schema before proceeding
     const validation = BacktestParamsSchema.safeParse(params);
     if (!validation.success) {
         console.error("Server Action (backtestStrategy) Error: Invalid input parameters.", validation.error.format());
@@ -35,19 +36,12 @@ export async function backtestStrategy(params: BacktestParams): Promise<Backtest
 
     const { strategy, pair, interval, startDate, endDate, initialBalance } = validation.data;
 
-    // ** Placeholder Backtesting Logic **
-    // In a real implementation:
-    // 1. Fetch historical data using getCandlestickData (potentially multiple calls for long ranges). Always fetch from Spot (isTestnet=false).
-    // 2. Simulate the strategy logic against the data.
-    // 3. Calculate performance metrics.
-
     let candles: Candle[] = [];
-    const isTestnet = false; // Backtesting always uses live Spot data
+    const isTestnet = false; 
     try {
-        // Crude limit estimation - improve for real backtests needing full range data
         const start = new Date(startDate).getTime();
         const end = new Date(endDate).getTime();
-        let intervalMs = 60 * 60 * 1000; // Default 1h
+        let intervalMs = 60 * 60 * 1000; 
         if (interval.endsWith('m')) intervalMs = parseInt(interval) * 60 * 1000;
         else if (interval.endsWith('h')) intervalMs = parseInt(interval) * 60 * 60 * 1000;
         else if (interval.endsWith('d')) intervalMs = parseInt(interval) * 24 * 60 * 60 * 1000;
@@ -57,12 +51,8 @@ export async function backtestStrategy(params: BacktestParams): Promise<Backtest
         }
 
         const estimatedCandles = Math.ceil((end - start) / intervalMs);
-        const limit = Math.min(Math.max(estimatedCandles, 100), 1000); // Fetch decent amount, max 1000 (Spot limit)
+        const limit = Math.min(Math.max(estimatedCandles, 100), 1000); 
         console.log(`Estimated candles: ${estimatedCandles}, Fetching limit: ${limit} for ${pair} (${interval}) from Spot`);
-
-        // NOTE: Real backtest needs ALL data. This is likely insufficient.
-        // Fetch Spot data (isTestnet = false explicitly)
-        // isFutures is implicitly false for Spot data
         candles = await getCandlestickData(pair, interval, isTestnet, false, limit);
         console.log(`Fetched ${candles.length} candles for backtest from Spot.`);
 
@@ -78,16 +68,15 @@ export async function backtestStrategy(params: BacktestParams): Promise<Backtest
         };
     }
 
-    // Simulate simple random results for placeholder
-    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1500)); // Simulate processing time
-    const totalTrades = Math.floor(Math.random() * candles.length / 5) + 2; // Simulate trades based on candle count
+    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1500)); 
+    const totalTrades = Math.floor(Math.random() * candles.length / 5) + 2; 
     const winningTrades = Math.floor(Math.random() * totalTrades);
     const losingTrades = totalTrades - winningTrades;
     const winRate = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : 0;
-    const pnlFactor = (Math.random() - 0.4); // -0.4 to 0.6
-    const totalPnl = initialBalance * pnlFactor * (Math.random() * 0.3 + 0.05); // Pnl between 30% loss and 60% gain range
+    const pnlFactor = (Math.random() - 0.4); 
+    const totalPnl = initialBalance * pnlFactor * (Math.random() * 0.3 + 0.05); 
     const totalPnlPercent = totalTrades > 0 ? (totalPnl / initialBalance) * 100 : 0;
-    const maxDrawdown = Math.random() * 40; // Random drawdown up to 40%
+    const maxDrawdown = Math.random() * 40; 
 
     console.log(`Server Action: Backtest complete for ${strategy.name} on ${pair}. PnL: ${totalPnlPercent.toFixed(2)}%`);
 
@@ -107,58 +96,101 @@ export async function backtestStrategy(params: BacktestParams): Promise<Backtest
 
 /**
  * Server Action to initiate live trading for a strategy on the specified market environment.
- * **PLACEHOLDER**: This should trigger a robust, persistent background execution mechanism.
+ * For demonstration, this will attempt to place a small MARKET BUY order.
  * @param params Parameters including the strategy, pair, interval, risk management, and environment.
- * @returns Promise resolving to RunResult indicating initial status.
+ * @returns Promise resolving to RunResult indicating initial status and trade attempt outcome.
  */
 export async function runStrategy(params: RunParams): Promise<RunResult> {
-    const { environment, strategy, pair, interval, stopLossPercent, takeProfitPercent } = params; // Destructure environment
+    const { environment, strategy, pair, interval } = params; // Destructure relevant params
     const isTestnet = environment.includes('testnet');
     const isFutures = environment.includes('futures');
     const envLabel = environment.replace('_', ' ').toUpperCase();
 
-    console.log(`Server Action: Initiating live strategy run for ${strategy.name} on ${pair} (${envLabel})`);
+    console.log(`Server Action: Initiating live strategy run (TEST ORDER) for ${strategy.name} on ${pair} (${envLabel})`);
 
-    // Validate input
     const validation = RunParamsSchema.safeParse(params);
     if (!validation.success) {
         console.error("Server Action (runStrategy) Error: Invalid input parameters.", validation.error.format());
         return { status: 'Error', message: `Invalid input: ${validation.error.format()._errors?.join(', ') || 'Validation failed.'}` };
     }
 
-    // ** Placeholder Logic **
-    // 1. Securely retrieve API keys for the specified `environment`.
-    // 2. Validate keys if not already confirmed.
-    // 3. Initiate a background task/job/service to:
-    //    - Monitor market data (getCandlestickData, potentially WebSockets) from the correct environment.
-    //    - Apply strategy logic (using strategy.prompt or defined rules).
-    //    - Place orders securely (placeOrder service action) with risk management on the correct environment.
-    //    - Log everything.
-    //    - Handle errors and state management.
+    let apiKey: string | null;
+    let secretKey: string | null;
+    let telegramBotToken: string | undefined = process.env.TELEGRAM_BOT_TOKEN;
+    let telegramChatId: string | undefined = process.env.TELEGRAM_CHAT_ID;
+    let orderResponse: OrderResponse | null = null;
+    let tradeAttemptMessage = '';
 
-    // Example secure key retrieval
     try {
-        const apiKey = await fetchSecureApiKey(environment);
-        const secretKey = await fetchSecureSecretKey(environment);
+        apiKey = await fetchSecureApiKey(environment);
+        secretKey = await fetchSecureSecretKey(environment);
         if (!apiKey || !secretKey) {
              throw new Error(`API keys for environment ${envLabel} not found or configured securely.`);
         }
-        // Keys are available here, pass them securely to the background task runner
-        console.log(`Server Action (runStrategy): API keys retrieved for ${envLabel} (placeholder). Starting background process...`);
-        // backgroundTaskRunner.start(strategy, pair, interval, apiKey, secretKey, isTestnet, isFutures, stopLossPercent, takeProfitPercent); // Pass flags
+        console.log(`Server Action (runStrategy): API keys retrieved for ${envLabel}. Attempting test order...`);
+
+        // Define test order parameters (MARKET BUY for ~11 USDT)
+        const orderParams: OrderParams = {
+            symbol: pair,
+            side: 'BUY',
+            type: 'MARKET',
+            quoteOrderQty: 11, // Target ~11 USDT value. Binance will calculate base quantity.
+        };
+        
+        console.log(`Server Action (runStrategy): Placing test order:`, orderParams);
+        orderResponse = await placeOrder(orderParams, apiKey, secretKey, isTestnet, isFutures);
+        console.log(`Server Action (runStrategy): Test order placed successfully for ${pair} (${envLabel}):`, orderResponse);
+        
+        const filledPrice = orderResponse.fills && orderResponse.fills.length > 0 ? parseFloat(orderResponse.fills[0].price) : parseFloat(orderResponse.price);
+        const executedQty = parseFloat(orderResponse.executedQty);
+
+        tradeAttemptMessage = `✅ TEST ORDER PLACED (${envLabel}):\n` +
+                              `Strategy: ${strategy.name}\n` +
+                              `Pair: ${orderResponse.symbol}\n` +
+                              `Side: ${orderResponse.side}\n` +
+                              `Type: ${orderResponse.type}\n` +
+                              `Status: ${orderResponse.status}\n` +
+                              `Executed Qty: ${executedQty.toFixed(8)} ${strategy.name.includes('BTC') ? 'BTC' : orderResponse.symbol.replace(/USDT|BUSD|TRY|EUR$/, '')}\n` + // Basic asset guess
+                              `Avg. Fill Price: ${filledPrice.toFixed(4)} ${pair.endsWith('USDT') ? 'USDT' : orderResponse.symbol.substring(orderResponse.symbol.length - 4)}\n` + // Basic quote guess
+                              `Total Value: ${parseFloat(orderResponse.cummulativeQuoteQty).toFixed(2)} ${pair.endsWith('USDT') ? 'USDT' : orderResponse.symbol.substring(orderResponse.symbol.length - 4)}\n` +
+                              `Order ID: ${orderResponse.orderId}`;
 
     } catch (error) {
          const message = error instanceof Error ? error.message : String(error);
-         console.error(`Server Action (runStrategy) Error: Failed to retrieve API keys or start background task for ${envLabel}: ${message}`);
-         return { status: 'Error', message: `Failed to start strategy: ${message}` };
+         console.error(`Server Action (runStrategy) Error during test order for ${pair} (${envLabel}): ${message}`);
+         tradeAttemptMessage = `❌ TEST ORDER FAILED (${envLabel}) for ${strategy.name} on ${pair}:\nError: ${message}`;
+         
+         // Send Telegram notification for failure
+         if (telegramBotToken && telegramChatId) {
+            try {
+                await sendTelegramMessageAction(telegramBotToken, telegramChatId, tradeAttemptMessage);
+                console.log(`Telegram notification sent for order failure on ${pair}.`);
+            } catch (tgError) {
+                console.error(`Failed to send Telegram notification for order failure on ${pair}:`, tgError);
+            }
+        } else {
+            console.warn(`Telegram token/chat ID not set. Skipping failure notification for ${pair}.`);
+        }
+         return { status: 'Error', message: `Test order failed: ${message}` };
     }
 
-
-    // Simulate immediate success for placeholder
-    await new Promise(resolve => setTimeout(resolve, 300));
+    // Send Telegram notification for success
+    if (orderResponse && telegramBotToken && telegramChatId) {
+        try {
+            await sendTelegramMessageAction(telegramBotToken, telegramChatId, tradeAttemptMessage, 'MarkdownV2'); // Using Markdown for better formatting potential
+            console.log(`Telegram notification sent for successful test order on ${pair}.`);
+        } catch (tgError) {
+            console.error(`Failed to send Telegram notification for successful test order on ${pair}:`, tgError);
+            tradeAttemptMessage += "\n(Telegram notification failed to send)";
+        }
+    } else if (orderResponse) {
+        console.warn(`Telegram token/chat ID not set. Skipping success notification for ${pair}.`);
+        tradeAttemptMessage += "\n(Telegram notification skipped: token/chat ID missing)";
+    }
+    
     return {
-        status: 'Active', // Indicates the initiation was successful
-        message: `Strategy ${strategy.name} started on ${pair} (${envLabel}). Monitoring in background.`,
+        status: 'Active', // Indicates the initiation (and test order) was successful
+        message: `Strategy ${strategy.name} run (test order placed) on ${pair} (${envLabel}). Details: ${tradeAttemptMessage}`,
     };
 }
 
@@ -172,8 +204,7 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
 export async function defineNewStrategy(params: DefineStrategyParams): Promise<DefineStrategyResult> {
     console.log(`Server Action: AI attempting to define strategy: ${params.name}`);
 
-     // Validate input
-    const validation = DefineStrategyParamsSchema.safeParse(params);
+     const validation = DefineStrategyParamsSchema.safeParse(params);
      if (!validation.success) {
         console.error("Server Action (defineNewStrategy) Error: Invalid input parameters.", validation.error.format());
         return { success: false, message: `Invalid input: ${validation.error.format()._errors?.join(', ') || 'Validation failed.'}` };
@@ -181,37 +212,17 @@ export async function defineNewStrategy(params: DefineStrategyParams): Promise<D
 
      const { name, description, prompt } = validation.data;
 
-    // ** Placeholder AI Logic **
-    // 1. Use Genkit (ai.generate or a specific flow/prompt) to process the user's prompt.
-    // 2. The AI should ideally output a structured representation of the strategy
-    //    (e.g., specific indicators, conditions, actions) or even validate the logic.
-    // 3. For now, we simulate success/failure and create a basic Strategy object.
-
     try {
-        // Simulate AI processing delay
         await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 2000));
 
-        // --- Placeholder for potential Genkit call ---
-        // const definePrompt = ai.definePrompt(...) // Define a prompt for strategy generation
-        // const { output } = await definePrompt({ name, description, userPrompt: prompt });
-        // if (!output || !output.isValid) { // Assuming AI returns validation status
-        //     throw new Error(output.reason || "AI could not generate a valid strategy from the prompt.");
-        // }
-        // const generatedLogic = output.logic; // Assuming AI returns structured logic
-        // --------------------------------------------
-
-        // Simulate success/failure randomly for now
-        if (Math.random() > 0.25) { // 75% chance of success
-             // Create a new strategy object - ID generation should be robust
+        if (Math.random() > 0.25) { 
              const newStrategy: Strategy = {
-                 id: `ai_${name.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}${Math.random().toString(16).slice(2, 6)}`, // More unique ID
+                 id: `ai_${name.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}${Math.random().toString(16).slice(2, 6)}`, 
                  name: name,
-                 description: description, // Could potentially be enhanced by AI response
-                 prompt: prompt, // Store original prompt
-                  // generatedLogic: generatedLogic, // Store structured logic if available
+                 description: description, 
+                 prompt: prompt, 
              };
 
-             // Validate the generated strategy object itself
              const strategyValidation = StrategySchema.safeParse(newStrategy);
              if (!strategyValidation.success) {
                  console.error("Server Action (defineNewStrategy) Error: Generated strategy object is invalid.", strategyValidation.error.format());
@@ -221,7 +232,7 @@ export async function defineNewStrategy(params: DefineStrategyParams): Promise<D
              console.log(`Server Action: AI successfully defined strategy '${name}'. ID: ${newStrategy.id}`);
              return {
                  success: true,
-                 strategy: strategyValidation.data, // Return validated data
+                 strategy: strategyValidation.data, 
                  message: `AI successfully defined strategy '${name}'.`,
              };
          } else {
@@ -237,3 +248,6 @@ export async function defineNewStrategy(params: DefineStrategyParams): Promise<D
         };
     }
 }
+
+
+    
