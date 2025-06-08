@@ -1,5 +1,4 @@
 
-
 // src/app/page.tsx
 'use client';
 
@@ -421,10 +420,22 @@ export default function Dashboard() {
                    const stablecoins = ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI']; 
                    const tryEurRate = { TRY: 0.03, EUR: 1.08 }; 
                    
-                    let basePrices: Record<string, number> = {
+                   let basePrices: Record<string, number> = {
                         BTC: 65000, ETH: 3500, SOL: 150, BNB: 600,
                         ADA: 0.45, XRP: 0.5, DOGE: 0.15, SHIB: 0.000025,
                     };
+                    // In a real app, you'd fetch current prices for non-stablecoins
+                    // For now, using rough estimates for major assets
+                    if (selectedPair && allAvailablePairsStore.length > 0) {
+                        const currentPairInfo = allAvailablePairsStore.find(p => p.symbol === selectedPair);
+                        if (currentPairInfo) {
+                            // This is a simplification. Fetch actual ticker price.
+                            // For demonstration, we'll just use the basePrices.
+                            // If latestCandleInfo were available and reliable:
+                            // basePrices[currentPairInfo.baseAsset] = latestCandleInfo.close;
+                        }
+                    }
+
 
                    filteredBalances.forEach(b => {
                       const totalAmount = parseFloat(b.free) + parseFloat(b.locked);
@@ -479,7 +490,7 @@ export default function Dashboard() {
         setLoadingPortfolio(false);
       }
    // eslint-disable-next-line react-hooks/exhaustive-deps
-   }, [activeApiEnvironment, activeEnvValidationStatus]);
+   }, [activeApiEnvironment, activeEnvValidationStatus]); // Removed selectedPair from deps as price fetching here is simplified
 
 
   // --- Handlers ---
@@ -984,6 +995,17 @@ export default function Dashboard() {
         BTC: 65000, ETH: 3500, SOL: 150, BNB: 600,
         ADA: 0.45, XRP: 0.5, DOGE: 0.15, SHIB: 0.000025,
     };
+     // In a real app, you'd fetch current prices for non-stablecoins
+    // For now, using rough estimates for major assets
+    if (selectedPair && allAvailablePairsStore.length > 0) {
+        const currentPairInfo = allAvailablePairsStore.find(p => p.symbol === selectedPair);
+        if (currentPairInfo) {
+            // This is a simplification. Fetch actual ticker price.
+            // For demonstration, we'll just use the basePrices.
+            // If latestCandleInfo were available and reliable:
+            // basePrices[currentPairInfo.baseAsset] = latestCandleInfo.close;
+        }
+    }
     
     return portfolioData
         .map(balance => {
@@ -1002,7 +1024,7 @@ export default function Dashboard() {
         })
         .filter((item): item is { name: string; value: number } => item !== null)
         .sort((a, b) => b.value - a.value); 
-}, [portfolioData, totalPortfolioValueUsd]);
+}, [portfolioData, totalPortfolioValueUsd, selectedPair]); // Added selectedPair to deps
 
   const PortfolioPieChart = () => {
     if (loadingPortfolio || !pieChartData || pieChartData.length === 0) {
@@ -1747,7 +1769,7 @@ export default function Dashboard() {
                </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="h-[2500px] w-full">
+            <div className="h-[650px] w-full">
               {selectedPair && selectedInterval ? (
                 <TradingViewWidget
                   symbolPair={selectedPair}
@@ -1769,3 +1791,4 @@ export default function Dashboard() {
     </SidebarProvider>
   );
 }
+
