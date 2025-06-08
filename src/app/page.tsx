@@ -421,14 +421,10 @@ export default function Dashboard() {
                    const stablecoins = ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI']; 
                    const tryEurRate = { TRY: 0.03, EUR: 1.08 }; 
                    
-                    // Define base prices with fallbacks
                     let basePrices: Record<string, number> = {
                         BTC: 65000, ETH: 3500, SOL: 150, BNB: 600,
                         ADA: 0.45, XRP: 0.5, DOGE: 0.15, SHIB: 0.000025,
                     };
-                    
-                    // Conditionally update basePrices from latestCandleInfo if available
-                    // This part is removed because latestCandleInfo is no longer fetched for TradingView widget
 
                    filteredBalances.forEach(b => {
                       const totalAmount = parseFloat(b.free) + parseFloat(b.locked);
@@ -483,7 +479,7 @@ export default function Dashboard() {
         setLoadingPortfolio(false);
       }
    // eslint-disable-next-line react-hooks/exhaustive-deps
-   }, [activeApiEnvironment, activeEnvValidationStatus]); // Removed apiKeys from dependency array as it caused too many re-fetches on input change
+   }, [activeApiEnvironment, activeEnvValidationStatus]);
 
 
   // --- Handlers ---
@@ -984,13 +980,10 @@ export default function Dashboard() {
     const stablecoins = ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI'];
     const tryEurRate = { TRY: 0.03, EUR: 1.08 }; 
     
-    // Define base prices with fallbacks
     let basePrices: Record<string, number> = {
         BTC: 65000, ETH: 3500, SOL: 150, BNB: 600,
         ADA: 0.45, XRP: 0.5, DOGE: 0.15, SHIB: 0.000025,
     };
-    // No longer attempting to use latestCandleInfo for pie chart as it's not directly available
-    // with TradingView widget in the same way. Using fixed/approximate base prices.
     
     return portfolioData
         .map(balance => {
@@ -1004,10 +997,6 @@ export default function Dashboard() {
                 valueUsd = totalAmount * tryEurRate.EUR;
             } else if (basePrices[balance.asset]) {
                 valueUsd = totalAmount * basePrices[balance.asset];
-            } else {
-                // Fallback for assets not in basePrices - might be zero or requires more complex price fetching
-                // For simplicity, we'll currently exclude them from pie chart value if no direct price.
-                // Could be enhanced by fetching multiple pairs for price conversion later.
             }
             return valueUsd > 0.01 ? { name: balance.asset, value: valueUsd } : null;
         })
@@ -1221,7 +1210,6 @@ export default function Dashboard() {
         </Card>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 flex-1">
-          {/* Portfolio/History/Logs Tabs - Now spans full width on its row */}
           <Card className="lg:col-span-3">
             <CardContent className="p-0"> 
               <Tabs defaultValue="portfolio" className="w-full">
@@ -1765,7 +1753,7 @@ export default function Dashboard() {
                   symbolPair={selectedPair}
                   interval={selectedInterval}
                   exchangePrefix="BINANCE" 
-                  autosize={true} 
+                  autosize={false} 
                   className="w-full h-full"
                 />
               ) : (

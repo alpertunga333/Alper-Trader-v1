@@ -10,39 +10,37 @@ interface TradingViewWidgetProps {
   interval: string;
   exchangePrefix?: string;
   className?: string;
-  autosize?: boolean;
+  autosize?: boolean; // This prop now significantly influences behavior
 }
 
 const SCRIPT_ID = 'tradingview-widget-script';
 const CONTAINER_ID_BASE = 'tradingview_chart_container_';
 
 const getTradingViewInterval = (interval: string): string => {
-  if (!interval) return 'D'; // Default to Daily if undefined
-  if (interval.endsWith('m')) return interval.slice(0, -1); // '1m' -> '1', '30m' -> '30'
-  if (interval.endsWith('h')) return (parseInt(interval.slice(0, -1)) * 60).toString(); // '1h' -> '60', '4h' -> '240'
-  if (interval.endsWith('d')) return interval.toUpperCase(); // '1d' -> '1D', '3d' -> '3D'
-  if (interval.endsWith('w')) return interval.toUpperCase(); // '1w' -> '1W'
-  if (interval.toUpperCase() === '1M') return 'M'; // '1M' (Month) -> 'M'
-  return 'D'; // Default fallback
+  if (!interval) return 'D';
+  if (interval.endsWith('m')) return interval.slice(0, -1);
+  if (interval.endsWith('h')) return (parseInt(interval.slice(0, -1)) * 60).toString();
+  if (interval.endsWith('d')) return interval.toUpperCase();
+  if (interval.endsWith('w')) return interval.toUpperCase();
+  if (interval.toUpperCase() === '1M') return 'M';
+  return 'D';
 };
 
 export function TradingViewWidget({
   symbolPair,
   interval,
   exchangePrefix = 'BINANCE',
-  className,
-  autosize = false,
+  className, // className for the root div of this component
+  autosize = true, // Default to TV's autosize, but page.tsx will pass false for explicit sizing
 }: TradingViewWidgetProps) {
   const containerId = React.useMemo(() => `${CONTAINER_ID_BASE}${Math.random().toString(36).substr(2, 9)}`, []);
   const widgetRef = React.useRef<HTMLDivElement>(null);
-  const [currentTheme, setCurrentTheme] = React.useState<'light' | 'dark'>('dark'); // Default to dark
+  const [currentTheme, setCurrentTheme] = React.useState<'light' | 'dark'>('dark');
+  const [measuredDimensions, setMeasuredDimensions] = React.useState<{ width: number; height: number } | null>(null);
 
   React.useEffect(() => {
-    // Determine theme based on document class
     const theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
     setCurrentTheme(theme);
-
-    // Optional: Observe theme changes
     const observer = new MutationObserver(() => {
       setCurrentTheme(document.documentElement.classList.contains('dark') ? 'dark' : 'light');
     });
@@ -50,6 +48,24 @@ export function TradingViewWidget({
     return () => observer.disconnect();
   }, []);
 
+  // Effect to measure container if not using TV's autosize (component autosize=false)
+  React.useLayoutEffect(() => {
+    if (!autosize && widgetRef.current) {
+      const { offsetWidth, offsetHeight } = widgetRef.current;
+      if (offsetWidth > 0 && offsetHeight > 0) {
+        if (!measuredDimensions || measuredDimensions.width !== offsetWidth || measuredDimensions.height !== offsetHeight) {
+          setMeasuredDimensions({ width: offsetWidth, height: offsetHeight });
+        }
+      } else if (measuredDimensions !== null) {
+        setMeasuredDimensions(null); // Container became 0x0, clear measured
+      }
+    } else if (autosize && measuredDimensions !== null) {
+      // If switched to component's autosize mode, clear measured dimensions
+      setMeasuredDimensions(null);
+    }
+  }, [autosize, measuredDimensions, className, symbolPair, interval]); // Re-check if className or key props change
+
+  // Effect to load script and create/update widget
   React.useEffect(() => {
     if (!symbolPair || !widgetRef.current) {
       return;
@@ -57,35 +73,50 @@ export function TradingViewWidget({
     
     const formattedSymbol = `${exchangePrefix}:${symbolPair.replace('/', '')}`;
     const tvInterval = getTradingViewInterval(interval);
-
     const script = document.getElementById(SCRIPT_ID) as HTMLScriptElement | null;
 
-    const createWidget = () => {
+    const createWidgetInstance = () => {
       if (widgetRef.current && typeof TradingView !== 'undefined' && TradingView.widget) {
-        // Clear previous widget if any
-        widgetRef.current.innerHTML = '';
-        new TradingView.widget({
-          autosize: autosize,
-          width: autosize ? "100%" : undefined, // Conditional width
-          height: autosize ? "100%" : undefined, // Conditional height
+        widgetRef.current.innerHTML = ''; // Clear previous widget
+
+        const widgetOptions: any = {
           symbol: formattedSymbol,
           interval: tvInterval,
           timezone: 'Etc/UTC',
           theme: currentTheme,
-          style: '1', // 1 for Bars, 2 for Candles, 3 for Line, etc. (Candles default for most)
+          style: '1',
           locale: 'tr',
           enable_publishing: false,
           hide_side_toolbar: false,
           allow_symbol_change: true,
           container_id: containerId,
-          toolbar_bg: currentTheme === 'dark' ? '#131722' : '#ffffff', // Match theme for toolbar
-          studies: [
-            "MASimple@tv-basicstudies", // Moving Average
-            "Volume@tv-basicstudies" // Volume
-          ],
-          // details: true, // Show contract details panel
-          // news: true, // Show news panel
-        });
+          toolbar_bg: currentTheme === 'dark' ? '#131722' : '#ffffff',
+          studies: ["MASimple@tv-basicstudies", "Volume@tv-basicstudies"],
+        };
+
+        if (autosize) { // If component's autosize prop is true
+          widgetOptions.autosize = true; // Use TV script's own autosize feature
+          widgetOptions.width = "100%";
+          widgetOptions.height = "100%";
+        } else if (measuredDimensions && measuredDimensions.width > 0 && measuredDimensions.height > 0) {
+          // If component's autosize is false, and we have valid measured dimensions
+          widgetOptions.autosize = false; // Do NOT use TV script's autosize
+          widgetOptions.width = measuredDimensions.width;
+          widgetOptions.height = measuredDimensions.height;
+        } else if (!autosize && !measuredDimensions) {
+          // Component's autosize is false, but dimensions not yet measured or container is 0x0.
+          // Widget creation will be deferred until measuredDimensions is set by useLayoutEffect.
+          // console.log("TradingViewWidget: Waiting for dimensions (or 0x0 container) in non-autosize mode.");
+          return; 
+        } else {
+          // Fallback (should ideally not be reached with proper state management)
+          console.warn("TradingViewWidget: Unexpected state for widget creation. Defaulting to TV autosize.");
+          widgetOptions.autosize = true;
+          widgetOptions.width = "100%";
+          widgetOptions.height = "100%";
+        }
+        
+        new TradingView.widget(widgetOptions);
       }
     };
 
@@ -95,14 +126,12 @@ export function TradingViewWidget({
       newScript.type = 'text/javascript';
       newScript.src = 'https://s3.tradingview.com/tv.js';
       newScript.async = true;
-      newScript.onload = createWidget;
+      newScript.onload = createWidgetInstance;
       document.head.appendChild(newScript);
     } else {
-      // If script already exists, wait for TradingView object to be available
-      // This can happen if the component re-renders quickly
       const checkTVReady = () => {
         if (typeof TradingView !== 'undefined' && TradingView.widget) {
-          createWidget();
+          createWidgetInstance();
         } else {
           setTimeout(checkTVReady, 100);
         }
@@ -111,26 +140,25 @@ export function TradingViewWidget({
     }
 
     return () => {
-      // Cleanup widget instance if TradingView and remove function exist
-      // This is a bit tricky as TV widget doesn't have a formal destroy method for script-injected widgets.
-      // Clearing the container is the most straightforward way.
       if (widgetRef.current) {
         widgetRef.current.innerHTML = '';
       }
     };
-  }, [symbolPair, interval, exchangePrefix, currentTheme, containerId, autosize]);
+  }, [symbolPair, interval, exchangePrefix, currentTheme, containerId, autosize, measuredDimensions]);
 
   return (
     <div
       id={containerId}
       ref={widgetRef}
-      className={cn("tradingview-widget-container", className, !autosize && "w-full h-full")}
+      // The className (e.g., h-full w-full from page.tsx) is applied here.
+      // This ensures this div has the dimensions for useLayoutEffect to measure if !autosize.
+      // If component's 'autosize' prop is true, then style also sets height:100%, width:100%.
+      className={cn("tradingview-widget-container", className)}
       style={autosize ? { width: '100%', height: '100%' } : undefined}
     />
   );
 }
 
-// Declare TradingView global for TypeScript
 declare global {
   interface Window {
     TradingView: any;
