@@ -124,7 +124,7 @@ import { TelegramSettingsPanel } from '@/components/dashboard/telegram-settings-
 import { TradingViewWidget } from '@/components/dashboard/tradingview-widget';
 
 // Recharts components that might be needed for PortfolioPieChart
-import { Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts'; // Removed ComposedChart, Bar, XAxis, YAxis, CartesianGrid as they are not used for main chart
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 
 
 // Placeholder: Replace with actual trade history fetching if implemented
@@ -421,7 +421,7 @@ export default function Dashboard() {
                    const stablecoins = ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI']; 
                    const tryEurRate = { TRY: 0.03, EUR: 1.08 }; 
                    
-                   // Define base prices with fallbacks
+                    // Define base prices with fallbacks
                     let basePrices: Record<string, number> = {
                         BTC: 65000, ETH: 3500, SOL: 150, BNB: 600,
                         ADA: 0.45, XRP: 0.5, DOGE: 0.15, SHIB: 0.000025,
@@ -1220,40 +1220,8 @@ export default function Dashboard() {
         </Card>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 flex-1">
-          {/* Main Chart Area */}
-          <Card className="lg:col-span-2">
-             <CardHeader className="flex flex-col space-y-1 pb-2 pt-3 px-4">
-                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                    <CardTitle className="text-xl font-bold text-foreground">
-                        {selectedPair ? `${selectedPair.replace(/USDT$/, '/USDT')}` : "Grafik"} 
-                    </CardTitle>
-                </div>
-                 <CardDescription className="text-xs text-muted-foreground pt-1">
-                   {selectedInterval} {activeApiEnvironment && `(${activeApiEnvironment.replace('_', ' ').toUpperCase()})`} - TradingView
-                 </CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="h-[2640px] w-full">
-                {selectedPair && selectedInterval ? (
-                  <TradingViewWidget
-                    symbolPair={selectedPair}
-                    interval={selectedInterval}
-                    exchangePrefix="BINANCE" // Assuming Binance, can be made dynamic
-                    autosize={true} // Let the widget fill the container
-                    className="w-full h-full"
-                  />
-                ) : (
-                  <div className="flex items-center justify-center h-full text-muted-foreground">
-                    Grafiği görüntülemek için bir parite ve zaman aralığı seçin.
-                     {loadingPairs && <Loader2 className="ml-2 h-4 w-4 animate-spin inline-block" />}
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-
-          <Card className="lg:col-span-1">
+          {/* Portfolio/History/Logs Tabs - Now spans full width */}
+          <Card className="lg:col-span-3">
             <CardContent className="p-0"> 
               <Tabs defaultValue="portfolio" className="w-full">
                 <TabsList className="grid w-full grid-cols-3 rounded-t-lg rounded-b-none p-0 h-auto"> 
@@ -1776,7 +1744,40 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Main Chart Area - Moved to the bottom */}
+        <Card className="mt-4 md:mt-6">
+           <CardHeader className="flex flex-col space-y-1 pb-2 pt-3 px-4">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                  <CardTitle className="text-xl font-bold text-foreground">
+                      {selectedPair ? `${selectedPair.replace(/USDT$/, '/USDT')}` : "Grafik"} 
+                  </CardTitle>
+              </div>
+               <CardDescription className="text-xs text-muted-foreground pt-1">
+                 {selectedInterval} {activeApiEnvironment && `(${activeApiEnvironment.replace('_', ' ').toUpperCase()})`} - TradingView
+               </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="h-[500px] w-full">
+              {selectedPair && selectedInterval ? (
+                <TradingViewWidget
+                  symbolPair={selectedPair}
+                  interval={selectedInterval}
+                  exchangePrefix="BINANCE" 
+                  autosize={true} 
+                  className="w-full h-full"
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  Grafiği görüntülemek için bir parite ve zaman aralığı seçin.
+                   {loadingPairs && <Loader2 className="ml-2 h-4 w-4 animate-spin inline-block" />}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </SidebarInset>
     </SidebarProvider>
   );
 }
+
