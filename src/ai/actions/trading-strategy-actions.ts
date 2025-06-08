@@ -137,21 +137,25 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
             type: 'MARKET',
         };
 
+        // Futures: Always use quantity. Spot: Use quoteOrderQty.
         if (isFutures) {
             if (pair === 'BTCUSDT') {
-                orderParams.quantity = 0.0002;
+                orderParams.quantity = 0.0002; // Approx 12-13 USD
             } else if (pair === 'ETHUSDT') {
-                orderParams.quantity = 0.0035;
+                orderParams.quantity = 0.0035; // Approx 12-13 USD
             } else if (pair === 'LTCUSDT') {
-                orderParams.quantity = 0.15;
+                orderParams.quantity = 0.15; // Approx 12-13 USD
             } else if (pair === 'SOLUSDT') {
-                orderParams.quantity = 0.08;
+                orderParams.quantity = 0.08; // Approx 12-13 USD
             } else {
-                orderParams.quantity = 0.01; // Default small quantity for other futures pairs
+                // Generic small quantity for other futures pairs
+                // This might hit MIN_NOTIONAL or LOT_SIZE issues depending on the pair & price.
+                orderParams.quantity = 0.01;
             }
         } else { // Spot
-            orderParams.quoteOrderQty = 11; // Use quoteOrderQty for Spot
+            orderParams.quoteOrderQty = 11; // Approx 11 USDT
         }
+
 
         console.log(`Server Action (runStrategy): Placing test order with params:`, orderParams);
         orderResponseFromApi = await placeOrder(orderParams, apiKey, secretKey, isTestnet, isFutures);
@@ -160,7 +164,8 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
         const filledPrice = orderResponseFromApi.fills && orderResponseFromApi.fills.length > 0 ? parseFloat(orderResponseFromApi.fills[0].price) : parseFloat(orderResponseFromApi.price);
         const executedQty = parseFloat(orderResponseFromApi.executedQty);
         const baseAsset = orderResponseFromApi.symbol.replace(/USDT|BUSD|TRY|EUR|FDUSD$/, '');
-        const quoteAsset = pair.match(/USDT|BUSD|TRY|EUR|FDUSD$/)?.[0] || '';
+        const quoteAssetMatch = pair.match(/USDT|BUSD|TRY|EUR|FDUSD$/);
+        const quoteAsset = quoteAssetMatch ? quoteAssetMatch[0] : '';
 
 
         tradeAttemptMessage = `✅ TEST EMRİ VERİLDİ (${envLabel}):\n` +
@@ -169,10 +174,33 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
                               `Yön: ${orderResponseFromApi.side}\n` +
                               `Tip: ${orderResponseFromApi.type}\n` +
                               `Durum: ${orderResponseFromApi.status}\n` +
+                              `Giriş Fiyatı (Ort.): ${filledPrice.toFixed(quoteAsset === 'TRY' ? 2 : 4)} ${quoteAsset}\n` +
                               `İşlem Miktarı: ${executedQty.toFixed(8)} ${baseAsset}\n` +
-                              `Ort. Dolum Fiyatı: ${filledPrice.toFixed(4)} ${quoteAsset}\n` +
                               `Toplam Değer: ${parseFloat(orderResponseFromApi.cummulativeQuoteQty).toFixed(2)} ${quoteAsset}\n` +
-                              `Emir ID: ${orderResponseFromApi.orderId}`;
+                              `Emir ID: ${orderResponseFromApi.orderId}\n`;
+
+        let riskManagementInfo = '';
+        if (params.stopLossPercent || params.takeProfitPercent) {
+            riskManagementInfo += `\n--- Risk Ayarları (Parametreler) ---\n`;
+            if (params.stopLossPercent) {
+                const potentialSlPrice = params.side === 'BUY'
+                    ? filledPrice * (1 - params.stopLossPercent / 100)
+                    : filledPrice * (1 + params.stopLossPercent / 100);
+                riskManagementInfo += `Stop-Loss Yüzdesi: ${params.stopLossPercent}%\n`;
+                riskManagementInfo += `Tahmini Stop-Loss Fiyatı: ${potentialSlPrice.toFixed(quoteAsset === 'TRY' ? 2 : 4)} ${quoteAsset}\n`;
+            }
+            if (params.takeProfitPercent) {
+                const potentialTpPrice = params.side === 'BUY'
+                    ? filledPrice * (1 + params.takeProfitPercent / 100)
+                    : filledPrice * (1 - params.takeProfitPercent / 100);
+                riskManagementInfo += `Kâr-Al Yüzdesi: ${params.takeProfitPercent}%\n`;
+                riskManagementInfo += `Tahmini Kâr-Al Fiyatı: ${potentialTpPrice.toFixed(quoteAsset === 'TRY' ? 2 : 4)} ${quoteAsset}\n`;
+            }
+        }
+        if (riskManagementInfo) {
+            tradeAttemptMessage += riskManagementInfo;
+        }
+
 
     } catch (error) {
          const message = error instanceof Error ? error.message : String(error);
@@ -182,12 +210,12 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
          if (telegramBotToken && telegramChatId) {
             try {
                 await sendTelegramMessageAction(telegramBotToken, telegramChatId, tradeAttemptMessage);
-                console.log(`Telegram notification sent for order failure on ${pair}.`);
+                console.log(`Telegram bildirimi gönderildi (başarısız emir): ${pair}.`);
             } catch (tgError) {
-                console.error(`Failed to send Telegram notification for order failure on ${pair}:`, tgError);
+                console.error(`Telegram hata bildirimi gönderilemedi (başarısız emir): ${pair}:`, tgError);
             }
         } else {
-            console.warn(`Telegram token/chat ID not set. Skipping failure notification for ${pair}.`);
+            console.warn(`Telegram token/chat ID ayarlanmamış. Hata bildirimi atlanıyor: ${pair}.`);
         }
          return { status: 'Hata', message: `Test emri başarısız oldu: ${message}. Lütfen API anahtarlarınızı, parite limitlerini ve ağ bağlantınızı kontrol edin.`, order: undefined };
     }
@@ -195,13 +223,13 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
     if (orderResponseFromApi && telegramBotToken && telegramChatId) {
         try {
             await sendTelegramMessageAction(telegramBotToken, telegramChatId, tradeAttemptMessage);
-            console.log(`Telegram notification sent for successful test order on ${pair}.`);
+            console.log(`Telegram bildirimi gönderildi (başarılı test emri): ${pair}.`);
         } catch (tgError) {
-            console.error(`Failed to send Telegram notification for successful test order on ${pair}:`, tgError);
+            console.error(`Telegram başarı bildirimi gönderilemedi (başarılı test emri): ${pair}:`, tgError);
             tradeAttemptMessage += "\n(Telegram bildirimi gönderilemedi)";
         }
     } else if (orderResponseFromApi) {
-        console.warn(`Telegram token/chat ID not set. Skipping success notification for ${pair}.`);
+        console.warn(`Telegram token/chat ID ayarlanmamış. Başarı bildirimi atlanıyor: ${pair}.`);
         tradeAttemptMessage += "\n(Telegram bildirimi atlandı: token/chat ID eksik)";
     }
 
@@ -225,7 +253,7 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
 
     return {
         status: 'Aktif',
-        message: `Strateji ${strategy.name} (${envLabel} üzerinde ${pair} için test emri verildi). Detaylar: ${tradeAttemptMessage}`,
+        message: `Strateji ${strategy.name} (${envLabel} üzerinde ${pair} için test emri verildi). Detaylar:\n${tradeAttemptMessage}`,
         order: resultOrder,
     };
 }
@@ -285,3 +313,4 @@ export async function defineNewStrategy(params: DefineStrategyParams): Promise<D
         };
     }
 }
+
