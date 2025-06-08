@@ -420,22 +420,16 @@ export default function Dashboard() {
                    const stablecoins = ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI']; 
                    const tryEurRate = { TRY: 0.03, EUR: 1.08 }; 
                    
-                   let basePrices: Record<string, number> = {
+                   // Define basePrices with fallback values
+                    let basePrices: Record<string, number> = {
                         BTC: 65000, ETH: 3500, SOL: 150, BNB: 600,
                         ADA: 0.45, XRP: 0.5, DOGE: 0.15, SHIB: 0.000025,
+                        // Add more common assets with rough fallback USD prices if desired
                     };
-                    // In a real app, you'd fetch current prices for non-stablecoins
-                    // For now, using rough estimates for major assets
-                    if (selectedPair && allAvailablePairsStore.length > 0) {
-                        const currentPairInfo = allAvailablePairsStore.find(p => p.symbol === selectedPair);
-                        if (currentPairInfo) {
-                            // This is a simplification. Fetch actual ticker price.
-                            // For demonstration, we'll just use the basePrices.
-                            // If latestCandleInfo were available and reliable:
-                            // basePrices[currentPairInfo.baseAsset] = latestCandleInfo.close;
-                        }
-                    }
 
+                    // This section for `latestCandleInfo` was problematic and is removed
+                    // as `latestCandleInfo` was not defined in this scope.
+                    // We will rely on the `basePrices` fallback mechanism or improve price fetching separately.
 
                    filteredBalances.forEach(b => {
                       const totalAmount = parseFloat(b.free) + parseFloat(b.locked);
@@ -445,9 +439,11 @@ export default function Dashboard() {
                           estimatedTotal += totalAmount * tryEurRate.TRY;
                       } else if (b.asset === 'EUR' && tryEurRate.EUR) {
                           estimatedTotal += totalAmount * tryEurRate.EUR;
-                      } else if (basePrices[b.asset]) { 
+                      } else if (basePrices[b.asset]) { // Use fallback price
                          estimatedTotal += totalAmount * basePrices[b.asset];
                       }
+                      // Consider adding a log for assets where price couldn't be estimated
+                      // else { addLog('WARN', `Price for asset ${b.asset} not found for portfolio valuation.`); }
                    });
                   setTotalPortfolioValueUsd(estimatedTotal);
                   addLog('INFO', `Estimated total portfolio value (${envLabel}): ~$${estimatedTotal.toFixed(2)} USD`);
@@ -991,21 +987,16 @@ export default function Dashboard() {
     const stablecoins = ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI'];
     const tryEurRate = { TRY: 0.03, EUR: 1.08 }; 
     
+    // Define basePrices with fallback values
     let basePrices: Record<string, number> = {
         BTC: 65000, ETH: 3500, SOL: 150, BNB: 600,
         ADA: 0.45, XRP: 0.5, DOGE: 0.15, SHIB: 0.000025,
+        // Add more common assets with rough fallback USD prices if desired
     };
-     // In a real app, you'd fetch current prices for non-stablecoins
-    // For now, using rough estimates for major assets
-    if (selectedPair && allAvailablePairsStore.length > 0) {
-        const currentPairInfo = allAvailablePairsStore.find(p => p.symbol === selectedPair);
-        if (currentPairInfo) {
-            // This is a simplification. Fetch actual ticker price.
-            // For demonstration, we'll just use the basePrices.
-            // If latestCandleInfo were available and reliable:
-            // basePrices[currentPairInfo.baseAsset] = latestCandleInfo.close;
-        }
-    }
+
+    // This section for `latestCandleInfo` was problematic and is removed
+    // as `latestCandleInfo` was not defined in this scope.
+    // We will rely on the `basePrices` fallback mechanism or improve price fetching separately.
     
     return portfolioData
         .map(balance => {
@@ -1017,14 +1008,16 @@ export default function Dashboard() {
                 valueUsd = totalAmount * tryEurRate.TRY;
             } else if (balance.asset === 'EUR' && tryEurRate.EUR) {
                 valueUsd = totalAmount * tryEurRate.EUR;
-            } else if (basePrices[balance.asset]) {
+            } else if (basePrices[balance.asset]) { // Use fallback price
                 valueUsd = totalAmount * basePrices[balance.asset];
             }
+            // else { addLog('WARN', `Price for asset ${balance.asset} not found for pie chart valuation.`); }
             return valueUsd > 0.01 ? { name: balance.asset, value: valueUsd } : null;
         })
         .filter((item): item is { name: string; value: number } => item !== null)
         .sort((a, b) => b.value - a.value); 
-}, [portfolioData, totalPortfolioValueUsd, selectedPair]); // Added selectedPair to deps
+}, [portfolioData, totalPortfolioValueUsd]);
+
 
   const PortfolioPieChart = () => {
     if (loadingPortfolio || !pieChartData || pieChartData.length === 0) {
@@ -1075,7 +1068,7 @@ export default function Dashboard() {
                             borderRadius: 'var(--radius)',
                             fontSize: '0.75rem', // 12px
                         }}
-                        formatter={(value: number, name: string) => [useFormattedNumber(value, {style: 'currency', currency: 'USD', maximumFractionDigits: 2 }), name]}
+                        formatter={(value: number, name: string) => [formatNumberClientSide(value, {style: 'currency', currency: 'USD', maximumFractionDigits: 2 }), name]}
                     />
                 </PieChart>
             </ResponsiveContainer>
