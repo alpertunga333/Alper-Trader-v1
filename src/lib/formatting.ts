@@ -1,10 +1,12 @@
+
 import * as React from 'react';
 import { useState, useEffect } from 'react';
 
 /**
  * Formats a timestamp (number or string) into a localized time string.
  * Returns an empty string if the timestamp is invalid.
- * @param timestamp The timestamp in milliseconds (number or numeric string).
+ * The conversion uses the client's local timezone by default when 'toLocaleTimeString' is called.
+ * @param timestamp The timestamp in milliseconds (number or numeric string), or an ISO 8601 string.
  * @param format 'full' (default) for HH:MM:SS, 'short' for HH:MM.
  * @returns Formatted time string or empty string.
  */
@@ -13,21 +15,29 @@ export const formatTimestamp = (
     format: 'full' | 'short' = 'full' // Default to full format
 ): string => {
     if (timestamp === undefined || timestamp === null) return '';
-    const numericTimestamp = typeof timestamp === 'string' ? parseInt(timestamp, 10) : timestamp;
-    if (isNaN(numericTimestamp)) return '';
 
-    const date = new Date(numericTimestamp);
-    if (isNaN(date.getTime())) return ''; // Check if date is valid
+    // Create Date object. Handles both ISO strings (like those from toISOString()) and numeric timestamps.
+    // new Date(value) will parse ISO strings as UTC and convert numeric values (ms since epoch) correctly.
+    const date = new Date(timestamp);
 
-    // Use try-catch for safety, though modern browsers support these options widely
+    if (isNaN(date.getTime())) { // Check if date is valid
+        // console.warn(`formatTimestamp: Invalid timestamp provided: ${timestamp}`); // Optional: for debugging
+        return '';
+    }
+
     try {
         const options: Intl.DateTimeFormatOptions = format === 'short'
-            ? { hour: '2-digit', minute: '2-digit' } // HH:MM for short
-            : { hour: '2-digit', minute: '2-digit', second: '2-digit' }; // HH:MM:SS for full
+            ? { hour: '2-digit', minute: '2-digit' }
+            : { hour: '2-digit', minute: '2-digit', second: '2-digit' };
+
+        // 'tr-TR' is for Turkish locale formatting (e.g., separators).
+        // toLocaleTimeString() itself defaults to using the client's current timezone
+        // unless a 'timeZone' option is explicitly provided.
         return date.toLocaleTimeString('tr-TR', options);
     } catch (error) {
-        console.error("Error formatting timestamp:", error);
-        // Fallback to a basic format if locale options fail
+        console.error("Error formatting timestamp:", error, "Raw timestamp:", timestamp);
+        // Fallback to a basic format if locale options fail (should be rare)
+        // date.getHours(), getMinutes(), getSeconds() also return values in local time.
         const hours = date.getHours().toString().padStart(2, '0');
         const minutes = date.getMinutes().toString().padStart(2, '0');
         const seconds = date.getSeconds().toString().padStart(2, '0');
