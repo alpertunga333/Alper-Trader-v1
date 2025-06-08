@@ -28,7 +28,6 @@ export const BacktestParamsSchema = z.object({
     startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Start date must be in YYYY-MM-DD format.").describe('Start date for backtesting (YYYY-MM-DD).'),
     endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "End date must be in YYYY-MM-DD format.").describe('End date for backtesting (YYYY-MM-DD).'),
     initialBalance: z.number().positive("Initial balance must be positive.").describe('Initial balance in quote currency (e.g., USDT).'),
-    // environment and isTestnet removed, backtesting defaults to Spot
 }).refine(data => new Date(data.startDate) < new Date(data.endDate), {
     message: "End date must be after start date.",
     path: ["endDate"], // Attach error to endDate field
@@ -51,6 +50,38 @@ export const BacktestResultSchema = z.object({
 });
 
 /**
+ * Zod schema for individual fill in an order.
+ */
+export const OrderFillSchema = z.object({
+  price: z.string(),
+  qty: z.string(),
+  commission: z.string(),
+  commissionAsset: z.string(),
+  tradeId: z.number(),
+});
+
+/**
+ * Zod schema for the response received after placing an order.
+ * This should align with the structure returned by the `placeOrder` service.
+ */
+export const OrderResponseSchema = z.object({
+  orderId: z.number(),
+  status: z.string(),
+  symbol: z.string(),
+  clientOrderId: z.string(),
+  price: z.string(), // For MARKET orders, this is the average filled price.
+  origQty: z.string(),
+  executedQty: z.string(),
+  cummulativeQuoteQty: z.string(),
+  timeInForce: z.string(),
+  type: z.string(),
+  side: z.string(),
+  transactTime: z.number().optional(), // Optional as it might not always be present or needed for history display immediately
+  fills: z.array(OrderFillSchema).optional(), // Fills are important for detailed trade history
+});
+
+
+/**
  * Zod schema for validating parameters to run a live strategy.
  */
 export const RunParamsSchema = z.object({
@@ -60,8 +91,6 @@ export const RunParamsSchema = z.object({
     stopLossPercent: z.number().positive("Stop loss must be positive.").optional().describe('Optional stop loss percentage.'),
     takeProfitPercent: z.number().positive("Take profit must be positive.").optional().describe('Optional take profit percentage.'),
     environment: ApiEnvironmentSchema.describe('The target API environment (spot, futures, testnet_spot, testnet_futures).'),
-    // isTestnet removed, derived from environment
-    // API keys should NOT be part of this schema; they must be handled securely server-side.
 });
 
 /**
@@ -70,6 +99,7 @@ export const RunParamsSchema = z.object({
 export const RunResultSchema = z.object({
     status: z.string().describe('Current status of the running strategy (e.g., Active, Error, Stopped).'),
     message: z.string().optional().describe('Additional status message or error details.'),
+    order: OrderResponseSchema.optional().describe('Details of the placed order, if successful.'),
 });
 
 /**

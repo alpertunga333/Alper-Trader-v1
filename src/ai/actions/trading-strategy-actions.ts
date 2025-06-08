@@ -8,10 +8,10 @@
  */
 
 import { z } from 'zod';
-import { ai } from '@/ai/ai-instance'; 
-import { getCandlestickData, placeOrder, type Candle, type OrderParams, type OrderResponse } from '@/services/binance';
-import type { BacktestParams, BacktestResult, RunParams, RunResult, DefineStrategyParams, DefineStrategyResult, Strategy, ApiEnvironment } from '@/ai/types/strategy-types';
-import { BacktestParamsSchema, BacktestResultSchema, RunParamsSchema, RunResultSchema, DefineStrategyParamsSchema, DefineStrategyResultSchema, StrategySchema } from '@/ai/schemas/strategy-schemas';
+import { ai } from '@/ai/ai-instance';
+import { getCandlestickData, placeOrder, type Candle, type OrderParams, type OrderResponse as BinanceOrderResponse } from '@/services/binance';
+import type { BacktestParams, BacktestResult, RunParams, RunResult, DefineStrategyParams, DefineStrategyResult, Strategy, ApiEnvironment, OrderResponse } from '@/ai/types/strategy-types';
+import { BacktestParamsSchema, BacktestResultSchema, RunParamsSchema, RunResultSchema, DefineStrategyParamsSchema, DefineStrategyResultSchema, StrategySchema, OrderResponseSchema } from '@/ai/schemas/strategy-schemas';
 import { fetchSecureApiKey, fetchSecureSecretKey } from '@/lib/secure-api';
 import { sendTelegramMessageAction } from '@/actions/telegramActions'; // Import Telegram action
 
@@ -38,11 +38,11 @@ export async function backtestStrategy(params: BacktestParams): Promise<Backtest
     const { strategy, pair, interval, startDate, endDate, initialBalance } = validation.data;
 
     let candles: Candle[] = [];
-    const isTestnet = false; 
+    const isTestnet = false;
     try {
         const start = new Date(startDate).getTime();
         const end = new Date(endDate).getTime();
-        let intervalMs = 60 * 60 * 1000; 
+        let intervalMs = 60 * 60 * 1000;
         if (interval.endsWith('m')) intervalMs = parseInt(interval) * 60 * 1000;
         else if (interval.endsWith('h')) intervalMs = parseInt(interval) * 60 * 60 * 1000;
         else if (interval.endsWith('d')) intervalMs = parseInt(interval) * 24 * 60 * 60 * 1000;
@@ -52,7 +52,7 @@ export async function backtestStrategy(params: BacktestParams): Promise<Backtest
         }
 
         const estimatedCandles = Math.ceil((end - start) / intervalMs);
-        const limit = Math.min(Math.max(estimatedCandles, 100), 1000); 
+        const limit = Math.min(Math.max(estimatedCandles, 100), 1000);
         console.log(`Estimated candles: ${estimatedCandles}, Fetching limit: ${limit} for ${pair} (${interval}) from Spot`);
         candles = await getCandlestickData(pair, interval, isTestnet, false, limit);
         console.log(`Fetched ${candles.length} candles for backtest from Spot.`);
@@ -69,15 +69,15 @@ export async function backtestStrategy(params: BacktestParams): Promise<Backtest
         };
     }
 
-    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1500)); 
-    const totalTrades = Math.floor(Math.random() * candles.length / 5) + 2; 
+    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1500));
+    const totalTrades = Math.floor(Math.random() * candles.length / 5) + 2;
     const winningTrades = Math.floor(Math.random() * totalTrades);
     const losingTrades = totalTrades - winningTrades;
     const winRate = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : 0;
-    const pnlFactor = (Math.random() - 0.4); 
-    const totalPnl = initialBalance * pnlFactor * (Math.random() * 0.3 + 0.05); 
+    const pnlFactor = (Math.random() - 0.4);
+    const totalPnl = initialBalance * pnlFactor * (Math.random() * 0.3 + 0.05);
     const totalPnlPercent = totalTrades > 0 ? (totalPnl / initialBalance) * 100 : 0;
-    const maxDrawdown = Math.random() * 40; 
+    const maxDrawdown = Math.random() * 40;
 
     console.log(`Server Action: Backtest complete for ${strategy.name} on ${pair}. PnL: ${totalPnlPercent.toFixed(2)}%`);
 
@@ -113,14 +113,14 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
     if (!validation.success) {
         console.error("Server Action (runStrategy) Error: Invalid input parameters.", validation.error.format());
         const errorMessages = validation.error.format()._errors?.join(', ') || 'Doğrulama başarısız oldu.';
-        return { status: 'Hata', message: `Geçersiz giriş: ${errorMessages}` };
+        return { status: 'Hata', message: `Geçersiz giriş: ${errorMessages}`, order: undefined };
     }
 
     let apiKey: string | null;
     let secretKey: string | null;
     let telegramBotToken: string | undefined = process.env.TELEGRAM_BOT_TOKEN;
     let telegramChatId: string | undefined = process.env.TELEGRAM_CHAT_ID;
-    let orderResponse: OrderResponse | null = null;
+    let orderResponseFromApi: BinanceOrderResponse | null = null;
     let tradeAttemptMessage = '';
 
     try {
@@ -139,46 +139,46 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
 
         if (isFutures) {
             if (pair === 'BTCUSDT') {
-                orderParams.quantity = 0.0002; 
+                orderParams.quantity = 0.0002;
             } else if (pair === 'ETHUSDT') {
-                orderParams.quantity = 0.0035; 
+                orderParams.quantity = 0.0035;
             } else if (pair === 'LTCUSDT') {
-                orderParams.quantity = 0.15;  
+                orderParams.quantity = 0.15;
             } else if (pair === 'SOLUSDT') {
-                orderParams.quantity = 0.08; 
+                orderParams.quantity = 0.08;
             } else {
-                orderParams.quantity = 0.01;
+                orderParams.quantity = 0.01; // Default small quantity for other futures pairs
             }
-        } else {
-            orderParams.quoteOrderQty = 11; 
+        } else { // Spot
+            orderParams.quoteOrderQty = 11; // Use quoteOrderQty for Spot
         }
-        
+
         console.log(`Server Action (runStrategy): Placing test order with params:`, orderParams);
-        orderResponse = await placeOrder(orderParams, apiKey, secretKey, isTestnet, isFutures);
-        console.log(`Server Action (runStrategy): Test order placed successfully for ${pair} (${envLabel}):`, orderResponse);
-        
-        const filledPrice = orderResponse.fills && orderResponse.fills.length > 0 ? parseFloat(orderResponse.fills[0].price) : parseFloat(orderResponse.price);
-        const executedQty = parseFloat(orderResponse.executedQty);
-        const baseAsset = orderResponse.symbol.replace(/USDT|BUSD|TRY|EUR|FDUSD$/, '');
+        orderResponseFromApi = await placeOrder(orderParams, apiKey, secretKey, isTestnet, isFutures);
+        console.log(`Server Action (runStrategy): Test order placed successfully for ${pair} (${envLabel}):`, orderResponseFromApi);
+
+        const filledPrice = orderResponseFromApi.fills && orderResponseFromApi.fills.length > 0 ? parseFloat(orderResponseFromApi.fills[0].price) : parseFloat(orderResponseFromApi.price);
+        const executedQty = parseFloat(orderResponseFromApi.executedQty);
+        const baseAsset = orderResponseFromApi.symbol.replace(/USDT|BUSD|TRY|EUR|FDUSD$/, '');
         const quoteAsset = pair.match(/USDT|BUSD|TRY|EUR|FDUSD$/)?.[0] || '';
 
 
         tradeAttemptMessage = `✅ TEST EMRİ VERİLDİ (${envLabel}):\n` +
                               `Strateji: ${strategy.name}\n` +
-                              `Parite: ${orderResponse.symbol}\n` +
-                              `Yön: ${orderResponse.side}\n` +
-                              `Tip: ${orderResponse.type}\n` +
-                              `Durum: ${orderResponse.status}\n` +
-                              `İşlem Miktarı: ${executedQty.toFixed(8)} ${baseAsset}\n` + 
+                              `Parite: ${orderResponseFromApi.symbol}\n` +
+                              `Yön: ${orderResponseFromApi.side}\n` +
+                              `Tip: ${orderResponseFromApi.type}\n` +
+                              `Durum: ${orderResponseFromApi.status}\n` +
+                              `İşlem Miktarı: ${executedQty.toFixed(8)} ${baseAsset}\n` +
                               `Ort. Dolum Fiyatı: ${filledPrice.toFixed(4)} ${quoteAsset}\n` +
-                              `Toplam Değer: ${parseFloat(orderResponse.cummulativeQuoteQty).toFixed(2)} ${quoteAsset}\n` +
-                              `Emir ID: ${orderResponse.orderId}`;
+                              `Toplam Değer: ${parseFloat(orderResponseFromApi.cummulativeQuoteQty).toFixed(2)} ${quoteAsset}\n` +
+                              `Emir ID: ${orderResponseFromApi.orderId}`;
 
     } catch (error) {
          const message = error instanceof Error ? error.message : String(error);
          console.error(`Server Action (runStrategy) Error during test order for ${pair} (${envLabel}): ${message}`);
          tradeAttemptMessage = `❌ TEST EMRİ BAŞARISIZ (${envLabel}) - Strateji: ${strategy.name}, Parite: ${pair}:\nHata: ${message}`;
-         
+
          if (telegramBotToken && telegramChatId) {
             try {
                 await sendTelegramMessageAction(telegramBotToken, telegramChatId, tradeAttemptMessage);
@@ -189,10 +189,10 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
         } else {
             console.warn(`Telegram token/chat ID not set. Skipping failure notification for ${pair}.`);
         }
-         return { status: 'Hata', message: `Test emri başarısız oldu: ${message}. Lütfen API anahtarlarınızı, parite limitlerini ve ağ bağlantınızı kontrol edin.` };
+         return { status: 'Hata', message: `Test emri başarısız oldu: ${message}. Lütfen API anahtarlarınızı, parite limitlerini ve ağ bağlantınızı kontrol edin.`, order: undefined };
     }
 
-    if (orderResponse && telegramBotToken && telegramChatId) {
+    if (orderResponseFromApi && telegramBotToken && telegramChatId) {
         try {
             await sendTelegramMessageAction(telegramBotToken, telegramChatId, tradeAttemptMessage);
             console.log(`Telegram notification sent for successful test order on ${pair}.`);
@@ -200,14 +200,33 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
             console.error(`Failed to send Telegram notification for successful test order on ${pair}:`, tgError);
             tradeAttemptMessage += "\n(Telegram bildirimi gönderilemedi)";
         }
-    } else if (orderResponse) {
+    } else if (orderResponseFromApi) {
         console.warn(`Telegram token/chat ID not set. Skipping success notification for ${pair}.`);
         tradeAttemptMessage += "\n(Telegram bildirimi atlandı: token/chat ID eksik)";
     }
-    
+
+    // Ensure the returned order object matches the OrderResponse schema/type if successful
+    const resultOrder: OrderResponse | undefined = orderResponseFromApi ? {
+        orderId: orderResponseFromApi.orderId,
+        status: orderResponseFromApi.status,
+        symbol: orderResponseFromApi.symbol,
+        clientOrderId: orderResponseFromApi.clientOrderId,
+        price: orderResponseFromApi.price,
+        origQty: orderResponseFromApi.origQty,
+        executedQty: orderResponseFromApi.executedQty,
+        cummulativeQuoteQty: orderResponseFromApi.cummulativeQuoteQty,
+        timeInForce: orderResponseFromApi.timeInForce,
+        type: orderResponseFromApi.type,
+        side: orderResponseFromApi.side,
+        transactTime: orderResponseFromApi.transactTime,
+        fills: orderResponseFromApi.fills,
+    } : undefined;
+
+
     return {
-        status: 'Aktif', 
+        status: 'Aktif',
         message: `Strateji ${strategy.name} (${envLabel} üzerinde ${pair} için test emri verildi). Detaylar: ${tradeAttemptMessage}`,
+        order: resultOrder,
     };
 }
 
@@ -233,12 +252,12 @@ export async function defineNewStrategy(params: DefineStrategyParams): Promise<D
     try {
         await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 2000));
 
-        if (Math.random() > 0.25) { 
+        if (Math.random() > 0.25) {
              const newStrategy: Strategy = {
-                 id: `ai_${name.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}${Math.random().toString(16).slice(2, 6)}`, 
+                 id: `ai_${name.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}${Math.random().toString(16).slice(2, 6)}`,
                  name: name,
-                 description: description, 
-                 prompt: prompt, 
+                 description: description,
+                 prompt: prompt,
              };
 
              const strategyValidation = StrategySchema.safeParse(newStrategy);
@@ -250,7 +269,7 @@ export async function defineNewStrategy(params: DefineStrategyParams): Promise<D
              console.log(`Server Action: AI successfully defined strategy '${name}'. ID: ${newStrategy.id}`);
              return {
                  success: true,
-                 strategy: strategyValidation.data, 
+                 strategy: strategyValidation.data,
                  message: `AI, '${name}' stratejisini başarıyla tanımladı.`,
              };
          } else {

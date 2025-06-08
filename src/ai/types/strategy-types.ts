@@ -1,6 +1,15 @@
 // src/ai/types/strategy-types.ts
 import type { z } from 'zod';
-import type { StrategySchema, BacktestParamsSchema, BacktestResultSchema, RunParamsSchema, RunResultSchema, DefineStrategyParamsSchema, DefineStrategyResultSchema } from '@/ai/schemas/strategy-schemas';
+import type {
+    StrategySchema,
+    BacktestParamsSchema,
+    BacktestResultSchema,
+    RunParamsSchema,
+    RunResultSchema,
+    DefineStrategyParamsSchema,
+    DefineStrategyResultSchema,
+    OrderResponseSchema // Import the Zod schema for OrderResponse
+} from '@/ai/schemas/strategy-schemas';
 
 /**
  * Represents the available API environments.
@@ -23,6 +32,11 @@ export type BacktestParams = z.infer<typeof BacktestParamsSchema>;
 export type BacktestResult = z.infer<typeof BacktestResultSchema>;
 
 /**
+ * Represents the details of a placed order, inferred from Zod schema.
+ */
+export type OrderResponse = z.infer<typeof OrderResponseSchema>;
+
+/**
  * Parameters required for initiating a live strategy run.
  * Includes the target API environment.
  */
@@ -30,6 +44,7 @@ export type RunParams = z.infer<typeof RunParamsSchema>;
 
 /**
  * The result obtained after initiating a live strategy run.
+ * This will infer the 'order' field type from OrderResponseSchema.
  */
 export type RunResult = z.infer<typeof RunResultSchema>;
 

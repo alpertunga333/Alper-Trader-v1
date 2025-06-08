@@ -99,14 +99,14 @@ import {
   Home,
   BrainCircuit // Icon for Strategies
 } from 'lucide-react';
-import type { Balance, SymbolInfo, OrderParams, OrderResponse } from '@/services/binance';
-import { getExchangeInfo, getCandlestickData as fetchBinanceCandles } from '@/services/binance';
+import type { Balance, SymbolInfo } from '@/services/binance'; // Removed OrderParams, OrderResponse as they are handled in actions/types
+import { getExchangeInfo } from '@/services/binance';
 import { toast } from '@/hooks/use-toast';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useFormattedNumber, formatNumberClientSide, formatTimestamp } from '@/lib/formatting';
-import type { BacktestParams, BacktestResult, DefineStrategyParams, DefineStrategyResult, RunParams, RunResult, Strategy, ApiEnvironment } from '@/ai/types/strategy-types'; // Removed Candle import as it's not used directly here anymore
+import type { BacktestParams, BacktestResult, DefineStrategyParams, DefineStrategyResult, RunParams, RunResult, Strategy, ApiEnvironment, OrderResponse as StrategyOrderResponse } from '@/ai/types/strategy-types';
 import { backtestStrategy, runStrategy, defineNewStrategy } from '@/ai/actions/trading-strategy-actions';
 import { fetchAccountBalancesAction } from '@/actions/binanceActions';
 import { Separator } from '@/components/ui/separator';
@@ -126,8 +126,16 @@ import { TradingViewWidget } from '@/components/dashboard/tradingview-widget';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 
 
-// Placeholder: Replace with actual trade history fetching if implemented
-const tradeHistoryData: any[] = []; // Example: Placeholder for trade history
+interface TradeHistoryItem {
+  id: number; // orderId
+  time: number; // transactTime or Date.now()
+  symbol: string;
+  isBuyer: boolean; // true for SELL, false for BUY (Binance: BUY=false, SELL=true)
+  price: number; // filled price
+  qty: number; // executedQty
+  quoteQty: number; // cummulativeQuoteQty
+  commissionAsset: string;
+}
 
 // Will be populated by API, used for backtesting dropdown.
 let allAvailablePairsStore: SymbolInfo[] = [];
@@ -222,6 +230,7 @@ export default function Dashboard() {
   const [portfolioError, setPortfolioError] = React.useState<string | null>(null);
   const [selectedPairsForBot, setSelectedPairsForBot] = React.useState<string[]>([]);
   const [dynamicLogData, setDynamicLogData] = React.useState<{ timestamp: string; type: string; message: string }[]>([]);
+  const [tradeHistoryData, setTradeHistoryData] = React.useState<TradeHistoryItem[]>([]);
 
   const [isDefineStrategyDialogOpen, setIsDefineStrategyDialogOpen] = React.useState(false);
   const [defineStrategyParams, setDefineStrategyParams] = React.useState<DefineStrategyParams>({ name: '', description: '', prompt: '' });
@@ -295,7 +304,7 @@ export default function Dashboard() {
                 chatId: defaultSettings.telegram.chatId || currentSettings.telegram.chatId,
             },
         }));
-        
+
         const anyKeyLoaded = Object.values(defaultSettings).some(env => (env as any).key || (env as any).secret || (env as any).token);
         if (anyKeyLoaded) {
             addLog('INFO', 'Varsayılan API ayarları ortam değişkenlerinden yüklendi ve önceden dolduruldu.');
@@ -321,11 +330,11 @@ export default function Dashboard() {
         try {
             // Always fetch from SPOT for the most comprehensive list for backtesting.
             const spotInfo = await getExchangeInfo(false, false); // isTestnet=false, isFutures=false for SPOT
-            
+
             allAvailablePairsStore = spotInfo.symbols
                 .filter(s => s.status === 'TRADING' && s.isSpotTradingAllowed)
                 .sort((a, b) => a.symbol.localeCompare(b.symbol));
-            
+
             setAllPairsForBacktest(allAvailablePairsStore);
 
             // Filter the user-defined list against what's available and trading on SPOT
@@ -341,7 +350,7 @@ export default function Dashboard() {
                 addLog('INFO', `Başarıyla ${allAvailablePairsStore.length} toplam Spot paritesi çekildi. Bot seçimi için ${activeUserDefinedPairs.length} kullanıcı tanımlı parite kullanılıyor. Varsayılan parite ${defaultPair.symbol} olarak ayarlandı.`);
             } else if (activeUserDefinedPairs.length === 0) {
                 addLog('WARN', `Kullanıcı tanımlı paritelerden hiçbiri şu anda Binance Spot'ta işlem görmüyor veya mevcut değil. Toplam Spot paritesi: ${allAvailablePairsStore.length}.`);
-                if (allAvailablePairsStore.length > 0 && !selectedPair) { 
+                if (allAvailablePairsStore.length > 0 && !selectedPair) {
                     setSelectedPair(allAvailablePairsStore[0].symbol);
                     setBacktestParams(prev => ({ ...prev, pair: allAvailablePairsStore[0].symbol}));
                     addLog('INFO', `Spot'tan ilk uygun pariteye varsayılan olarak ayarlanıyor: ${allAvailablePairsStore[0].symbol}`);
@@ -360,7 +369,7 @@ export default function Dashboard() {
             }
 
         } catch (err) {
-            console.error("Failed to fetch exchange info:", err);
+            console.error("Borsa bilgileri alınamadı:", err);
             const errorMsg = err instanceof Error ? err.message : "Bilinmeyen bir hata oluştu.";
             setPortfolioError(`Parite verileri yüklenemedi: ${errorMsg}`);
             addLog('ERROR', `Borsa bilgileri alınamadı: ${errorMsg}`);
@@ -398,14 +407,14 @@ export default function Dashboard() {
 
           setLoadingPortfolio(true);
           setPortfolioError(null);
-          setTotalPortfolioValueUsd(null); 
+          setTotalPortfolioValueUsd(null);
           const envLabel = activeApiEnvironment.replace('_', ' ').toUpperCase();
           addLog('INFO', `${envLabel} ortamı için portföy verileri çekiliyor...`);
 
           try {
-              const apiKeyHint = apiKeys[activeApiEnvironment].key.substring(0, 4); 
-              const secretKeyHint = '****'; 
-              
+              const apiKeyHint = apiKeys[activeApiEnvironment].key.substring(0, 4);
+              const secretKeyHint = '****';
+
               const result = await fetchAccountBalancesAction(apiKeyHint, secretKeyHint, activeApiEnvironment);
 
               if (result.success && result.balances) {
@@ -425,9 +434,9 @@ export default function Dashboard() {
                   }
 
                    let estimatedTotal = 0;
-                   const stablecoins = ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI']; 
-                   const tryEurRate = { TRY: 0.03, EUR: 1.08 }; 
-                   
+                   const stablecoins = ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI'];
+                   const tryEurRate = { TRY: 0.03, EUR: 1.08 };
+
                     let basePrices: Record<string, number> = {
                         BTC: 65000, ETH: 3500, SOL: 150, BNB: 600,
                         ADA: 0.45, XRP: 0.5, DOGE: 0.15, SHIB: 0.000025,
@@ -437,12 +446,12 @@ export default function Dashboard() {
                    filteredBalances.forEach(b => {
                       const totalAmount = parseFloat(b.free) + parseFloat(b.locked);
                       if (stablecoins.includes(b.asset)) {
-                          estimatedTotal += totalAmount; 
+                          estimatedTotal += totalAmount;
                       } else if (b.asset === 'TRY' && tryEurRate.TRY) {
                           estimatedTotal += totalAmount * tryEurRate.TRY;
                       } else if (b.asset === 'EUR' && tryEurRate.EUR) {
                           estimatedTotal += totalAmount * tryEurRate.EUR;
-                      } else if (basePrices[b.asset]) { 
+                      } else if (basePrices[b.asset]) {
                          estimatedTotal += totalAmount * basePrices[b.asset];
                       }
                    });
@@ -450,9 +459,9 @@ export default function Dashboard() {
                   addLog('INFO', `Tahmini toplam portföy değeri (${envLabel}): ~$${estimatedTotal.toFixed(2)} USD`);
 
               } else {
-                   const errMsg = result.error || `Failed to fetch balances for ${envLabel}.`;
+                   const errMsg = result.error || `Portföy çekilirken hata oluştu (${envLabel}).`;
                    setPortfolioError(errMsg);
-                   setPortfolioData([]); 
+                   setPortfolioData([]);
                    setTotalPortfolioValueUsd(null);
                    if (activeApiEnvironment && (errMsg.includes('API anahtarları') || errMsg.includes('yapılandırılmamış') || errMsg.includes('Geçersiz'))) {
                         setValidationStatus(prev => ({ ...prev, [activeApiEnvironment!]: 'invalid' }));
@@ -462,10 +471,10 @@ export default function Dashboard() {
               }
           } catch (err) {
               const errorMsg = err instanceof Error ? err.message : "Portföy yüklenirken bilinmeyen bir hata oluştu.";
-              console.error(`Failed to fetch portfolio (${envLabel}):`, err);
+              console.error(`Portföy çekilirken hata (${envLabel}):`, err);
               setPortfolioError(errorMsg);
               addLog('ERROR', `Portföy çekme işlemi (${envLabel}) başarısız oldu: ${errorMsg}`);
-              setPortfolioData([]); 
+              setPortfolioData([]);
               setTotalPortfolioValueUsd(null);
           } finally {
               setLoadingPortfolio(false);
@@ -483,7 +492,7 @@ export default function Dashboard() {
       } else {
         setPortfolioData([]);
         setTotalPortfolioValueUsd(null);
-        setPortfolioError(null); 
+        setPortfolioError(null);
         setLoadingPortfolio(false);
       }
    // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -517,7 +526,7 @@ export default function Dashboard() {
             return;
         }
 
-        setBotStatus('running'); 
+        setBotStatus('running');
         const strategies = activeStrategies.map(id => definedStrategies.find(s=>s.id===id)?.name).filter(Boolean);
         toast({ title: `Bot Başlatılıyor...`, description: `Ortam: ${envLabel}. Pariteler: ${selectedPairsForBot.join(', ')}. Stratejiler: ${strategies.join(', ')}.` });
         addLog('INFO', `Bot başlatılıyor... Ortam: ${envLabel}, Pariteler: ${selectedPairsForBot.join(', ') || 'Hiçbiri'}. Stratejiler: ${strategies.join(', ') || 'Hiçbiri'}.`);
@@ -534,14 +543,30 @@ export default function Dashboard() {
                         const runParams: RunParams = {
                             strategy,
                             pair,
-                            interval: selectedInterval, 
+                            interval: selectedInterval,
                             stopLossPercent: stopLoss ? parseFloat(stopLoss) : undefined,
                             takeProfitPercent: takeProfit ? parseFloat(takeProfit) : undefined,
                             environment: activeApiEnvironment!,
                         };
                         const result: RunResult = await runStrategy(runParams);
                         addLog('STRATEGY_START', `Strateji '${strategy.name}', ${pair} (${envLabel}) durumu: ${result.status}. ${result.message || ''}`);
-                        if(result.status.toLowerCase() !== 'error') {
+
+                        if (result.order) {
+                            const newTrade: TradeHistoryItem = {
+                                id: result.order.orderId,
+                                time: result.order.transactTime || Date.now(),
+                                symbol: result.order.symbol,
+                                isBuyer: result.order.side === 'SELL', // SELL ise isBuyer true
+                                price: parseFloat(result.order.fills && result.order.fills.length > 0 ? result.order.fills[0].price : result.order.price),
+                                qty: parseFloat(result.order.executedQty),
+                                quoteQty: parseFloat(result.order.cummulativeQuoteQty),
+                                commissionAsset: result.order.fills && result.order.fills.length > 0 && result.order.fills[0].commissionAsset ? result.order.fills[0].commissionAsset : 'N/A',
+                            };
+                            setTradeHistoryData(prevTrades => [newTrade, ...prevTrades].slice(0, 50)); // Başa ekle, 50 ile sınırla
+                            addLog('TRADE_HISTORY', `Yeni işlem geçmişe eklendi: Emir ID ${newTrade.id} (${newTrade.symbol})`);
+                        }
+
+                        if(result.status.toLowerCase() !== 'error' && result.status.toLowerCase() !== 'hata') {
                             strategyStartSuccessCount++;
                         } else {
                             strategyStartFailCount++;
@@ -561,12 +586,12 @@ export default function Dashboard() {
 
         addLog('INFO', `Strateji başlatma denemesi tamamlandı. Başarılı: ${strategyStartSuccessCount}, Başarısız: ${strategyStartFailCount}.`);
 
-        let finalBotStatus = 'running'; 
+        let finalBotStatus = 'running';
         let telegramMessageText = '';
 
         if (strategyStartSuccessCount === 0 && strategyStartFailCount > 0) {
-            finalBotStatus = 'stopped'; 
-            setBotStatus('stopped'); 
+            finalBotStatus = 'stopped';
+            setBotStatus('stopped');
             toast({
                 title: "Bot Başlatılamadı",
                 description: `Tüm stratejiler başlatılırken hata oluştu (${strategyStartFailCount} hata). Lütfen logları kontrol edin.`,
@@ -577,7 +602,7 @@ export default function Dashboard() {
             toast({
                 title: "Kısmi Başlatma",
                 description: `${strategyStartSuccessCount} strateji başlatıldı, ${strategyStartFailCount} başlatılamadı. Detaylar için logları inceleyin.`,
-                variant: "default" 
+                variant: "default"
             });
             addLog('WARN', `Bot kısmi başarıyla başlatıldı. Başarılı: ${strategyStartSuccessCount}, Başarısız: ${strategyStartFailCount}.`);
             telegramMessageText = `⚠️ KriptoPilot bot (${envLabel}) ${selectedPairsForBot.length} paritede kısmen aktif. Başarılı: ${strategyStartSuccessCount}, Başarısız: ${strategyStartFailCount} strateji.`;
@@ -585,10 +610,10 @@ export default function Dashboard() {
              toast({ title: `Bot Başarıyla Başlatıldı`, description: `${strategyStartSuccessCount} strateji ${envLabel} ortamında aktif.`});
              telegramMessageText = `✅ KriptoPilot bot (${envLabel}) ${selectedPairsForBot.length} paritede ${strategyStartSuccessCount} strateji ile tamamen aktif.`;
         }
-        
+
         setBotStatus(finalBotStatus);
 
-        if (finalBotStatus === 'running' && telegramMessageText) { 
+        if (finalBotStatus === 'running' && telegramMessageText) {
             try {
                 const telegramResult = await sendTelegramMessageAction(apiKeys.telegram.token, apiKeys.telegram.chatId, telegramMessageText);
                 if (telegramResult.success) {
@@ -598,17 +623,17 @@ export default function Dashboard() {
                 }
             } catch (error) {
                 const errorMsg = error instanceof Error ? error.message : "Bilinmeyen hata";
-                console.error("Error sending Telegram start message:", error);
+                console.error("Telegram başlatma mesajı gönderilirken hata:", error);
                 addLog('TELEGRAM_ERROR', `Bot başlatma bildirimi gönderilemedi: ${errorMsg}`);
             }
         }
 
 
-    } else { 
+    } else {
         setBotStatus('stopped');
         toast({ title: 'Bot Durduruldu.', description: `Aktif ortam: ${envLabel}` });
         addLog('INFO', `Bot durdurma işlemi ${envLabel} ortamı için başlatıldı.`);
-        console.log(`Stopping bot for environment ${envLabel}... (Placeholder: actual stop logic needed)`);
+        console.log(`Bot durduruluyor, ortam: ${envLabel}... (Placeholder: gerçek durdurma mantığı eklenecek)`);
 
         if (validationStatus.telegramToken === 'valid' && validationStatus.telegramChatId === 'valid') {
             try {
@@ -620,7 +645,7 @@ export default function Dashboard() {
                 }
             } catch (error) {
                 const errorMsg = error instanceof Error ? error.message : "Bilinmeyen hata";
-                console.error("Error sending Telegram stop message:", error);
+                console.error("Telegram durdurma mesajı gönderilirken hata:", error);
                 addLog('TELEGRAM_ERROR', `Bot durdurma bildirimi gönderilemedi: ${errorMsg}`);
             }
         }
@@ -648,7 +673,7 @@ export default function Dashboard() {
 
   const handleApiKeyChange = (
     value: string,
-    env: ApiEnvironment, 
+    env: ApiEnvironment,
     field: 'key' | 'secret'
   ) => {
     setApiKeys(prev => ({
@@ -658,9 +683,9 @@ export default function Dashboard() {
     setValidationStatus(prev => ({ ...prev, [env]: 'not_checked' }));
     addLog('CONFIG', `${env.replace('_',' ').toUpperCase()} API ${field === 'key' ? 'anahtarı' : 'gizli anahtarı'} değiştirildi, doğrulama durumu sıfırlandı.`);
     if (activeApiEnvironment === env) {
-        setActiveApiEnvironment(null); 
+        setActiveApiEnvironment(null);
         addLog('CONFIG', `API ortamı ${env.replace('_',' ').toUpperCase()}, anahtar değişikliği nedeniyle devre dışı bırakıldı.`);
-        setPortfolioData([]); 
+        setPortfolioData([]);
         setTotalPortfolioValueUsd(null);
         setPortfolioError(null);
     }
@@ -703,17 +728,17 @@ export default function Dashboard() {
       if (result.isValid) {
         setActiveApiEnvironment(env);
         addLog('CONFIG', `Aktif API ortamı: ${envLabel}`);
-        setPortfolioError(null); 
+        setPortfolioError(null);
       } else if (activeApiEnvironment === env) {
         setActiveApiEnvironment(null);
         addLog('CONFIG', `API ortamı ${envLabel}, başarısız doğrulama nedeniyle devre dışı bırakıldı.`);
-        setPortfolioData([]); 
+        setPortfolioData([]);
         setTotalPortfolioValueUsd(null);
         setPortfolioError(null);
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Sunucu aksiyonu çağrılırken bilinmeyen bir hata oluştu.";
-      console.error(`Error calling validateBinanceKeysAction for ${envLabel}:`, error);
+      console.error(`${envLabel} için validateBinanceKeysAction çağrılırken hata:`, error);
       setValidationStatus(prev => ({ ...prev, [env]: 'invalid' }));
       addLog('ERROR', `API Anahtarı Doğrulama Aksiyonu Hatası (${envLabel}): ${errorMsg}`);
       toast({
@@ -721,7 +746,7 @@ export default function Dashboard() {
         description: `${envLabel} API anahtarları doğrulanırken bir sunucu hatası oluştu: ${errorMsg}`,
         variant: "destructive",
       });
-      if (activeApiEnvironment === env) { 
+      if (activeApiEnvironment === env) {
         setActiveApiEnvironment(null);
         addLog('CONFIG', `API ortamı ${envLabel}, doğrulama aksiyonu hatası nedeniyle devre dışı bırakıldı.`);
         setPortfolioData([]);
@@ -732,7 +757,7 @@ export default function Dashboard() {
   };
 
   const handleValidateTelegramToken = async () => {
-    setValidationStatus(prev => ({ ...prev, telegramToken: 'pending', telegramChatId: 'not_checked' })); 
+    setValidationStatus(prev => ({ ...prev, telegramToken: 'pending', telegramChatId: 'not_checked' }));
     addLog('INFO', 'Telegram bot token Sunucu Aksiyonu ile doğrulanıyor...');
     try {
       const result = await validateTelegramTokenAction(apiKeys.telegram.token);
@@ -750,7 +775,7 @@ export default function Dashboard() {
        }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Sunucu aksiyonu çağrılırken bilinmeyen bir hata oluştu.";
-      console.error("Error calling validateTelegramTokenAction:", error);
+      console.error("validateTelegramTokenAction çağrılırken hata:", error);
       setValidationStatus(prev => ({ ...prev, telegramToken: 'invalid', telegramChatId: 'not_checked' }));
       addLog('ERROR', `Telegram Token Doğrulama Aksiyonu Hatası: ${errorMsg}`);
       toast({ title: "Doğrulama Hatası", description: `Telegram token doğrulanırken bir sunucu hatası oluştu: ${errorMsg}`, variant: "destructive" });
@@ -768,7 +793,7 @@ export default function Dashboard() {
 
     try {
       const validationResult = await validateTelegramChatIdAction(apiKeys.telegram.token, apiKeys.telegram.chatId);
-      
+
       if (validationResult.isValid) {
         setValidationStatus(prev => ({ ...prev, telegramChatId: 'valid' }));
         addLog('INFO', `Telegram Chat ID ${apiKeys.telegram.chatId} doğrulaması başarılı. Test mesajı gönderiliyor...`);
@@ -782,12 +807,12 @@ export default function Dashboard() {
               variant: "default",
             });
         } else {
-             setValidationStatus(prev => ({ ...prev, telegramChatId: 'invalid' })); 
+             setValidationStatus(prev => ({ ...prev, telegramChatId: 'invalid' }));
             addLog('TELEGRAM_ERROR', `Test mesajı gönderilemedi: ${messageResult.message}`);
             toast({
               title: "Chat ID Doğrulandı, Mesaj Hatası",
               description: `Chat ID geçerli, ancak test mesajı gönderilemedi: ${messageResult.message || 'Bilinmeyen hata.'} Lütfen botun sohbete eklendiğinden ve mesaj gönderme izni olduğundan emin olun.`,
-              variant: "destructive", 
+              variant: "destructive",
             });
         }
       } else {
@@ -797,7 +822,7 @@ export default function Dashboard() {
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Sunucu aksiyonu çağrılırken bilinmeyen bir hata oluştu.";
-      console.error("Error calling Telegram Chat ID validation/messaging actions:", error);
+      console.error("Telegram Chat ID doğrulama/mesajlaşma aksiyonları çağrılırken hata:", error);
       setValidationStatus(prev => ({ ...prev, telegramChatId: 'invalid' }));
       addLog('ERROR', `Telegram Chat ID Doğrulama/Mesajlaşma Aksiyonu Hatası: ${errorMsg} (ID: ${apiKeys.telegram.chatId})`);
       toast({ title: "Doğrulama Hatası", description: `Telegram Chat ID işlemleri sırasında sunucu hatası: ${errorMsg}`, variant: "destructive" });
@@ -818,21 +843,21 @@ export default function Dashboard() {
     setIsDefiningStrategy(true);
     addLog('AI_TASK', `Yeni strateji '${defineStrategyParams.name}' AI ile tanımlanmaya çalışılıyor...`);
     try {
-      const result: DefineStrategyResult = await defineNewStrategy(defineStrategyParams); 
+      const result: DefineStrategyResult = await defineNewStrategy(defineStrategyParams);
 
       if (result.success && result.strategy) {
-        setDefinedStrategies(prev => [...prev, result.strategy!]); 
+        setDefinedStrategies(prev => [...prev, result.strategy!]);
         toast({ title: "Strateji Tanımlandı", description: result.message || `"${result.strategy.name}" başarıyla tanımlandı.` });
         addLog('AI_TASK', `AI, '${result.strategy.name}' stratejisini başarıyla tanımladı. ID: ${result.strategy.id}`);
-        setIsDefineStrategyDialogOpen(false); 
-        setDefineStrategyParams({ name: '', description: '', prompt: '' }); 
+        setIsDefineStrategyDialogOpen(false);
+        setDefineStrategyParams({ name: '', description: '', prompt: '' });
       } else {
         const message = result.message || "AI stratejiyi tanımlayamadı.";
         toast({ title: "Strateji Tanımlama Başarısız", description: message, variant: "destructive" });
         addLog('AI_ERROR', `AI stratejiyi tanımlayamadı: ${message}`);
       }
     } catch (error) {
-      console.error("Error defining new strategy:", error);
+      console.error("Yeni strateji tanımlanırken hata:", error);
       const message = error instanceof Error ? error.message : "Bilinmeyen bir AI hatası oluştu.";
       addLog('AI_ERROR', `Yeni strateji tanımlanırken hata: ${message}`);
       toast({ title: "AI Hatası", description: `Strateji tanımlanırken hata: ${message}`, variant: "destructive" });
@@ -859,7 +884,7 @@ export default function Dashboard() {
 
   const runBacktestHandler = async () => {
     setIsBacktesting(true);
-    setBacktestResult(null); 
+    setBacktestResult(null);
     addLog('BACKTEST', 'Geriye dönük test başlatıldı...');
 
     const strategy = definedStrategies.find(s => s.id === selectedBacktestStrategyId);
@@ -897,7 +922,7 @@ export default function Dashboard() {
     addLog('BACKTEST', `Parametreler: Parite=${backtestParams.pair}, Aralık=${backtestParams.interval}, Başlangıç=${backtestParams.startDate}, Bitiş=${backtestParams.endDate}, Bakiye=${backtestParams.initialBalance}`);
 
     const fullBacktestParams: BacktestParams = {
-      strategy: strategy, 
+      strategy: strategy,
       pair: backtestParams.pair,
       interval: backtestParams.interval,
       startDate: backtestParams.startDate,
@@ -907,9 +932,9 @@ export default function Dashboard() {
 
     try {
       addLog('BACKTEST', `Geriye dönük test aksiyonu ${strategy.name} stratejisi için ${backtestParams.pair} (Spot Verisi) üzerinde çağrılıyor...`);
-      const result: BacktestResult = await backtestStrategy(fullBacktestParams); 
+      const result: BacktestResult = await backtestStrategy(fullBacktestParams);
 
-      setBacktestResult(result); 
+      setBacktestResult(result);
 
       if (result.errorMessage) {
         toast({ title: "Backtest Sonucu", description: result.errorMessage, variant: "destructive" });
@@ -919,7 +944,7 @@ export default function Dashboard() {
         addLog('BACKTEST', `Geriye dönük test başarıyla tamamlandı. PnL: ${result.totalPnlPercent?.toFixed(2)}%`);
       }
     } catch (error) {
-      console.error("Backtest action error:", error);
+      console.error("Backtest aksiyonu hatası:", error);
       const errorMessage = error instanceof Error ? error.message : "Bilinmeyen bir AI veya API hatası oluştu.";
       setBacktestResult({ errorMessage, totalTrades: 0, winningTrades: 0, losingTrades: 0, winRate: 0, totalPnl: 0, totalPnlPercent: 0, maxDrawdown: 0 });
       addLog('BACKTEST_ERROR', `Geriye dönük test aksiyonu yürütme başarısız: ${errorMessage}`);
@@ -947,16 +972,16 @@ export default function Dashboard() {
     );
   };
 
-   const TradeHistoryRow = ({ trade }: { trade: any }) => { 
+   const TradeHistoryRow = ({ trade }: { trade: TradeHistoryItem }) => {
         const formattedPrice = formatNumberClientSide(trade.price, { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 8 });
         const formattedAmount = formatNumberClientSide(trade.qty, { maximumFractionDigits: 8 });
         const formattedTotal = formatNumberClientSide(trade.quoteQty, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
 
        return (
-           <TableRow key={trade.id || trade.orderId}> 
+           <TableRow key={trade.id}>
                <TableCell className="text-xs whitespace-nowrap">{formatTimestamp(trade.time)}</TableCell>
                <TableCell>{trade.symbol}</TableCell>
-               <TableCell className={cn("font-medium", trade.isBuyer === false ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500')}>{trade.isBuyer === false ? 'BUY' : 'SELL'}</TableCell>
+               <TableCell className={cn("font-medium", trade.isBuyer === false ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500')}>{trade.isBuyer === false ? 'ALIŞ' : 'SATIŞ'}</TableCell>
                <TableCell className="text-right tabular-nums">{formattedPrice}</TableCell>
                <TableCell className="text-right tabular-nums">{formattedAmount}</TableCell>
                <TableCell className="text-right tabular-nums">{formattedTotal}</TableCell>
@@ -985,13 +1010,13 @@ export default function Dashboard() {
     if (!portfolioData || !totalPortfolioValueUsd || totalPortfolioValueUsd === 0) return [];
 
     const stablecoins = ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI'];
-    const tryEurRate = { TRY: 0.03, EUR: 1.08 }; 
-    
+    const tryEurRate = { TRY: 0.03, EUR: 1.08 };
+
     let basePrices: Record<string, number> = {
         BTC: 65000, ETH: 3500, SOL: 150, BNB: 600,
         ADA: 0.45, XRP: 0.5, DOGE: 0.15, SHIB: 0.000025,
     };
-    
+
     return portfolioData
         .map(balance => {
             const totalAmount = parseFloat(balance.free) + parseFloat(balance.locked);
@@ -1002,13 +1027,13 @@ export default function Dashboard() {
                 valueUsd = totalAmount * tryEurRate.TRY;
             } else if (balance.asset === 'EUR' && tryEurRate.EUR) {
                 valueUsd = totalAmount * tryEurRate.EUR;
-            } else if (basePrices[balance.asset]) { 
+            } else if (basePrices[balance.asset]) {
                 valueUsd = totalAmount * basePrices[balance.asset];
             }
             return valueUsd > 0.01 ? { name: balance.asset, value: valueUsd } : null;
         })
         .filter((item): item is { name: string; value: number } => item !== null)
-        .sort((a, b) => b.value - a.value); 
+        .sort((a, b) => b.value - a.value);
 }, [portfolioData, totalPortfolioValueUsd]);
 
 
@@ -1021,7 +1046,7 @@ export default function Dashboard() {
         );
     }
 
-    const chartSize = 150; 
+    const chartSize = 150;
 
     return (
         <div className="flex flex-col items-center gap-2">
@@ -1042,7 +1067,7 @@ export default function Dashboard() {
                            const x = cx + radius * Math.cos(-midAngle * RADIAN);
                            const y = cy + radius * Math.sin(-midAngle * RADIAN);
                            const percentage = (percent * 100).toFixed(0);
-                           if (parseFloat(percentage) < 5) return null; 
+                           if (parseFloat(percentage) < 5) return null;
                            return (
                                <text x={x} y={y} fill="hsl(var(--primary-foreground))" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" className="text-[10px] font-medium">
                                    {`${name} ${percentage}%`}
@@ -1059,7 +1084,7 @@ export default function Dashboard() {
                             backgroundColor: 'hsl(var(--background))',
                             borderColor: 'hsl(var(--border))',
                             borderRadius: 'var(--radius)',
-                            fontSize: '0.75rem', 
+                            fontSize: '0.75rem',
                         }}
                         formatter={(value: number, name: string) => [formatNumberClientSide(value, {style: 'currency', currency: 'USD', maximumFractionDigits: 2 }), name]}
                     />
@@ -1072,7 +1097,7 @@ export default function Dashboard() {
         </div>
     );
   };
-  
+
   return (
     <SidebarProvider>
        <Sidebar side="left" collapsible="icon" variant="sidebar">
@@ -1174,7 +1199,7 @@ export default function Dashboard() {
               <span className={cn(
                 "text-sm font-medium px-2 py-1 rounded",
                 botStatus === 'running' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800',
-                'dark:bg-opacity-20', 
+                'dark:bg-opacity-20',
                 botStatus === 'running' ? 'dark:bg-green-800/30 dark:text-green-300' : 'dark:bg-red-800/30 dark:text-red-300'
               )}>
                 Bot: {botStatus === 'running' ? 'Çalışıyor' : 'Durdu'}
@@ -1219,13 +1244,13 @@ export default function Dashboard() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 flex-1">
           <Card className="lg:col-span-3">
-            <CardContent className="p-0"> 
+            <CardContent className="p-0">
               <Tabs defaultValue="portfolio" className="w-full">
-                <TabsList className="grid w-full grid-cols-3 rounded-t-lg rounded-b-none p-0 h-auto"> 
+                <TabsList className="grid w-full grid-cols-3 rounded-t-lg rounded-b-none p-0 h-auto">
                   <TabsTrigger value="portfolio" className="rounded-tl-md rounded-tr-none rounded-b-none py-2">
                     <Wallet className="h-4 w-4 mr-1" /> Portföy
                   </TabsTrigger>
-                  <TabsTrigger value="history" className="rounded-none py-2"> 
+                  <TabsTrigger value="history" className="rounded-none py-2">
                     <History className="h-4 w-4 mr-1" /> Geçmiş
                   </TabsTrigger>
                   <TabsTrigger value="logs" className="rounded-tr-md rounded-tl-none rounded-b-none py-2">
@@ -1233,7 +1258,7 @@ export default function Dashboard() {
                   </TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="portfolio" className="p-4 max-h-[570px] overflow-y-auto"> 
+                <TabsContent value="portfolio" className="p-4 max-h-[570px] overflow-y-auto">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-base font-medium">
                       Portföy {activeApiEnvironment && ` (${activeApiEnvironment.replace('_',' ').toUpperCase()})`}
@@ -1241,11 +1266,11 @@ export default function Dashboard() {
                     {loadingPortfolio && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
                   </div>
 
-                  <div className="mb-4 p-4 bg-muted/50 rounded-lg"> 
+                  <div className="mb-4 p-4 bg-muted/50 rounded-lg">
                      <PortfolioPieChart />
                   </div>
 
-                  {portfolioError && !loadingPortfolio && ( 
+                  {portfolioError && !loadingPortfolio && (
                     <Alert variant="destructive" className="mb-4">
                         <AlertCircle className="h-4 w-4" />
                         <AlertTitle>Portföy Yüklenemedi</AlertTitle>
@@ -1259,7 +1284,7 @@ export default function Dashboard() {
                     </Alert>
                   )}
 
-                  {!activeApiEnvironment && !loadingPortfolio && !portfolioError && ( 
+                  {!activeApiEnvironment && !loadingPortfolio && !portfolioError && (
                     <Alert variant="default" className="mb-4">
                       <AlertCircle className="h-4 w-4" />
                       <AlertTitle>API Ortamı Seçilmedi</AlertTitle>
@@ -1290,10 +1315,10 @@ export default function Dashboard() {
                       ) : (
                         <TableRow>
                           <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
-                            {portfolioError ? "Veri yüklenemedi." : 
-                              !activeApiEnvironment ? "Aktif API ortamı seçilmedi." : 
-                                (activeApiEnvironment && validationStatus[activeApiEnvironment] !== 'valid' && !portfolioError) ? `${activeApiEnvironment.replace('_',' ').toUpperCase()} API anahtarları doğrulanmamış.` : 
-                                  portfolioData.length === 0 && !loadingPortfolio ? "Portföy boş." : 
+                            {portfolioError ? "Veri yüklenemedi." :
+                              !activeApiEnvironment ? "Aktif API ortamı seçilmedi." :
+                                (activeApiEnvironment && validationStatus[activeApiEnvironment] !== 'valid' && !portfolioError) ? `${activeApiEnvironment.replace('_',' ').toUpperCase()} API anahtarları doğrulanmamış.` :
+                                  portfolioData.length === 0 && !loadingPortfolio ? "Portföy boş." :
                                     "Portföy verisi bekleniyor..."}
                           </TableCell>
                         </TableRow>
@@ -1303,8 +1328,8 @@ export default function Dashboard() {
                 </TabsContent>
 
                 <TabsContent value="history" className="p-4 max-h-[570px] overflow-y-auto">
-                  <h3 className="text-base font-medium mb-2">İşlem Geçmişi {activeApiEnvironment && ` (${activeApiEnvironment.replace('_',' ').toUpperCase()})`} (Yakında)</h3>
-                  <p className="text-sm text-muted-foreground mb-4">Binance API üzerinden son işlemleriniz burada listelenecektir.</p>
+                  <h3 className="text-base font-medium mb-2">İşlem Geçmişi {activeApiEnvironment && ` (${activeApiEnvironment.replace('_',' ').toUpperCase()})`}</h3>
+                  <p className="text-sm text-muted-foreground mb-4">Bot tarafından açılan test işlemleri burada listelenir.</p>
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -1325,7 +1350,7 @@ export default function Dashboard() {
                           </TableCell>
                         </TableRow>
                       ) : (
-                        tradeHistoryData.map((trade, index) => <TradeHistoryRow key={index} trade={trade} />)
+                        tradeHistoryData.map((trade) => <TradeHistoryRow key={trade.id} trade={trade} />)
                       )}
                     </TableBody>
                   </Table>
@@ -1333,7 +1358,7 @@ export default function Dashboard() {
 
                 <TabsContent value="logs" className="p-4 max-h-[570px] overflow-y-auto">
                   <h3 className="text-base font-medium mb-2">Log Kayıtları ({dynamicLogData.length})</h3>
-                  <ScrollArea className="h-[510px]"> 
+                  <ScrollArea className="h-[510px]">
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -1359,7 +1384,7 @@ export default function Dashboard() {
                                     log.type === 'WARN' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' :
                                       log.type === 'ERROR' || log.type.includes('ERROR') ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' :
                                         log.type === 'CONFIG' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300' :
-                                          log.type.includes('START') || log.type === 'BACKTEST' || log.type.includes('STRATEJI') ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
+                                          log.type.includes('START') || log.type === 'BACKTEST' || log.type.includes('STRATEJI') || log.type === 'TRADE_HISTORY' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
                                             log.type.includes('TELEGRAM') ? 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300' :
                                               log.type.includes('AI') ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300' :
                                               'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
@@ -1426,8 +1451,8 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card id="strategies" className="row-span-1 md:row-span-2"> 
-            <CardContent className="p-0"> 
+          <Card id="strategies" className="row-span-1 md:row-span-2">
+            <CardContent className="p-0">
               <Tabs defaultValue="manage" className="w-full">
                 <TabsList className="grid w-full grid-cols-3 rounded-t-lg rounded-b-none p-0 h-auto">
                   <TabsTrigger value="manage" className="rounded-tl-md rounded-tr-none rounded-b-none py-2">
@@ -1451,7 +1476,7 @@ export default function Dashboard() {
                           Yeni Strateji (AI)
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="sm:max-w-[600px]"> 
+                      <DialogContent className="sm:max-w-[600px]">
                         <DialogHeader>
                           <DialogTitle>Yeni Ticaret Stratejisi Tanımla (AI)</DialogTitle>
                           <DialogDescription>
@@ -1467,7 +1492,7 @@ export default function Dashboard() {
                             <Label htmlFor="strategy-description" className="text-right">Kısa Açıklama</Label>
                             <Input id="strategy-description" value={defineStrategyParams.description} onChange={(e) => handleDefineStrategyParamChange(e, 'description')} placeholder="Stratejinin ana fikri." className="col-span-3" />
                           </div>
-                          <div className="grid grid-cols-4 items-start gap-4"> 
+                          <div className="grid grid-cols-4 items-start gap-4">
                             <Label htmlFor="strategy-prompt" className="text-right pt-2">Detaylı Strateji İstemi (Prompt)</Label>
                             <div className="col-span-3 space-y-1">
                               <Textarea id="strategy-prompt" value={defineStrategyParams.prompt} onChange={(e) => handleDefineStrategyParamChange(e, 'prompt')} placeholder="AI için detaylı alım/satım kuralları, indikatörler ve parametreler... Örn: 'RSI(14) 35 altına düştüğünde VE Hacim son 10 mumun ortalamasının 1.5 katından fazlaysa AL. RSI(14) 70 üzerine çıktığında veya %3 Stop-Loss tetiklendiğinde SAT.'" className="min-h-[150px]" />
@@ -1516,10 +1541,10 @@ export default function Dashboard() {
                     <AccordionItem value="available-strategies">
                       <AccordionTrigger>Mevcut Stratejiler ({definedStrategies.length})</AccordionTrigger>
                       <AccordionContent>
-                        <ScrollArea className="h-[250px] pr-3"> 
+                        <ScrollArea className="h-[250px] pr-3">
                           <div className="space-y-2">
                             {definedStrategies.map((strategy) => (
-                              <div key={strategy.id} className="flex items-center gap-2 p-2 border rounded-md bg-card"> 
+                              <div key={strategy.id} className="flex items-center gap-2 p-2 border rounded-md bg-card">
                                 <Checkbox
                                   id={`strategy-${strategy.id}`}
                                   checked={activeStrategies.includes(strategy.id)}
@@ -1531,7 +1556,7 @@ export default function Dashboard() {
                                       <TooltipTrigger asChild>
                                         <label htmlFor={`strategy-${strategy.id}`} className="text-sm font-medium cursor-pointer flex items-center gap-1">
                                           {strategy.name}
-                                          {strategy.id.startsWith('ai_') && <Info className="h-3 w-3 text-blue-500" />} 
+                                          {strategy.id.startsWith('ai_') && <Info className="h-3 w-3 text-blue-500" />}
                                         </label>
                                       </TooltipTrigger>
                                       <TooltipContent>
@@ -1578,7 +1603,7 @@ export default function Dashboard() {
                           <ScrollArea className="h-[300px]">
                             {loadingPairs ? (
                               <SelectItem value="loading" disabled>Yükleniyor...</SelectItem>
-                            ) : allPairsForBacktest.length > 0 ? ( 
+                            ) : allPairsForBacktest.length > 0 ? (
                               allPairsForBacktest.map((pair) => (
                                 <SelectItem key={pair.symbol} value={pair.symbol}>{pair.symbol}</SelectItem>
                               ))
@@ -1657,9 +1682,9 @@ export default function Dashboard() {
                 </TabsContent>
 
                 <TabsContent value="risk" className="p-4 space-y-6">
-                  <h3 className="text-base font-medium">Risk Yönetimi Ayarları</h3>
-                  <p className="text-sm text-muted-foreground">Botun kullanacağı genel risk parametrelerini belirleyin.</p>
-                  
+                  <h3 className="text-base font-medium">Genel Risk Yönetimi Ayarları</h3>
+                   <p className="text-sm text-muted-foreground">Botun kullanacağı genel risk parametrelerini belirleyin. Bu ayarlar seçilen tüm stratejiler için geçerli olacaktır.</p>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
                     <div className="space-y-1">
                       <Label htmlFor="portfolio-allocation">Portföy Yüzdesi (%) - İşlem Başına</Label>
@@ -1672,7 +1697,7 @@ export default function Dashboard() {
                       <Input id="max-open-trades" type="number" value={maxOpenTrades} onChange={(e) => setMaxOpenTrades(e.target.value)} placeholder="Örn: 5" min="1" step="1" />
                       <p className="text-xs text-muted-foreground">Aynı anda açılabilecek maksimum işlem sayısı.</p>
                     </div>
-                  
+
                     <div className="space-y-1">
                       <Label htmlFor="stop-loss">Zarar Durdur (%) - Pozisyon Sonrası</Label>
                       <Input id="stop-loss" type="number" value={stopLoss} onChange={(e) => setStopLoss(e.target.value)} placeholder="Örn: 2" min="0.1" step="0.1" />
@@ -1683,7 +1708,7 @@ export default function Dashboard() {
                       <Input id="take-profit" type="number" value={takeProfit} onChange={(e) => setTakeProfit(e.target.value)} placeholder="Örn: 5" min="0.1" step="0.1" />
                       <p className="text-xs text-muted-foreground">Pozisyon açıldıktan sonra, giriş fiyatının % kaç üstünde kar al.</p>
                     </div>
-                    
+
                     <div className="space-y-1">
                       <Label htmlFor="buy-stop-offset">Alış Stop Yüzdesi (%) - Emir Girişi</Label>
                       <Input id="buy-stop-offset" type="number" value={buyStopOffsetPercent} onChange={(e) => setBuyStopOffsetPercent(e.target.value)} placeholder="Örn: 1" min="0.01" step="0.01" />
@@ -1696,7 +1721,7 @@ export default function Dashboard() {
                       <p className="text-xs text-muted-foreground">Satış Stop emri için, mevcut piyasa fiyatının % kaç altına emir yerleştirileceği.</p>
                     </div>
                   </div>
-                  
+
                   <div className="sm:col-span-2 pt-2">
                     <Button disabled>
                       Risk Ayarlarını Kaydet (Yakında)
@@ -1767,12 +1792,12 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
-        
-        <Card className="mt-4 md:mt-6 lg:col-span-3">
+
+        <Card className="mt-4 md:mt-6">
            <CardHeader className="flex flex-col space-y-1 pb-2 pt-3 px-4">
               <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                   <CardTitle className="text-xl font-bold text-foreground">
-                      {selectedPair ? `${selectedPair.replace(/USDT$/, '/USDT')}` : "Grafik"} 
+                      {selectedPair ? `${selectedPair.replace(/USDT$/, '/USDT')}` : "Grafik"}
                   </CardTitle>
               </div>
                <CardDescription className="text-xs text-muted-foreground pt-1">
@@ -1785,8 +1810,8 @@ export default function Dashboard() {
                 <TradingViewWidget
                   symbolPair={selectedPair}
                   interval={selectedInterval}
-                  exchangePrefix="BINANCE" 
-                  autosize={false} 
+                  exchangePrefix="BINANCE"
+                  autosize={false}
                   className="w-full h-full"
                 />
               ) : (
@@ -1802,4 +1827,3 @@ export default function Dashboard() {
     </SidebarProvider>
   );
 }
-
