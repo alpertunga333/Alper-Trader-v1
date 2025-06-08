@@ -317,7 +317,7 @@ export default function Dashboard() {
     const fetchPairs = async () => {
         setLoadingPairs(true);
         setPortfolioError(null);
-        addLog('INFO', 'Fetching available trading pairs from Binance...');
+        addLog('INFO', 'Binance\'ten mevcut işlem pariteleri çekiliyor...');
         try {
             // Always fetch from SPOT for the most comprehensive list for backtesting.
             const spotInfo = await getExchangeInfo(false, false); // isTestnet=false, isFutures=false for SPOT
@@ -338,13 +338,13 @@ export default function Dashboard() {
                 const defaultPair = activeUserDefinedPairs.find(p => p.symbol === 'BTCUSDT') || activeUserDefinedPairs[0];
                 setSelectedPair(defaultPair.symbol);
                 setBacktestParams(prev => ({ ...prev, pair: defaultPair.symbol }));
-                addLog('INFO', `Successfully fetched ${allAvailablePairsStore.length} total Spot pairs. Using ${activeUserDefinedPairs.length} user-defined pairs for bot selection. Default pair set to ${defaultPair.symbol}.`);
+                addLog('INFO', `Başarıyla ${allAvailablePairsStore.length} toplam Spot paritesi çekildi. Bot seçimi için ${activeUserDefinedPairs.length} kullanıcı tanımlı parite kullanılıyor. Varsayılan parite ${defaultPair.symbol} olarak ayarlandı.`);
             } else if (activeUserDefinedPairs.length === 0) {
-                addLog('WARN', `None of the user-defined pairs are currently trading or available on Binance Spot. Total Spot pairs: ${allAvailablePairsStore.length}.`);
+                addLog('WARN', `Kullanıcı tanımlı paritelerden hiçbiri şu anda Binance Spot'ta işlem görmüyor veya mevcut değil. Toplam Spot paritesi: ${allAvailablePairsStore.length}.`);
                 if (allAvailablePairsStore.length > 0 && !selectedPair) { 
                     setSelectedPair(allAvailablePairsStore[0].symbol);
                     setBacktestParams(prev => ({ ...prev, pair: allAvailablePairsStore[0].symbol}));
-                    addLog('INFO', `Defaulting to first available pair from Spot: ${allAvailablePairsStore[0].symbol}`);
+                    addLog('INFO', `Spot'tan ilk uygun pariteye varsayılan olarak ayarlanıyor: ${allAvailablePairsStore[0].symbol}`);
                 }
             } else if (selectedPair && !activeUserDefinedPairs.find(p => p.symbol === selectedPair) && allAvailablePairsStore.length > 0) {
                 // If current selectedPair is not in the filtered user list, reset to default from user list or general list
@@ -352,18 +352,18 @@ export default function Dashboard() {
                 if (newDefault) {
                   setSelectedPair(newDefault.symbol);
                   setBacktestParams(prev => ({ ...prev, pair: newDefault.symbol }));
-                  addLog('INFO', `Current selected pair ${selectedPair} not in user-defined list, reset to ${newDefault.symbol}.`);
+                  addLog('INFO', `Mevcut seçili parite ${selectedPair} kullanıcı tanımlı listede değil, ${newDefault.symbol} olarak sıfırlandı.`);
                 }
-                addLog('INFO', `Displaying ${activeUserDefinedPairs.length} user-defined pairs for bot (active on Spot). Total Spot pairs: ${allAvailablePairsStore.length}.`);
+                addLog('INFO', `Bot için ${activeUserDefinedPairs.length} kullanıcı tanımlı parite (Spot'ta aktif) görüntüleniyor. Toplam Spot paritesi: ${allAvailablePairsStore.length}.`);
             } else {
-                 addLog('INFO', `Displaying ${activeUserDefinedPairs.length} user-defined pairs for bot (active on Spot). Total Spot pairs: ${allAvailablePairsStore.length}.`);
+                 addLog('INFO', `Bot için ${activeUserDefinedPairs.length} kullanıcı tanımlı parite (Spot'ta aktif) görüntüleniyor. Toplam Spot paritesi: ${allAvailablePairsStore.length}.`);
             }
 
         } catch (err) {
             console.error("Failed to fetch exchange info:", err);
             const errorMsg = err instanceof Error ? err.message : "Bilinmeyen bir hata oluştu.";
             setPortfolioError(`Parite verileri yüklenemedi: ${errorMsg}`);
-            addLog('ERROR', `Failed to fetch exchange info: ${errorMsg}`);
+            addLog('ERROR', `Borsa bilgileri alınamadı: ${errorMsg}`);
             toast({ title: "Hata", description: `Binance pariteleri alınamadı: ${errorMsg}`, variant: "destructive" });
         } finally {
             setLoadingPairs(false);
@@ -400,7 +400,7 @@ export default function Dashboard() {
           setPortfolioError(null);
           setTotalPortfolioValueUsd(null); 
           const envLabel = activeApiEnvironment.replace('_', ' ').toUpperCase();
-          addLog('INFO', `Fetching portfolio data for ${envLabel} environment...`);
+          addLog('INFO', `${envLabel} ortamı için portföy verileri çekiliyor...`);
 
           try {
               const apiKeyHint = apiKeys[activeApiEnvironment].key.substring(0, 4); 
@@ -419,9 +419,9 @@ export default function Dashboard() {
                           return a.asset.localeCompare(b.asset);
                       });
                   setPortfolioData(filteredBalances);
-                  addLog('INFO', `Successfully fetched portfolio (${envLabel}). Found ${filteredBalances.length} assets with non-zero balance.`);
+                  addLog('INFO', `Portföy (${envLabel}) başarıyla çekildi. Sıfır olmayan bakiyeye sahip ${filteredBalances.length} varlık bulundu.`);
                   if (filteredBalances.length === 0) {
-                      addLog('INFO', `Portfolio (${envLabel}) is empty or all balances are zero.`);
+                      addLog('INFO', `Portföy (${envLabel}) boş veya tüm bakiyeler sıfır.`);
                   }
 
                    let estimatedTotal = 0;
@@ -447,7 +447,7 @@ export default function Dashboard() {
                       }
                    });
                   setTotalPortfolioValueUsd(estimatedTotal);
-                  addLog('INFO', `Estimated total portfolio value (${envLabel}): ~$${estimatedTotal.toFixed(2)} USD`);
+                  addLog('INFO', `Tahmini toplam portföy değeri (${envLabel}): ~$${estimatedTotal.toFixed(2)} USD`);
 
               } else {
                    const errMsg = result.error || `Failed to fetch balances for ${envLabel}.`;
@@ -456,15 +456,15 @@ export default function Dashboard() {
                    setTotalPortfolioValueUsd(null);
                    if (activeApiEnvironment && (errMsg.includes('API anahtarları') || errMsg.includes('yapılandırılmamış') || errMsg.includes('Geçersiz'))) {
                         setValidationStatus(prev => ({ ...prev, [activeApiEnvironment!]: 'invalid' }));
-                        addLog('WARN', `Portfolio fetch failed (${envLabel}) due to API key issue, setting status to invalid.`);
+                        addLog('WARN', `Portföy çekme işlemi (${envLabel}) API anahtarı sorunu nedeniyle başarısız oldu, durum geçersiz olarak ayarlanıyor.`);
                    }
-                   addLog('ERROR', `Portfolio fetch failed (${envLabel}): ${errMsg}`);
+                   addLog('ERROR', `Portföy çekme işlemi (${envLabel}) başarısız oldu: ${errMsg}`);
               }
           } catch (err) {
               const errorMsg = err instanceof Error ? err.message : "Portföy yüklenirken bilinmeyen bir hata oluştu.";
               console.error(`Failed to fetch portfolio (${envLabel}):`, err);
               setPortfolioError(errorMsg);
-              addLog('ERROR', `Failed to fetch portfolio (${envLabel}): ${errorMsg}`);
+              addLog('ERROR', `Portföy çekme işlemi (${envLabel}) başarısız oldu: ${errorMsg}`);
               setPortfolioData([]); 
               setTotalPortfolioValueUsd(null);
           } finally {
@@ -498,29 +498,29 @@ export default function Dashboard() {
      if (newStatus === 'running') {
          if (!activeApiEnvironment || validationStatus[activeApiEnvironment] !== 'valid') {
              toast({ title: "API Doğrulaması Gerekli", description: `Lütfen aktif ortam (${envLabel}) için API anahtarlarını doğrulayın.`, variant: "destructive" });
-             addLog('WARN', `Bot start prevented: Active API environment (${envLabel}) not validated.`);
+             addLog('WARN', `Bot başlatma engellendi: Aktif API ortamı (${envLabel}) doğrulanmadı.`);
              return;
          }
         if (selectedPairsForBot.length === 0) {
             toast({ title: "Parite Seçilmedi", description: "Lütfen botun çalışacağı en az bir parite seçin.", variant: "destructive" });
-            addLog('WARN', 'Bot start prevented: No pairs selected.');
+            addLog('WARN', 'Bot başlatma engellendi: Hiç parite seçilmedi.');
             return;
         }
         if (activeStrategies.length === 0) {
             toast({ title: "Strateji Seçilmedi", description: "Lütfen en az bir aktif strateji seçin.", variant: "destructive" });
-            addLog('WARN', 'Bot start prevented: No strategies selected.');
+            addLog('WARN', 'Bot başlatma engellendi: Hiç strateji seçilmedi.');
             return;
         }
         if (validationStatus.telegramToken !== 'valid' || validationStatus.telegramChatId !== 'valid') {
             toast({ title: "Telegram Doğrulaması Gerekli", description: "Lütfen geçerli Telegram bot token ve chat ID'sini doğrulayın.", variant: "destructive" });
-            addLog('WARN', 'Bot start prevented: Telegram not validated.');
+            addLog('WARN', 'Bot başlatma engellendi: Telegram doğrulanmadı.');
             return;
         }
 
         setBotStatus('running'); 
         const strategies = activeStrategies.map(id => definedStrategies.find(s=>s.id===id)?.name).filter(Boolean);
         toast({ title: `Bot Başlatılıyor...`, description: `Ortam: ${envLabel}. Pariteler: ${selectedPairsForBot.join(', ')}. Stratejiler: ${strategies.join(', ')}.` });
-        addLog('INFO', `Bot starting... Env: ${envLabel}, Pairs: ${selectedPairsForBot.join(', ') || 'None'}. Strategies: ${strategies.join(', ') || 'None'}.`);
+        addLog('INFO', `Bot başlatılıyor... Ortam: ${envLabel}, Pariteler: ${selectedPairsForBot.join(', ') || 'Hiçbiri'}. Stratejiler: ${strategies.join(', ') || 'Hiçbiri'}.`);
 
         let strategyStartSuccessCount = 0;
         let strategyStartFailCount = 0;
@@ -530,7 +530,7 @@ export default function Dashboard() {
                 const strategy = definedStrategies.find(s => s.id === strategyId);
                 if (strategy) {
                     try {
-                        addLog('INFO', `Attempting to start strategy '${strategy.name}' on ${pair} (${envLabel})...`);
+                        addLog('INFO', `'${strategy.name}' stratejisi ${pair} (${envLabel}) üzerinde başlatılmaya çalışılıyor...`);
                         const runParams: RunParams = {
                             strategy,
                             pair,
@@ -540,7 +540,7 @@ export default function Dashboard() {
                             environment: activeApiEnvironment!,
                         };
                         const result: RunResult = await runStrategy(runParams);
-                        addLog('STRATEGY_START', `Strategy '${strategy.name}' on ${pair} (${envLabel}) status: ${result.status}. ${result.message || ''}`);
+                        addLog('STRATEGY_START', `Strateji '${strategy.name}', ${pair} (${envLabel}) durumu: ${result.status}. ${result.message || ''}`);
                         if(result.status.toLowerCase() !== 'error') {
                             strategyStartSuccessCount++;
                         } else {
@@ -550,16 +550,16 @@ export default function Dashboard() {
                         strategyStartFailCount++;
                         const message = error instanceof Error ? error.message : "Bilinmeyen hata";
                         toast({ title: "Bot Strateji Hatası", description: `${strategy.name} - ${pair} (${envLabel}): Başlatılamadı: ${message}`, variant: "destructive" });
-                        addLog('ERROR', `Failed to start strategy '${strategy.name}' on ${pair} (${envLabel}): ${message}`);
+                        addLog('ERROR', `'${strategy.name}' stratejisi ${pair} (${envLabel}) üzerinde başlatılamadı: ${message}`);
                     }
                 } else {
                     strategyStartFailCount++;
-                    addLog('ERROR', `Strategy not found: ${strategyId} (Pair: ${pair})`);
+                    addLog('ERROR', `Strateji bulunamadı: ${strategyId} (Parite: ${pair})`);
                 }
             }
         }
 
-        addLog('INFO', `Strategy start attempt complete. Success: ${strategyStartSuccessCount}, Failed: ${strategyStartFailCount}.`);
+        addLog('INFO', `Strateji başlatma denemesi tamamlandı. Başarılı: ${strategyStartSuccessCount}, Başarısız: ${strategyStartFailCount}.`);
 
         let finalBotStatus = 'running'; 
         let telegramMessageText = '';
@@ -572,14 +572,14 @@ export default function Dashboard() {
                 description: `Tüm stratejiler başlatılırken hata oluştu (${strategyStartFailCount} hata). Lütfen logları kontrol edin.`,
                 variant: "destructive"
             });
-            addLog('ERROR', `Bot completely failed to start. All ${strategyStartFailCount} strategy initializations failed.`);
+            addLog('ERROR', `Bot tamamen başlatılamadı. Tüm ${strategyStartFailCount} strateji başlatma işlemi başarısız oldu.`);
         } else if (strategyStartFailCount > 0) {
             toast({
                 title: "Kısmi Başlatma",
                 description: `${strategyStartSuccessCount} strateji başlatıldı, ${strategyStartFailCount} başlatılamadı. Detaylar için logları inceleyin.`,
                 variant: "default" 
             });
-            addLog('WARN', `Bot started with partial success. Success: ${strategyStartSuccessCount}, Failed: ${strategyStartFailCount}.`);
+            addLog('WARN', `Bot kısmi başarıyla başlatıldı. Başarılı: ${strategyStartSuccessCount}, Başarısız: ${strategyStartFailCount}.`);
             telegramMessageText = `⚠️ KriptoPilot bot (${envLabel}) ${selectedPairsForBot.length} paritede kısmen aktif. Başarılı: ${strategyStartSuccessCount}, Başarısız: ${strategyStartFailCount} strateji.`;
         } else if (strategyStartSuccessCount > 0 && strategyStartFailCount === 0) {
              toast({ title: `Bot Başarıyla Başlatıldı`, description: `${strategyStartSuccessCount} strateji ${envLabel} ortamında aktif.`});
@@ -592,14 +592,14 @@ export default function Dashboard() {
             try {
                 const telegramResult = await sendTelegramMessageAction(apiKeys.telegram.token, apiKeys.telegram.chatId, telegramMessageText);
                 if (telegramResult.success) {
-                  addLog('TELEGRAM', 'Bot start notification sent.');
+                  addLog('TELEGRAM', 'Bot başlatma bildirimi gönderildi.');
                 } else {
-                  addLog('TELEGRAM_ERROR', `Bot start notification failed: ${telegramResult.message}`);
+                  addLog('TELEGRAM_ERROR', `Bot başlatma bildirimi gönderilemedi: ${telegramResult.message}`);
                 }
             } catch (error) {
                 const errorMsg = error instanceof Error ? error.message : "Bilinmeyen hata";
                 console.error("Error sending Telegram start message:", error);
-                addLog('TELEGRAM_ERROR', `Bot start notification failed: ${errorMsg}`);
+                addLog('TELEGRAM_ERROR', `Bot başlatma bildirimi gönderilemedi: ${errorMsg}`);
             }
         }
 
@@ -607,21 +607,21 @@ export default function Dashboard() {
     } else { 
         setBotStatus('stopped');
         toast({ title: 'Bot Durduruldu.', description: `Aktif ortam: ${envLabel}` });
-        addLog('INFO', `Bot stopping process initiated for environment ${envLabel}.`);
+        addLog('INFO', `Bot durdurma işlemi ${envLabel} ortamı için başlatıldı.`);
         console.log(`Stopping bot for environment ${envLabel}... (Placeholder: actual stop logic needed)`);
 
         if (validationStatus.telegramToken === 'valid' && validationStatus.telegramChatId === 'valid') {
             try {
                 const telegramResult = await sendTelegramMessageAction(apiKeys.telegram.token, apiKeys.telegram.chatId, `🛑 KriptoPilot bot (${envLabel}) durduruldu.`);
                 if (telegramResult.success) {
-                  addLog('TELEGRAM', 'Bot stop notification sent.');
+                  addLog('TELEGRAM', 'Bot durdurma bildirimi gönderildi.');
                 } else {
-                  addLog('TELEGRAM_ERROR', `Bot stop notification failed: ${telegramResult.message}`);
+                  addLog('TELEGRAM_ERROR', `Bot durdurma bildirimi gönderilemedi: ${telegramResult.message}`);
                 }
             } catch (error) {
                 const errorMsg = error instanceof Error ? error.message : "Bilinmeyen hata";
                 console.error("Error sending Telegram stop message:", error);
-                addLog('TELEGRAM_ERROR', `Bot stop notification failed: ${errorMsg}`);
+                addLog('TELEGRAM_ERROR', `Bot durdurma bildirimi gönderilemedi: ${errorMsg}`);
             }
         }
     }
@@ -632,7 +632,7 @@ export default function Dashboard() {
       const isAdding = !prev.includes(strategyId);
        const newStrategies = isAdding ? [...prev, strategyId] : prev.filter((id) => id !== strategyId);
       const strategyName = definedStrategies.find(s => s.id === strategyId)?.name || strategyId;
-      addLog('CONFIG', `Strategy ${isAdding ? 'activated' : 'deactivated'}: ${strategyName}`);
+      addLog('CONFIG', `Strateji ${isAdding ? 'aktive edildi' : 'devre dışı bırakıldı'}: ${strategyName}`);
       return newStrategies;
     });
   };
@@ -641,7 +641,7 @@ export default function Dashboard() {
     setSelectedPairsForBot((prev) => {
       const isAdding = !prev.includes(pairSymbol);
       const newPairs = isAdding ? [...prev, pairSymbol] : prev.filter((symbol) => symbol !== pairSymbol);
-      addLog('CONFIG', `Bot pair ${isAdding ? 'added' : 'removed'}: ${pairSymbol}`);
+      addLog('CONFIG', `Bot paritesi ${isAdding ? 'eklendi' : 'kaldırıldı'}: ${pairSymbol}`);
       return newPairs;
     });
   };
@@ -656,10 +656,10 @@ export default function Dashboard() {
       [env]: { ...prev[env], [field]: value },
     }));
     setValidationStatus(prev => ({ ...prev, [env]: 'not_checked' }));
-    addLog('CONFIG', `${env.replace('_',' ').toUpperCase()} API ${field} changed, validation status reset.`);
+    addLog('CONFIG', `${env.replace('_',' ').toUpperCase()} API ${field === 'key' ? 'anahtarı' : 'gizli anahtarı'} değiştirildi, doğrulama durumu sıfırlandı.`);
     if (activeApiEnvironment === env) {
         setActiveApiEnvironment(null); 
-        addLog('CONFIG', `Deactivated API environment ${env.replace('_',' ').toUpperCase()} due to key change.`);
+        addLog('CONFIG', `API ortamı ${env.replace('_',' ').toUpperCase()}, anahtar değişikliği nedeniyle devre dışı bırakıldı.`);
         setPortfolioData([]); 
         setTotalPortfolioValueUsd(null);
         setPortfolioError(null);
@@ -676,24 +676,24 @@ export default function Dashboard() {
       }));
       if (field === 'token') {
           setValidationStatus(prev => ({ ...prev, telegramToken: 'not_checked', telegramChatId: 'not_checked' }));
-          addLog('CONFIG', 'Telegram token changed, validation status reset.');
+          addLog('CONFIG', 'Telegram token değiştirildi, doğrulama durumu sıfırlandı.');
       } else if (field === 'chatId') {
           setValidationStatus(prev => ({ ...prev, telegramChatId: 'not_checked' }));
-          addLog('CONFIG', 'Telegram chat ID changed, validation status reset.');
+          addLog('CONFIG', 'Telegram chat ID değiştirildi, doğrulama durumu sıfırlandı.');
       }
   };
 
  const handleValidateApiKey = async (env: ApiEnvironment) => {
     setValidationStatus(prev => ({ ...prev, [env]: 'pending' }));
     const envLabel = env.replace('_', ' ').toUpperCase();
-    addLog('INFO', `Validating ${envLabel} API keys via Server Action...`);
+    addLog('INFO', `${envLabel} API anahtarları Sunucu Aksiyonu ile doğrulanıyor...`);
 
     try {
       const result = await validateBinanceKeysAction(apiKeys[env].key, apiKeys[env].secret, env);
       const newStatus = result.isValid ? 'valid' : 'invalid';
       setValidationStatus(prev => ({ ...prev, [env]: newStatus }));
 
-      addLog(result.isValid ? 'INFO' : 'ERROR', `API Key Validation (${envLabel}): ${result.message}`);
+      addLog(result.isValid ? 'INFO' : 'ERROR', `API Anahtarı Doğrulaması (${envLabel}): ${result.message}`);
       toast({
         title: result.isValid ? "API Anahtarı Doğrulandı" : "API Anahtarı Geçersiz",
         description: result.message,
@@ -702,11 +702,11 @@ export default function Dashboard() {
 
       if (result.isValid) {
         setActiveApiEnvironment(env);
-        addLog('CONFIG', `Activated API environment: ${envLabel}`);
+        addLog('CONFIG', `Aktif API ortamı: ${envLabel}`);
         setPortfolioError(null); 
       } else if (activeApiEnvironment === env) {
         setActiveApiEnvironment(null);
-        addLog('CONFIG', `Deactivated API environment ${envLabel} due to failed validation.`);
+        addLog('CONFIG', `API ortamı ${envLabel}, başarısız doğrulama nedeniyle devre dışı bırakıldı.`);
         setPortfolioData([]); 
         setTotalPortfolioValueUsd(null);
         setPortfolioError(null);
@@ -715,7 +715,7 @@ export default function Dashboard() {
       const errorMsg = error instanceof Error ? error.message : "Sunucu aksiyonu çağrılırken bilinmeyen bir hata oluştu.";
       console.error(`Error calling validateBinanceKeysAction for ${envLabel}:`, error);
       setValidationStatus(prev => ({ ...prev, [env]: 'invalid' }));
-      addLog('ERROR', `API Key Validation Action Error (${envLabel}): ${errorMsg}`);
+      addLog('ERROR', `API Anahtarı Doğrulama Aksiyonu Hatası (${envLabel}): ${errorMsg}`);
       toast({
         title: "Doğrulama Hatası",
         description: `${envLabel} API anahtarları doğrulanırken bir sunucu hatası oluştu: ${errorMsg}`,
@@ -723,7 +723,7 @@ export default function Dashboard() {
       });
       if (activeApiEnvironment === env) { 
         setActiveApiEnvironment(null);
-        addLog('CONFIG', `Deactivated API environment ${envLabel} due to validation action error.`);
+        addLog('CONFIG', `API ortamı ${envLabel}, doğrulama aksiyonu hatası nedeniyle devre dışı bırakıldı.`);
         setPortfolioData([]);
         setTotalPortfolioValueUsd(null);
         setPortfolioError(null);
@@ -733,12 +733,12 @@ export default function Dashboard() {
 
   const handleValidateTelegramToken = async () => {
     setValidationStatus(prev => ({ ...prev, telegramToken: 'pending', telegramChatId: 'not_checked' })); 
-    addLog('INFO', 'Validating Telegram bot token via Server Action...');
+    addLog('INFO', 'Telegram bot token Sunucu Aksiyonu ile doğrulanıyor...');
     try {
       const result = await validateTelegramTokenAction(apiKeys.telegram.token);
       setValidationStatus(prev => ({ ...prev, telegramToken: result.isValid ? 'valid' : 'invalid' }));
 
-      addLog(result.isValid ? 'INFO' : 'ERROR', `Telegram Token Validation: ${result.message}`);
+      addLog(result.isValid ? 'INFO' : 'ERROR', `Telegram Token Doğrulaması: ${result.message}`);
       toast({
         title: result.isValid ? "Telegram Token Doğrulandı" : "Telegram Token Geçersiz",
         description: result.message,
@@ -746,13 +746,13 @@ export default function Dashboard() {
       });
        if (!result.isValid) {
             setValidationStatus(prev => ({ ...prev, telegramChatId: 'not_checked'}));
-            addLog('WARN', 'Telegram token invalid, chat ID validation cannot proceed.');
+            addLog('WARN', 'Telegram token geçersiz, chat ID doğrulaması devam edemez.');
        }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Sunucu aksiyonu çağrılırken bilinmeyen bir hata oluştu.";
       console.error("Error calling validateTelegramTokenAction:", error);
       setValidationStatus(prev => ({ ...prev, telegramToken: 'invalid', telegramChatId: 'not_checked' }));
-      addLog('ERROR', `Telegram Token Validation Action Error: ${errorMsg}`);
+      addLog('ERROR', `Telegram Token Doğrulama Aksiyonu Hatası: ${errorMsg}`);
       toast({ title: "Doğrulama Hatası", description: `Telegram token doğrulanırken bir sunucu hatası oluştu: ${errorMsg}`, variant: "destructive" });
     }
   };
@@ -760,22 +760,22 @@ export default function Dashboard() {
   const handleValidateTelegramChatId = async () => {
     if (validationStatus.telegramToken !== 'valid') {
       toast({ title: "Önce Token'ı Doğrulayın", description: "Chat ID'yi test etmek için önce geçerli bir bot token girip doğrulayın.", variant: "destructive" });
-      addLog('WARN', 'Telegram chat ID validation prevented: Token not valid.');
+      addLog('WARN', 'Telegram chat ID doğrulaması engellendi: Token geçerli değil.');
       return;
     }
     setValidationStatus(prev => ({ ...prev, telegramChatId: 'pending' }));
-    addLog('INFO', `Validating Telegram chat ID ${apiKeys.telegram.chatId} via Server Action...`);
+    addLog('INFO', `Telegram chat ID ${apiKeys.telegram.chatId} Sunucu Aksiyonu ile doğrulanıyor...`);
 
     try {
       const validationResult = await validateTelegramChatIdAction(apiKeys.telegram.token, apiKeys.telegram.chatId);
       
       if (validationResult.isValid) {
         setValidationStatus(prev => ({ ...prev, telegramChatId: 'valid' }));
-        addLog('INFO', `Telegram Chat ID ${apiKeys.telegram.chatId} validation successful. Sending test message...`);
+        addLog('INFO', `Telegram Chat ID ${apiKeys.telegram.chatId} doğrulaması başarılı. Test mesajı gönderiliyor...`);
         const messageResult = await sendTelegramMessageAction(apiKeys.telegram.token, apiKeys.telegram.chatId, "✅ KriptoPilot Telegram bağlantısı başarıyla doğrulandı!");
 
         if (messageResult.success) {
-            addLog('TELEGRAM', `Test message sent to chat ID ${apiKeys.telegram.chatId}.`);
+            addLog('TELEGRAM', `Test mesajı ${apiKeys.telegram.chatId} chat ID'sine gönderildi.`);
             toast({
               title: "Telegram Chat ID Doğrulandı",
               description: `Chat ID geçerli. Test mesajı gönderildi: ${apiKeys.telegram.chatId}`,
@@ -783,7 +783,7 @@ export default function Dashboard() {
             });
         } else {
              setValidationStatus(prev => ({ ...prev, telegramChatId: 'invalid' })); 
-            addLog('TELEGRAM_ERROR', `Test message failed to send: ${messageResult.message}`);
+            addLog('TELEGRAM_ERROR', `Test mesajı gönderilemedi: ${messageResult.message}`);
             toast({
               title: "Chat ID Doğrulandı, Mesaj Hatası",
               description: `Chat ID geçerli, ancak test mesajı gönderilemedi: ${messageResult.message || 'Bilinmeyen hata.'} Lütfen botun sohbete eklendiğinden ve mesaj gönderme izni olduğundan emin olun.`,
@@ -792,14 +792,14 @@ export default function Dashboard() {
         }
       } else {
          setValidationStatus(prev => ({ ...prev, telegramChatId: 'invalid' }));
-         addLog('ERROR', `Telegram Chat ID Validation: ${validationResult.message}`);
+         addLog('ERROR', `Telegram Chat ID Doğrulaması: ${validationResult.message}`);
          toast({ title: "Telegram Chat ID Geçersiz", description: validationResult.message, variant: "destructive" });
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Sunucu aksiyonu çağrılırken bilinmeyen bir hata oluştu.";
       console.error("Error calling Telegram Chat ID validation/messaging actions:", error);
       setValidationStatus(prev => ({ ...prev, telegramChatId: 'invalid' }));
-      addLog('ERROR', `Telegram Chat ID Validation/Messaging Action Error: ${errorMsg} (ID: ${apiKeys.telegram.chatId})`);
+      addLog('ERROR', `Telegram Chat ID Doğrulama/Mesajlaşma Aksiyonu Hatası: ${errorMsg} (ID: ${apiKeys.telegram.chatId})`);
       toast({ title: "Doğrulama Hatası", description: `Telegram Chat ID işlemleri sırasında sunucu hatası: ${errorMsg}`, variant: "destructive" });
     }
   };
@@ -811,30 +811,30 @@ export default function Dashboard() {
   const handleDefineNewStrategy = async () => {
     if (!defineStrategyParams.name.trim() || !defineStrategyParams.description.trim() || !defineStrategyParams.prompt.trim()) {
       toast({ title: "Hata", description: "Strateji adı, açıklaması ve istemi boş olamaz.", variant: "destructive" });
-      addLog('WARN', 'Define new strategy prevented: Missing required fields.');
+      addLog('WARN', 'Yeni strateji tanımlama engellendi: Gerekli alanlar eksik.');
       return;
     }
 
     setIsDefiningStrategy(true);
-    addLog('AI_TASK', `Attempting to define new strategy '${defineStrategyParams.name}' with AI...`);
+    addLog('AI_TASK', `Yeni strateji '${defineStrategyParams.name}' AI ile tanımlanmaya çalışılıyor...`);
     try {
       const result: DefineStrategyResult = await defineNewStrategy(defineStrategyParams); 
 
       if (result.success && result.strategy) {
         setDefinedStrategies(prev => [...prev, result.strategy!]); 
         toast({ title: "Strateji Tanımlandı", description: result.message || `"${result.strategy.name}" başarıyla tanımlandı.` });
-        addLog('AI_TASK', `AI successfully defined strategy '${result.strategy.name}'. ID: ${result.strategy.id}`);
+        addLog('AI_TASK', `AI, '${result.strategy.name}' stratejisini başarıyla tanımladı. ID: ${result.strategy.id}`);
         setIsDefineStrategyDialogOpen(false); 
         setDefineStrategyParams({ name: '', description: '', prompt: '' }); 
       } else {
         const message = result.message || "AI stratejiyi tanımlayamadı.";
         toast({ title: "Strateji Tanımlama Başarısız", description: message, variant: "destructive" });
-        addLog('AI_ERROR', `AI failed to define strategy: ${message}`);
+        addLog('AI_ERROR', `AI stratejiyi tanımlayamadı: ${message}`);
       }
     } catch (error) {
       console.error("Error defining new strategy:", error);
       const message = error instanceof Error ? error.message : "Bilinmeyen bir AI hatası oluştu.";
-      addLog('AI_ERROR', `Error defining new strategy: ${message}`);
+      addLog('AI_ERROR', `Yeni strateji tanımlanırken hata: ${message}`);
       toast({ title: "AI Hatası", description: `Strateji tanımlanırken hata: ${message}`, variant: "destructive" });
     } finally {
       setIsDefiningStrategy(false);
@@ -860,17 +860,17 @@ export default function Dashboard() {
   const runBacktestHandler = async () => {
     setIsBacktesting(true);
     setBacktestResult(null); 
-    addLog('BACKTEST', 'Backtest initiated...');
+    addLog('BACKTEST', 'Geriye dönük test başlatıldı...');
 
     const strategy = definedStrategies.find(s => s.id === selectedBacktestStrategyId);
 
     if (!strategy) {
       toast({ title: "Backtest Hatası", description: "Geçerli bir strateji seçilmedi.", variant: "destructive" });
-      addLog('BACKTEST_ERROR', 'Backtest failed: No strategy selected.');
+      addLog('BACKTEST_ERROR', 'Geriye dönük test başarısız: Strateji seçilmedi.');
       setIsBacktesting(false);
       return;
     }
-    addLog('BACKTEST', `Selected Strategy: ${strategy.name}`);
+    addLog('BACKTEST', `Seçilen Strateji: ${strategy.name}`);
 
     const missingParams = [
         !backtestParams.pair && "Parite",
@@ -883,18 +883,18 @@ export default function Dashboard() {
     if (missingParams) {
         toast({ title: "Backtest Hatası", description: `Lütfen eksik veya geçersiz alanları doldurun: ${missingParams}.`, variant: "destructive" });
         setBacktestResult({ errorMessage: `Eksik parametreler: ${missingParams}.`, totalTrades: 0, winningTrades: 0, losingTrades: 0, winRate: 0, totalPnl: 0, totalPnlPercent: 0, maxDrawdown: 0 });
-        addLog('BACKTEST_ERROR', `Backtest failed: Missing parameters - ${missingParams}.`);
+        addLog('BACKTEST_ERROR', `Geriye dönük test başarısız: Eksik parametreler - ${missingParams}.`);
         setIsBacktesting(false);
         return;
     }
     if (new Date(backtestParams.startDate) >= new Date(backtestParams.endDate)) {
         toast({ title: "Backtest Hatası", description: "Başlangıç tarihi bitiş tarihinden önce olmalıdır.", variant: "destructive" });
         setBacktestResult({ errorMessage: "Geçersiz tarih aralığı.", totalTrades: 0, winningTrades: 0, losingTrades: 0, winRate: 0, totalPnl: 0, totalPnlPercent: 0, maxDrawdown: 0 });
-        addLog('BACKTEST_ERROR', 'Backtest failed: Start date must be before end date.');
+        addLog('BACKTEST_ERROR', 'Geriye dönük test başarısız: Başlangıç tarihi bitiş tarihinden önce olmalıdır.');
         setIsBacktesting(false);
         return;
     }
-    addLog('BACKTEST', `Parameters: Pair=${backtestParams.pair}, Interval=${backtestParams.interval}, Start=${backtestParams.startDate}, End=${backtestParams.endDate}, Balance=${backtestParams.initialBalance}`);
+    addLog('BACKTEST', `Parametreler: Parite=${backtestParams.pair}, Aralık=${backtestParams.interval}, Başlangıç=${backtestParams.startDate}, Bitiş=${backtestParams.endDate}, Bakiye=${backtestParams.initialBalance}`);
 
     const fullBacktestParams: BacktestParams = {
       strategy: strategy, 
@@ -906,23 +906,23 @@ export default function Dashboard() {
     };
 
     try {
-      addLog('BACKTEST', `Calling backtestStrategy action for ${strategy.name} on ${backtestParams.pair} (Spot Data)...`);
+      addLog('BACKTEST', `Geriye dönük test aksiyonu ${strategy.name} stratejisi için ${backtestParams.pair} (Spot Verisi) üzerinde çağrılıyor...`);
       const result: BacktestResult = await backtestStrategy(fullBacktestParams); 
 
       setBacktestResult(result); 
 
       if (result.errorMessage) {
         toast({ title: "Backtest Sonucu", description: result.errorMessage, variant: "destructive" });
-        addLog('BACKTEST_ERROR', `Backtest completed with error: ${result.errorMessage}`);
+        addLog('BACKTEST_ERROR', `Geriye dönük test hatayla tamamlandı: ${result.errorMessage}`);
       } else {
         toast({ title: "Backtest Tamamlandı", description: `${strategy.name} stratejisi ${backtestParams.pair} üzerinde başarıyla test edildi.` });
-        addLog('BACKTEST', `Backtest completed successfully. PnL: ${result.totalPnlPercent?.toFixed(2)}%`);
+        addLog('BACKTEST', `Geriye dönük test başarıyla tamamlandı. PnL: ${result.totalPnlPercent?.toFixed(2)}%`);
       }
     } catch (error) {
       console.error("Backtest action error:", error);
       const errorMessage = error instanceof Error ? error.message : "Bilinmeyen bir AI veya API hatası oluştu.";
       setBacktestResult({ errorMessage, totalTrades: 0, winningTrades: 0, losingTrades: 0, winRate: 0, totalPnl: 0, totalPnlPercent: 0, maxDrawdown: 0 });
-      addLog('BACKTEST_ERROR', `Backtest action execution failed: ${errorMessage}`);
+      addLog('BACKTEST_ERROR', `Geriye dönük test aksiyonu yürütme başarısız: ${errorMessage}`);
       toast({ title: "Backtest Başarısız", description: errorMessage, variant: "destructive" });
     } finally {
       setIsBacktesting(false);
@@ -1359,7 +1359,7 @@ export default function Dashboard() {
                                     log.type === 'WARN' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' :
                                       log.type === 'ERROR' || log.type.includes('ERROR') ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' :
                                         log.type === 'CONFIG' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300' :
-                                          log.type.includes('START') || log.type === 'BACKTEST' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
+                                          log.type.includes('START') || log.type === 'BACKTEST' || log.type.includes('STRATEJI') ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
                                             log.type.includes('TELEGRAM') ? 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300' :
                                               log.type.includes('AI') ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300' :
                                               'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
@@ -1767,8 +1767,8 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
-
-        <Card className="mt-4 md:mt-6">
+        
+        <Card className="mt-4 md:mt-6 lg:col-span-3">
            <CardHeader className="flex flex-col space-y-1 pb-2 pt-3 px-4">
               <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                   <CardTitle className="text-xl font-bold text-foreground">
