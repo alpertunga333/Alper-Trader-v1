@@ -28,8 +28,9 @@ export async function backtestStrategy(params: BacktestParams): Promise<Backtest
     const validation = BacktestParamsSchema.safeParse(params);
     if (!validation.success) {
         console.error("Server Action (backtestStrategy) Error: Invalid input parameters.", validation.error.format());
+        const errorMessages = validation.error.format()._errors?.join(', ') || 'Doğrulama başarısız oldu.';
         return {
-            errorMessage: `Invalid input parameters: ${validation.error.format()._errors?.join(', ') || 'Validation failed.'}`,
+            errorMessage: `Geçersiz giriş parametreleri: ${errorMessages}`,
             totalTrades: 0, winningTrades: 0, losingTrades: 0, winRate: 0, totalPnl: 0, totalPnlPercent: 0, maxDrawdown: 0
         };
     }
@@ -47,7 +48,7 @@ export async function backtestStrategy(params: BacktestParams): Promise<Backtest
         else if (interval.endsWith('d')) intervalMs = parseInt(interval) * 24 * 60 * 60 * 1000;
 
         if (isNaN(intervalMs) || intervalMs <= 0) {
-           throw new Error(`Invalid interval: ${interval}`);
+           throw new Error(`Geçersiz zaman aralığı: ${interval}`);
         }
 
         const estimatedCandles = Math.ceil((end - start) / intervalMs);
@@ -57,13 +58,13 @@ export async function backtestStrategy(params: BacktestParams): Promise<Backtest
         console.log(`Fetched ${candles.length} candles for backtest from Spot.`);
 
         if (candles.length === 0) {
-            throw new Error("No historical data fetched.");
+            throw new Error("Geçmiş veri çekilemedi. Lütfen parite ve tarih aralığını kontrol edin.");
         }
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.error("Server Action (backtestStrategy) Error fetching data:", error);
         return {
-            errorMessage: `Failed to fetch historical data: ${message}`,
+            errorMessage: `Geçmiş veri çekilemedi: ${message}. Lütfen parite, ağ bağlantısı ve tarih ayarlarınızı kontrol edin.`,
             totalTrades: 0, winningTrades: 0, losingTrades: 0, winRate: 0, totalPnl: 0, totalPnlPercent: 0, maxDrawdown: 0
         };
     }
@@ -111,7 +112,8 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
     const validation = RunParamsSchema.safeParse(params);
     if (!validation.success) {
         console.error("Server Action (runStrategy) Error: Invalid input parameters.", validation.error.format());
-        return { status: 'Error', message: `Invalid input: ${validation.error.format()._errors?.join(', ') || 'Validation failed.'}` };
+        const errorMessages = validation.error.format()._errors?.join(', ') || 'Doğrulama başarısız oldu.';
+        return { status: 'Hata', message: `Geçersiz giriş: ${errorMessages}` };
     }
 
     let apiKey: string | null;
@@ -125,11 +127,10 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
         apiKey = await fetchSecureApiKey(environment);
         secretKey = await fetchSecureSecretKey(environment);
         if (!apiKey || !secretKey) {
-             throw new Error(`API keys for environment ${envLabel} not found or configured securely.`);
+             throw new Error(`${envLabel} ortamı için API anahtarları bulunamadı veya güvenli bir şekilde yapılandırılmadı.`);
         }
         console.log(`Server Action (runStrategy): API keys retrieved for ${envLabel}. Attempting test order...`);
 
-        // Define test order parameters (MARKET BUY)
         const orderParams: OrderParams = {
             symbol: pair,
             side: 'BUY',
@@ -137,30 +138,19 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
         };
 
         if (isFutures) {
-            // For ALL Futures MARKET orders (especially on Testnet), 'quantity' is strictly required by Binance.
-            // We'll use specific small quantities for common pairs and a generic small quantity for others.
-            // This is a simplified approach for a "test order" and does not involve live price fetching
-            // or dynamic calculation based on specific pair minimums/step sizes.
             if (pair === 'BTCUSDT') {
-                orderParams.quantity = 0.0002; // Approx $13 at $65k BTC
+                orderParams.quantity = 0.0002; 
             } else if (pair === 'ETHUSDT') {
-                orderParams.quantity = 0.0035; // Approx $12.25 at $3500 ETH
+                orderParams.quantity = 0.0035; 
             } else if (pair === 'LTCUSDT') {
-                orderParams.quantity = 0.15;  // Approx $12 at $80 LTC
+                orderParams.quantity = 0.15;  
             } else if (pair === 'SOLUSDT') {
-                orderParams.quantity = 0.08; // Approx $12 at $150 SOL
+                orderParams.quantity = 0.08; 
             } else {
-                // For other futures pairs, provide a generic small 'quantity'.
-                // This directly addresses the "-1102 quantity mandatory" error.
-                // However, this fixed value might be too small (below minQty/minNotional) or
-                // too large for some pairs, potentially leading to other API errors.
-                // A robust solution would involve fetching exchange info for limits and current price.
                 orderParams.quantity = 0.01;
             }
-            // Ensure quoteOrderQty is NOT sent for futures if quantity is being sent for MARKET orders.
         } else {
-            // For Spot MARKET orders, quoteOrderQty is generally well-supported.
-            orderParams.quoteOrderQty = 11; // Target ~11 USDT value.
+            orderParams.quoteOrderQty = 11; 
         }
         
         console.log(`Server Action (runStrategy): Placing test order with params:`, orderParams);
@@ -173,23 +163,22 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
         const quoteAsset = pair.match(/USDT|BUSD|TRY|EUR|FDUSD$/)?.[0] || '';
 
 
-        tradeAttemptMessage = `✅ TEST ORDER PLACED (${envLabel}):\n` +
-                              `Strategy: ${strategy.name}\n` +
-                              `Pair: ${orderResponse.symbol}\n` +
-                              `Side: ${orderResponse.side}\n` +
-                              `Type: ${orderResponse.type}\n` +
-                              `Status: ${orderResponse.status}\n` +
-                              `Executed Qty: ${executedQty.toFixed(8)} ${baseAsset}\n` + 
-                              `Avg. Fill Price: ${filledPrice.toFixed(4)} ${quoteAsset}\n` +
-                              `Total Value: ${parseFloat(orderResponse.cummulativeQuoteQty).toFixed(2)} ${quoteAsset}\n` +
-                              `Order ID: ${orderResponse.orderId}`;
+        tradeAttemptMessage = `✅ TEST EMRİ VERİLDİ (${envLabel}):\n` +
+                              `Strateji: ${strategy.name}\n` +
+                              `Parite: ${orderResponse.symbol}\n` +
+                              `Yön: ${orderResponse.side}\n` +
+                              `Tip: ${orderResponse.type}\n` +
+                              `Durum: ${orderResponse.status}\n` +
+                              `İşlem Miktarı: ${executedQty.toFixed(8)} ${baseAsset}\n` + 
+                              `Ort. Dolum Fiyatı: ${filledPrice.toFixed(4)} ${quoteAsset}\n` +
+                              `Toplam Değer: ${parseFloat(orderResponse.cummulativeQuoteQty).toFixed(2)} ${quoteAsset}\n` +
+                              `Emir ID: ${orderResponse.orderId}`;
 
     } catch (error) {
          const message = error instanceof Error ? error.message : String(error);
          console.error(`Server Action (runStrategy) Error during test order for ${pair} (${envLabel}): ${message}`);
-         tradeAttemptMessage = `❌ TEST ORDER FAILED (${envLabel}) for ${strategy.name} on ${pair}:\nError: ${message}`;
+         tradeAttemptMessage = `❌ TEST EMRİ BAŞARISIZ (${envLabel}) - Strateji: ${strategy.name}, Parite: ${pair}:\nHata: ${message}`;
          
-         // Send Telegram notification for failure
          if (telegramBotToken && telegramChatId) {
             try {
                 await sendTelegramMessageAction(telegramBotToken, telegramChatId, tradeAttemptMessage);
@@ -200,26 +189,25 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
         } else {
             console.warn(`Telegram token/chat ID not set. Skipping failure notification for ${pair}.`);
         }
-         return { status: 'Error', message: `Test order failed: ${message}` };
+         return { status: 'Hata', message: `Test emri başarısız oldu: ${message}. Lütfen API anahtarlarınızı, parite limitlerini ve ağ bağlantınızı kontrol edin.` };
     }
 
-    // Send Telegram notification for success
     if (orderResponse && telegramBotToken && telegramChatId) {
         try {
             await sendTelegramMessageAction(telegramBotToken, telegramChatId, tradeAttemptMessage);
             console.log(`Telegram notification sent for successful test order on ${pair}.`);
         } catch (tgError) {
             console.error(`Failed to send Telegram notification for successful test order on ${pair}:`, tgError);
-            tradeAttemptMessage += "\n(Telegram notification failed to send)";
+            tradeAttemptMessage += "\n(Telegram bildirimi gönderilemedi)";
         }
     } else if (orderResponse) {
         console.warn(`Telegram token/chat ID not set. Skipping success notification for ${pair}.`);
-        tradeAttemptMessage += "\n(Telegram notification skipped: token/chat ID missing)";
+        tradeAttemptMessage += "\n(Telegram bildirimi atlandı: token/chat ID eksik)";
     }
     
     return {
-        status: 'Active', // Indicates the initiation (and test order) was successful
-        message: `Strategy ${strategy.name} run (test order placed) on ${pair} (${envLabel}). Details: ${tradeAttemptMessage}`,
+        status: 'Aktif', 
+        message: `Strateji ${strategy.name} (${envLabel} üzerinde ${pair} için test emri verildi). Detaylar: ${tradeAttemptMessage}`,
     };
 }
 
@@ -236,7 +224,8 @@ export async function defineNewStrategy(params: DefineStrategyParams): Promise<D
      const validation = DefineStrategyParamsSchema.safeParse(params);
      if (!validation.success) {
         console.error("Server Action (defineNewStrategy) Error: Invalid input parameters.", validation.error.format());
-        return { success: false, message: `Invalid input: ${validation.error.format()._errors?.join(', ') || 'Validation failed.'}` };
+        const errorMessages = validation.error.format()._errors?.join(', ') || 'Doğrulama başarısız oldu.';
+        return { success: false, message: `Geçersiz giriş: ${errorMessages}` };
      }
 
      const { name, description, prompt } = validation.data;
@@ -255,17 +244,17 @@ export async function defineNewStrategy(params: DefineStrategyParams): Promise<D
              const strategyValidation = StrategySchema.safeParse(newStrategy);
              if (!strategyValidation.success) {
                  console.error("Server Action (defineNewStrategy) Error: Generated strategy object is invalid.", strategyValidation.error.format());
-                 throw new Error("Internal error: Generated strategy data is invalid.");
+                 throw new Error("İç hata: Oluşturulan strateji verileri geçersiz.");
              }
 
              console.log(`Server Action: AI successfully defined strategy '${name}'. ID: ${newStrategy.id}`);
              return {
                  success: true,
                  strategy: strategyValidation.data, 
-                 message: `AI successfully defined strategy '${name}'.`,
+                 message: `AI, '${name}' stratejisini başarıyla tanımladı.`,
              };
          } else {
-             throw new Error("AI failed to define a valid strategy from the provided prompt. Please try refining the prompt with clearer rules and conditions.");
+             throw new Error("AI, sağlanan istemden geçerli bir strateji tanımlayamadı. Lütfen istemi daha net kurallar ve koşullarla iyileştirmeyi deneyin.");
          }
 
     } catch (error) {
@@ -273,11 +262,7 @@ export async function defineNewStrategy(params: DefineStrategyParams): Promise<D
         console.error(`Server Action (defineNewStrategy) Error for "${name}":`, error);
         return {
             success: false,
-            message: `Error defining strategy: ${message}`,
+            message: `Strateji tanımlanırken hata oluştu: ${message}. Lütfen isteminizi kontrol edin veya daha sonra tekrar deneyin.`,
         };
     }
 }
-
-    
-
-    

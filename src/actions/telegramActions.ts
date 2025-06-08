@@ -23,13 +23,13 @@ export async function validateTelegramTokenAction(
     }
     try {
         const isValid = await validateTelegramBotTokenService(token);
-        const message = isValid ? "Bot token geçerli." : "Bot token geçersiz veya Telegram API'ye ulaşılamadı.";
+        const message = isValid ? "Bot token geçerli." : "Bot token geçersiz veya Telegram API'ye ulaşılamadı. Lütfen token'ı kontrol edin ve internet bağlantınızı doğrulayın.";
         console.log(`Server Action: Telegram Token Validation: ${message}`);
         return { isValid, message };
     } catch (error) {
         const errorMsg = error instanceof Error ? error.message : "Bilinmeyen bir hata oluştu.";
         console.error("Server Action (validateTelegramTokenAction) Error:", errorMsg);
-        return { isValid: false, message: `Token doğrulanırken hata: ${errorMsg}` };
+        return { isValid: false, message: `Token doğrulanırken bir hata oluştu. Lütfen internet bağlantınızı kontrol edin veya daha sonra tekrar deneyin.` };
     }
 }
 
@@ -49,7 +49,6 @@ export async function validateTelegramChatIdAction(
     }
     try {
         const isValid = await validateTelegramChatIdService(token, chatId);
-        // The service function now throws for "chat not found", so a successful return means it's valid generally
         console.log(`Server Action: Telegram Chat ID ${chatId} validation successful.`);
         return { isValid: true, message: `Chat ID (${chatId}) geçerli.` };
 
@@ -59,7 +58,7 @@ export async function validateTelegramChatIdAction(
         if (errorMsg.toLowerCase().includes('chat not found')) {
             return { isValid: false, message: `Chat ID (${chatId}) bulunamadı. Lütfen ID'yi kontrol edin ve botun sohbete eklendiğinden/başlatıldığından emin olun.`};
         }
-        return { isValid: false, message: `Chat ID (${chatId}) doğrulanırken hata: ${errorMsg}` };
+        return { isValid: false, message: `Chat ID (${chatId}) doğrulanırken bir hata oluştu. Lütfen token, ID ve internet bağlantınızı kontrol edin.` };
     }
 }
 
@@ -86,8 +85,21 @@ export async function sendTelegramMessageAction(
         console.log(`Server Action: Telegram message sent successfully to ${chatId}.`);
         return { success: true };
     } catch (error) {
+        // Error from makeTelegramRequest (e.g. specific Telegram API error)
+        // or Error from sendTelegramMessageService if it throws for other reasons
         const errorMsg = error instanceof Error ? error.message : "Bilinmeyen bir hata oluştu.";
         console.error("Server Action (sendTelegramMessageAction) Error:", errorMsg);
-        return { success: false, message: `Telegram mesajı gönderilemedi: ${errorMsg}` };
+        
+        let userFriendlyMessage = "Telegram mesajı gönderilemedi. Lütfen ayarlarınızı ve internet bağlantınızı kontrol edin.";
+        // Try to parse more specific Telegram errors if available in errorMsg
+        if (errorMsg.includes("chat not found")) {
+            userFriendlyMessage = `Telegram mesajı gönderilemedi: Chat ID (${chatId}) bulunamadı.`;
+        } else if (errorMsg.includes("bot token") || errorMsg.includes("Unauthorized")) {
+            userFriendlyMessage = "Telegram mesajı gönderilemedi: Geçersiz bot token.";
+        } else if (errorMsg.includes("Wrong type of chat") || errorMsg.includes("bot can't initiate conversation")) {
+            userFriendlyMessage = `Telegram mesajı gönderilemedi: Bot bu Chat ID (${chatId}) ile iletişim kuramıyor. Botun sohbete eklendiğinden ve mesaj gönderme izni olduğundan emin olun.`;
+        }
+        
+        return { success: false, message: userFriendlyMessage };
     }
 }
