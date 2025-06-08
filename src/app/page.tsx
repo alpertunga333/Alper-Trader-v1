@@ -203,8 +203,16 @@ export default function Dashboard() {
   const [selectedInterval, setSelectedInterval] = React.useState<string>('1h');
   const [botStatus, setBotStatus] = React.useState<'running' | 'stopped'>('stopped');
   const [activeStrategies, setActiveStrategies] = React.useState<string[]>([]);
-  const [stopLoss, setStopLoss] = React.useState<string>('');
-  const [takeProfit, setTakeProfit] = React.useState<string>('');
+
+  // Risk Management States
+  const [stopLoss, setStopLoss] = React.useState<string>(''); // For Take Profit / Stop Loss after position open
+  const [takeProfit, setTakeProfit] = React.useState<string>(''); // For Take Profit / Stop Loss after position open
+  const [portfolioAllocationPercent, setPortfolioAllocationPercent] = React.useState<string>('10'); // Default 10%
+  const [maxOpenTrades, setMaxOpenTrades] = React.useState<string>('5'); // Default 5 trades
+  const [buyStopOffsetPercent, setBuyStopOffsetPercent] = React.useState<string>('1'); // Default 1% offset for Buy Stop orders
+  const [sellStopOffsetPercent, setSellStopOffsetPercent] = React.useState<string>('1'); // Default 1% offset for Sell Stop orders
+
+
   const [availablePairsForBot, setAvailablePairsForBot] = React.useState<SymbolInfo[]>([]); // For bot selection UI
   const [allPairsForBacktest, setAllPairsForBacktest] = React.useState<SymbolInfo[]>([]); // For backtesting dropdown
   const [portfolioData, setPortfolioData] = React.useState<Balance[]>([]);
@@ -420,16 +428,11 @@ export default function Dashboard() {
                    const stablecoins = ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI']; 
                    const tryEurRate = { TRY: 0.03, EUR: 1.08 }; 
                    
-                   // Define basePrices with fallback values
                     let basePrices: Record<string, number> = {
                         BTC: 65000, ETH: 3500, SOL: 150, BNB: 600,
                         ADA: 0.45, XRP: 0.5, DOGE: 0.15, SHIB: 0.000025,
-                        // Add more common assets with rough fallback USD prices if desired
                     };
 
-                    // This section for `latestCandleInfo` was problematic and is removed
-                    // as `latestCandleInfo` was not defined in this scope.
-                    // We will rely on the `basePrices` fallback mechanism or improve price fetching separately.
 
                    filteredBalances.forEach(b => {
                       const totalAmount = parseFloat(b.free) + parseFloat(b.locked);
@@ -439,11 +442,9 @@ export default function Dashboard() {
                           estimatedTotal += totalAmount * tryEurRate.TRY;
                       } else if (b.asset === 'EUR' && tryEurRate.EUR) {
                           estimatedTotal += totalAmount * tryEurRate.EUR;
-                      } else if (basePrices[b.asset]) { // Use fallback price
+                      } else if (basePrices[b.asset]) { 
                          estimatedTotal += totalAmount * basePrices[b.asset];
                       }
-                      // Consider adding a log for assets where price couldn't be estimated
-                      // else { addLog('WARN', `Price for asset ${b.asset} not found for portfolio valuation.`); }
                    });
                   setTotalPortfolioValueUsd(estimatedTotal);
                   addLog('INFO', `Estimated total portfolio value (${envLabel}): ~$${estimatedTotal.toFixed(2)} USD`);
@@ -486,7 +487,7 @@ export default function Dashboard() {
         setLoadingPortfolio(false);
       }
    // eslint-disable-next-line react-hooks/exhaustive-deps
-   }, [activeApiEnvironment, activeEnvValidationStatus]); // Removed selectedPair from deps as price fetching here is simplified
+   }, [activeApiEnvironment, activeEnvValidationStatus]);
 
 
   // --- Handlers ---
@@ -533,7 +534,7 @@ export default function Dashboard() {
                         const runParams: RunParams = {
                             strategy,
                             pair,
-                            interval: selectedInterval, // Use the globally selected interval for now
+                            interval: selectedInterval, 
                             stopLossPercent: stopLoss ? parseFloat(stopLoss) : undefined,
                             takeProfitPercent: takeProfit ? parseFloat(takeProfit) : undefined,
                             environment: activeApiEnvironment!,
@@ -565,7 +566,7 @@ export default function Dashboard() {
 
         if (strategyStartSuccessCount === 0 && strategyStartFailCount > 0) {
             finalBotStatus = 'stopped'; 
-            setBotStatus('stopped'); // Update UI immediately
+            setBotStatus('stopped'); 
             toast({
                 title: "Bot Başlatılamadı",
                 description: `Tüm stratejiler başlatılırken hata oluştu (${strategyStartFailCount} hata). Lütfen logları kontrol edin.`,
@@ -607,7 +608,6 @@ export default function Dashboard() {
         setBotStatus('stopped');
         toast({ title: 'Bot Durduruldu.', description: `Aktif ortam: ${envLabel}` });
         addLog('INFO', `Bot stopping process initiated for environment ${envLabel}.`);
-        // In a real application, you would also send commands to stop any running strategy processes/loops.
         console.log(`Stopping bot for environment ${envLabel}... (Placeholder: actual stop logic needed)`);
 
         if (validationStatus.telegramToken === 'valid' && validationStatus.telegramChatId === 'valid') {
@@ -987,16 +987,10 @@ export default function Dashboard() {
     const stablecoins = ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI'];
     const tryEurRate = { TRY: 0.03, EUR: 1.08 }; 
     
-    // Define basePrices with fallback values
     let basePrices: Record<string, number> = {
         BTC: 65000, ETH: 3500, SOL: 150, BNB: 600,
         ADA: 0.45, XRP: 0.5, DOGE: 0.15, SHIB: 0.000025,
-        // Add more common assets with rough fallback USD prices if desired
     };
-
-    // This section for `latestCandleInfo` was problematic and is removed
-    // as `latestCandleInfo` was not defined in this scope.
-    // We will rely on the `basePrices` fallback mechanism or improve price fetching separately.
     
     return portfolioData
         .map(balance => {
@@ -1008,10 +1002,9 @@ export default function Dashboard() {
                 valueUsd = totalAmount * tryEurRate.TRY;
             } else if (balance.asset === 'EUR' && tryEurRate.EUR) {
                 valueUsd = totalAmount * tryEurRate.EUR;
-            } else if (basePrices[balance.asset]) { // Use fallback price
+            } else if (basePrices[balance.asset]) { 
                 valueUsd = totalAmount * basePrices[balance.asset];
             }
-            // else { addLog('WARN', `Price for asset ${balance.asset} not found for pie chart valuation.`); }
             return valueUsd > 0.01 ? { name: balance.asset, value: valueUsd } : null;
         })
         .filter((item): item is { name: string; value: number } => item !== null)
@@ -1049,7 +1042,7 @@ export default function Dashboard() {
                            const x = cx + radius * Math.cos(-midAngle * RADIAN);
                            const y = cy + radius * Math.sin(-midAngle * RADIAN);
                            const percentage = (percent * 100).toFixed(0);
-                           if (parseFloat(percentage) < 5) return null; // Hide small labels
+                           if (parseFloat(percentage) < 5) return null; 
                            return (
                                <text x={x} y={y} fill="hsl(var(--primary-foreground))" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" className="text-[10px] font-medium">
                                    {`${name} ${percentage}%`}
@@ -1066,7 +1059,7 @@ export default function Dashboard() {
                             backgroundColor: 'hsl(var(--background))',
                             borderColor: 'hsl(var(--border))',
                             borderRadius: 'var(--radius)',
-                            fontSize: '0.75rem', // 12px
+                            fontSize: '0.75rem', 
                         }}
                         formatter={(value: number, name: string) => [formatNumberClientSide(value, {style: 'currency', currency: 'USD', maximumFractionDigits: 2 }), name]}
                     />
@@ -1663,25 +1656,51 @@ export default function Dashboard() {
                   </Card>
                 </TabsContent>
 
-                <TabsContent value="risk" className="p-4 space-y-4">
-                  <h3 className="text-base font-medium">Risk Yönetimi (Zarar Durdur / Kar Al)</h3>
-                  <p className="text-sm text-muted-foreground">Her işlem için otomatik Zarar Durdur (Stop-Loss) ve Kar Al (Take-Profit) yüzdeleri belirleyin. Bu ayarlar, çalışan stratejilere uygulanacaktır. (Geliştirme aşamasında)</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <TabsContent value="risk" className="p-4 space-y-6">
+                  <h3 className="text-base font-medium">Risk Yönetimi Ayarları</h3>
+                  <p className="text-sm text-muted-foreground">Botun kullanacağı genel risk parametrelerini belirleyin.</p>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
                     <div className="space-y-1">
-                      <Label htmlFor="stop-loss">Zarar Durdur (%)</Label>
+                      <Label htmlFor="portfolio-allocation">Portföy Yüzdesi (%) - İşlem Başına</Label>
+                      <Input id="portfolio-allocation" type="number" value={portfolioAllocationPercent} onChange={(e) => setPortfolioAllocationPercent(e.target.value)} placeholder="Örn: 10" min="0.1" step="0.1" />
+                      <p className="text-xs text-muted-foreground">Her bir işlem için toplam portföyün yüzde kaçının kullanılacağını belirtir.</p>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label htmlFor="max-open-trades">Maksimum Açık İşlem Sayısı</Label>
+                      <Input id="max-open-trades" type="number" value={maxOpenTrades} onChange={(e) => setMaxOpenTrades(e.target.value)} placeholder="Örn: 5" min="1" step="1" />
+                      <p className="text-xs text-muted-foreground">Aynı anda açılabilecek maksimum işlem sayısı.</p>
+                    </div>
+                  
+                    <div className="space-y-1">
+                      <Label htmlFor="stop-loss">Zarar Durdur (%) - Pozisyon Sonrası</Label>
                       <Input id="stop-loss" type="number" value={stopLoss} onChange={(e) => setStopLoss(e.target.value)} placeholder="Örn: 2" min="0.1" step="0.1" />
-                      <p className="text-xs text-muted-foreground">Pozisyon açılış fiyatının % kaç altında zararı durdur.</p>
+                      <p className="text-xs text-muted-foreground">Pozisyon açıldıktan sonra, giriş fiyatının % kaç altında zararı durdur.</p>
                     </div>
                     <div className="space-y-1">
-                      <Label htmlFor="take-profit">Kar Al (%)</Label>
+                      <Label htmlFor="take-profit">Kar Al (%) - Pozisyon Sonrası</Label>
                       <Input id="take-profit" type="number" value={takeProfit} onChange={(e) => setTakeProfit(e.target.value)} placeholder="Örn: 5" min="0.1" step="0.1" />
-                      <p className="text-xs text-muted-foreground">Pozisyon açılış fiyatının % kaç üstünde kar al.</p>
+                      <p className="text-xs text-muted-foreground">Pozisyon açıldıktan sonra, giriş fiyatının % kaç üstünde kar al.</p>
                     </div>
-                    <div className="sm:col-span-2">
-                      <Button disabled>
-                        Risk Ayarlarını Kaydet (Yakında)
-                      </Button>
+                    
+                    <div className="space-y-1">
+                      <Label htmlFor="buy-stop-offset">Alış Stop Yüzdesi (%) - Emir Girişi</Label>
+                      <Input id="buy-stop-offset" type="number" value={buyStopOffsetPercent} onChange={(e) => setBuyStopOffsetPercent(e.target.value)} placeholder="Örn: 1" min="0.01" step="0.01" />
+                      <p className="text-xs text-muted-foreground">Alış Stop emri için, mevcut piyasa fiyatının % kaç üzerine emir yerleştirileceği.</p>
                     </div>
+
+                    <div className="space-y-1">
+                      <Label htmlFor="sell-stop-offset">Satış Stop Yüzdesi (%) - Emir Girişi</Label>
+                      <Input id="sell-stop-offset" type="number" value={sellStopOffsetPercent} onChange={(e) => setSellStopOffsetPercent(e.target.value)} placeholder="Örn: 1" min="0.01" step="0.01" />
+                      <p className="text-xs text-muted-foreground">Satış Stop emri için, mevcut piyasa fiyatının % kaç altına emir yerleştirileceği.</p>
+                    </div>
+                  </div>
+                  
+                  <div className="sm:col-span-2 pt-2">
+                    <Button disabled>
+                      Risk Ayarlarını Kaydet (Yakında)
+                    </Button>
                   </div>
                 </TabsContent>
               </Tabs>
@@ -1749,7 +1768,6 @@ export default function Dashboard() {
           </Card>
         </div>
 
-        {/* Main Chart Area - Moved to the bottom, spanning full width */}
         <Card className="mt-4 md:mt-6">
            <CardHeader className="flex flex-col space-y-1 pb-2 pt-3 px-4">
               <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
