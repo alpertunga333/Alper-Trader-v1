@@ -122,6 +122,9 @@ import { ApiKeySettingsPanel } from '@/components/dashboard/api-settings-panel';
 import { TelegramSettingsPanel } from '@/components/dashboard/telegram-settings-panel';
 import { TradingViewWidget } from '@/components/dashboard/tradingview-widget';
 
+// Recharts components that might be needed for PortfolioPieChart
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
+
 
 // Placeholder: Replace with actual trade history fetching if implemented
 const tradeHistoryData: any[] = []; // Example: Placeholder for trade history
@@ -417,13 +420,15 @@ export default function Dashboard() {
                    const stablecoins = ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI']; 
                    const tryEurRate = { TRY: 0.03, EUR: 1.08 }; 
                                       
-                   // Base prices for estimation - these are fallbacks
-                   const basePrices: Record<string, number> = {
+                  let basePrices: Record<string, number> = {
                        BTC: 65000, ETH: 3500, SOL: 150, BNB: 600,
                        ADA: 0.45, XRP: 0.5, DOGE: 0.15, SHIB: 0.000025,
                    };
-                   // In a real app, you'd fetch current prices for non-stablecoins.
-                   // For this demo, we use fixed estimates or rely on selectedPair if it's a quote pair.
+                  
+                   // Update with latest candle if available for the selected pair
+                   // This logic is now simplified as latestCandleInfo is removed.
+                   // We rely on the basePrices for estimation.
+
 
                    filteredBalances.forEach(b => {
                       const totalAmount = parseFloat(b.free) + parseFloat(b.locked);
@@ -433,7 +438,7 @@ export default function Dashboard() {
                           estimatedTotal += totalAmount * tryEurRate.TRY;
                       } else if (b.asset === 'EUR' && tryEurRate.EUR) {
                           estimatedTotal += totalAmount * tryEurRate.EUR;
-                      } else if (basePrices[b.asset]) { // Use estimated base prices
+                      } else if (basePrices[b.asset]) { 
                          estimatedTotal += totalAmount * basePrices[b.asset];
                       }
                    });
@@ -478,7 +483,7 @@ export default function Dashboard() {
         setLoadingPortfolio(false);
       }
    // eslint-disable-next-line react-hooks/exhaustive-deps
-   }, [activeApiEnvironment, activeEnvValidationStatus]); // Removed latestCandleInfo, selectedPair to avoid re-fetching on candle ticks
+   }, [activeApiEnvironment, activeEnvValidationStatus]);
 
 
   // --- Handlers ---
@@ -979,8 +984,7 @@ export default function Dashboard() {
     const stablecoins = ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI'];
     const tryEurRate = { TRY: 0.03, EUR: 1.08 }; 
     
-    // Fallback prices, should ideally be fetched or updated more dynamically
-    const basePrices: Record<string, number> = {
+    let basePrices: Record<string, number> = {
         BTC: 65000, ETH: 3500, SOL: 150, BNB: 600,
         ADA: 0.45, XRP: 0.5, DOGE: 0.15, SHIB: 0.000025
     };
@@ -1004,7 +1008,7 @@ export default function Dashboard() {
         })
         .filter((item): item is { name: string; value: number } => item !== null)
         .sort((a, b) => b.value - a.value); 
-}, [portfolioData, totalPortfolioValueUsd]); // Removed latestCandleInfo dependency
+}, [portfolioData, totalPortfolioValueUsd]);
 
   const PortfolioPieChart = () => {
     if (loadingPortfolio || !pieChartData || pieChartData.length === 0) {
@@ -1019,14 +1023,46 @@ export default function Dashboard() {
 
     return (
         <div className="flex flex-col items-center gap-2">
-            {/* 
-              The ComposedChart and Pie components for the pie chart were here.
-              They are removed to avoid potential conflicts or if they are not strictly needed
-              with the TradingView widget handling main charting.
-              If a separate portfolio pie chart is still desired alongside TV widget,
-              ensure Pie and Cell are imported from 'recharts' and the JSX is reinstated here.
-              For now, assuming main focus is on TV widget.
-            */}
+            <ResponsiveContainer width="100%" height={chartSize}>
+                <PieChart>
+                    <Pie
+                        data={pieChartData}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={chartSize / 2 - 10}
+                        fill="hsl(var(--primary))"
+                        labelLine={false}
+                        label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, name, value }) => {
+                           const RADIAN = Math.PI / 180;
+                           const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+                           const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                           const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                           const percentage = (percent * 100).toFixed(0);
+                           if (parseFloat(percentage) < 5) return null; // Hide small labels
+                           return (
+                               <text x={x} y={y} fill="hsl(var(--primary-foreground))" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" className="text-[10px] font-medium">
+                                   {`${name} ${percentage}%`}
+                               </text>
+                           );
+                        }}
+                    >
+                        {pieChartData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={PIE_CHART_COLORS[index % PIE_CHART_COLORS.length]} />
+                        ))}
+                    </Pie>
+                    <RechartsTooltip
+                        contentStyle={{
+                            backgroundColor: 'hsl(var(--background))',
+                            borderColor: 'hsl(var(--border))',
+                            borderRadius: 'var(--radius)',
+                            fontSize: '0.75rem', // 12px
+                        }}
+                        formatter={(value: number, name: string) => [useFormattedNumber(value, {style: 'currency', currency: 'USD', maximumFractionDigits: 2 }), name]}
+                    />
+                </PieChart>
+            </ResponsiveContainer>
              <p className="text-xs text-muted-foreground">Toplam Değer (Tahmini)</p>
              <p className="text-lg font-semibold">
                  {totalPortfolioValueUsd !== null ? useFormattedNumber(totalPortfolioValueUsd, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }) : '...'}
@@ -1193,7 +1229,7 @@ export default function Dashboard() {
                  </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="h-[480px] w-full">
+              <div className="h-[600px] w-full">
                 {selectedPair && selectedInterval ? (
                   <TradingViewWidget
                     symbolPair={selectedPair}
@@ -1228,7 +1264,7 @@ export default function Dashboard() {
                   </TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="portfolio" className="p-4 max-h-[450px] overflow-y-auto"> 
+                <TabsContent value="portfolio" className="p-4 max-h-[570px] overflow-y-auto"> 
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-base font-medium">
                       Portföy {activeApiEnvironment && ` (${activeApiEnvironment.replace('_',' ').toUpperCase()})`}
@@ -1297,7 +1333,7 @@ export default function Dashboard() {
                   </Table>
                 </TabsContent>
 
-                <TabsContent value="history" className="p-4 max-h-[450px] overflow-y-auto">
+                <TabsContent value="history" className="p-4 max-h-[570px] overflow-y-auto">
                   <h3 className="text-base font-medium mb-2">İşlem Geçmişi {activeApiEnvironment && ` (${activeApiEnvironment.replace('_',' ').toUpperCase()})`} (Yakında)</h3>
                   <p className="text-sm text-muted-foreground mb-4">Binance API üzerinden son işlemleriniz burada listelenecektir.</p>
                   <Table>
@@ -1326,9 +1362,9 @@ export default function Dashboard() {
                   </Table>
                 </TabsContent>
 
-                <TabsContent value="logs" className="p-4 max-h-[450px] overflow-y-auto">
+                <TabsContent value="logs" className="p-4 max-h-[570px] overflow-y-auto">
                   <h3 className="text-base font-medium mb-2">Log Kayıtları ({dynamicLogData.length})</h3>
-                  <ScrollArea className="h-[390px]"> 
+                  <ScrollArea className="h-[510px]"> 
                     <Table>
                       <TableHeader>
                         <TableRow>
