@@ -984,10 +984,13 @@ export default function Dashboard() {
     const stablecoins = ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI'];
     const tryEurRate = { TRY: 0.03, EUR: 1.08 }; 
     
+    // Define base prices with fallbacks
     let basePrices: Record<string, number> = {
         BTC: 65000, ETH: 3500, SOL: 150, BNB: 600,
         ADA: 0.45, XRP: 0.5, DOGE: 0.15, SHIB: 0.000025,
     };
+    // No longer attempting to use latestCandleInfo for pie chart as it's not directly available
+    // with TradingView widget in the same way. Using fixed/approximate base prices.
     
     return portfolioData
         .map(balance => {
@@ -1002,11 +1005,9 @@ export default function Dashboard() {
             } else if (basePrices[balance.asset]) {
                 valueUsd = totalAmount * basePrices[balance.asset];
             } else {
-                const quoteAssets = ['USDT', 'BUSD', 'USDC', 'TRY', 'EUR'];
-                const pairInfo = allAvailablePairsStore.find(p => 
-                    (p.baseAsset === balance.asset && quoteAssets.includes(p.quoteAsset)) ||
-                    (p.quoteAsset === balance.asset && quoteAssets.includes(p.baseAsset))
-                );
+                // Fallback for assets not in basePrices - might be zero or requires more complex price fetching
+                // For simplicity, we'll currently exclude them from pie chart value if no direct price.
+                // Could be enhanced by fetching multiple pairs for price conversion later.
             }
             return valueUsd > 0.01 ? { name: balance.asset, value: valueUsd } : null;
         })
@@ -1220,7 +1221,7 @@ export default function Dashboard() {
         </Card>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 flex-1">
-          {/* Portfolio/History/Logs Tabs - Now spans full width */}
+          {/* Portfolio/History/Logs Tabs - Now spans full width on its row */}
           <Card className="lg:col-span-3">
             <CardContent className="p-0"> 
               <Tabs defaultValue="portfolio" className="w-full">
@@ -1745,7 +1746,7 @@ export default function Dashboard() {
           </Card>
         </div>
 
-        {/* Main Chart Area - Moved to the bottom */}
+        {/* Main Chart Area - Moved to the bottom, spanning full width */}
         <Card className="mt-4 md:mt-6">
            <CardHeader className="flex flex-col space-y-1 pb-2 pt-3 px-4">
               <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -1758,7 +1759,7 @@ export default function Dashboard() {
                </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="h-[500px] w-full">
+            <div className="h-[2500px] w-full">
               {selectedPair && selectedInterval ? (
                 <TradingViewWidget
                   symbolPair={selectedPair}
@@ -1780,4 +1781,3 @@ export default function Dashboard() {
     </SidebarProvider>
   );
 }
-
