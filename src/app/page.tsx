@@ -107,7 +107,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useFormattedNumber, formatNumberClientSide, formatTimestamp } from '@/lib/formatting';
-import type { BacktestParams, BacktestResult, DefineStrategyParams, DefineStrategyResult, RunParams, RunResult, Strategy, ApiEnvironment, Candle } from '@/ai/types/strategy-types';
+import type { BacktestParams, BacktestResult, DefineStrategyParams, DefineStrategyResult, RunParams, RunResult, Strategy, ApiEnvironment } from '@/ai/types/strategy-types'; // Removed Candle import as it's not used directly here anymore
 import { backtestStrategy, runStrategy, defineNewStrategy } from '@/ai/actions/trading-strategy-actions';
 import { fetchAccountBalancesAction } from '@/actions/binanceActions';
 import { Separator } from '@/components/ui/separator';
@@ -124,7 +124,7 @@ import { TelegramSettingsPanel } from '@/components/dashboard/telegram-settings-
 import { TradingViewWidget } from '@/components/dashboard/tradingview-widget';
 
 // Recharts components that might be needed for PortfolioPieChart
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, ComposedChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts'; // Removed ComposedChart, Bar, XAxis, YAxis, CartesianGrid as they are not used for main chart
 
 
 // Placeholder: Replace with actual trade history fetching if implemented
@@ -425,8 +425,11 @@ export default function Dashboard() {
                     let basePrices: Record<string, number> = {
                         BTC: 65000, ETH: 3500, SOL: 150, BNB: 600,
                         ADA: 0.45, XRP: 0.5, DOGE: 0.15, SHIB: 0.000025,
-                        // Add more common assets as needed
                     };
+                    
+                    // Conditionally update basePrices from latestCandleInfo if available
+                    // This part is removed because latestCandleInfo is no longer fetched for TradingView widget
+
                    filteredBalances.forEach(b => {
                       const totalAmount = parseFloat(b.free) + parseFloat(b.locked);
                       if (stablecoins.includes(b.asset)) {
@@ -480,7 +483,7 @@ export default function Dashboard() {
         setLoadingPortfolio(false);
       }
    // eslint-disable-next-line react-hooks/exhaustive-deps
-   }, [activeApiEnvironment, activeEnvValidationStatus]);
+   }, [activeApiEnvironment, activeEnvValidationStatus]); // Removed apiKeys from dependency array as it caused too many re-fetches on input change
 
 
   // --- Handlers ---
@@ -981,11 +984,9 @@ export default function Dashboard() {
     const stablecoins = ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI'];
     const tryEurRate = { TRY: 0.03, EUR: 1.08 }; 
     
-    // Define base prices with fallbacks
     let basePrices: Record<string, number> = {
         BTC: 65000, ETH: 3500, SOL: 150, BNB: 600,
         ADA: 0.45, XRP: 0.5, DOGE: 0.15, SHIB: 0.000025,
-        // Add more common assets as needed
     };
     
     return portfolioData
@@ -1001,17 +1002,11 @@ export default function Dashboard() {
             } else if (basePrices[balance.asset]) {
                 valueUsd = totalAmount * basePrices[balance.asset];
             } else {
-                // Fallback for unknown assets: try to find a pair with USDT, BUSD etc.
-                // This is a very basic estimation and might not be accurate.
-                // A more robust solution would involve fetching current market prices.
                 const quoteAssets = ['USDT', 'BUSD', 'USDC', 'TRY', 'EUR'];
                 const pairInfo = allAvailablePairsStore.find(p => 
                     (p.baseAsset === balance.asset && quoteAssets.includes(p.quoteAsset)) ||
                     (p.quoteAsset === balance.asset && quoteAssets.includes(p.baseAsset))
                 );
-                // This part is simplified as we don't fetch live prices for all pairs for this estimation
-                // For now, unknown assets that are not common will have a value of 0 in the pie chart.
-                // console.warn(`No price found for asset ${balance.asset} in pie chart estimation.`);
             }
             return valueUsd > 0.01 ? { name: balance.asset, value: valueUsd } : null;
         })
@@ -1238,7 +1233,7 @@ export default function Dashboard() {
                  </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="h-[640px] w-full">
+              <div className="h-[2640px] w-full">
                 {selectedPair && selectedInterval ? (
                   <TradingViewWidget
                     symbolPair={selectedPair}
@@ -1785,4 +1780,3 @@ export default function Dashboard() {
     </SidebarProvider>
   );
 }
-
