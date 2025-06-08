@@ -100,7 +100,7 @@ import {
   BrainCircuit, // Icon for Strategies
   Save // Icon for Save button
 } from 'lucide-react';
-import type { Balance, SymbolInfo } from '@/services/binance'; // Removed OrderParams, OrderResponse as they are handled in actions/types
+import type { Balance, SymbolInfo } from '@/services/binance';
 import { getExchangeInfo } from '@/services/binance';
 import { toast } from '@/hooks/use-toast';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -280,13 +280,42 @@ export default function Dashboard() {
 
   const [activeApiEnvironment, setActiveApiEnvironment] = React.useState<ApiEnvironment | null>(null);
 
+  // --- Refs for interval ---
+  const botIntervalRef = React.useRef<NodeJS.Timeout | null>(null);
+  const botStatusRef = React.useRef(botStatus);
+  const activeApiEnvironmentRef = React.useRef(activeApiEnvironment);
+  const validationStatusRef = React.useRef(validationStatus);
+  const selectedPairsForBotRef = React.useRef(selectedPairsForBot);
+  const activeStrategiesRef = React.useRef(activeStrategies);
+  const definedStrategiesRef = React.useRef(definedStrategies);
+  const selectedIntervalRef = React.useRef(selectedInterval);
+  const stopLossRef = React.useRef(stopLoss);
+  const takeProfitRef = React.useRef(takeProfit);
+  const buyStopOffsetPercentRef = React.useRef(buyStopOffsetPercent);
+  const sellStopOffsetPercentRef = React.useRef(sellStopOffsetPercent);
+  const apiKeysRef = React.useRef(apiKeys);
+
 
   // --- Helper Functions ---
-  const addLog = (type: string, message: string) => {
+  const addLog = React.useCallback((type: string, message: string) => {
     const newLog = { timestamp: new Date().toISOString(), type, message };
     setDynamicLogData(prevLogs => [newLog, ...prevLogs].slice(0, 100));
-  };
+  }, []);
 
+
+  // --- Effects to update refs ---
+  React.useEffect(() => { botStatusRef.current = botStatus; }, [botStatus]);
+  React.useEffect(() => { activeApiEnvironmentRef.current = activeApiEnvironment; }, [activeApiEnvironment]);
+  React.useEffect(() => { validationStatusRef.current = validationStatus; }, [validationStatus]);
+  React.useEffect(() => { selectedPairsForBotRef.current = selectedPairsForBot; }, [selectedPairsForBot]);
+  React.useEffect(() => { activeStrategiesRef.current = activeStrategies; }, [activeStrategies]);
+  React.useEffect(() => { definedStrategiesRef.current = definedStrategies; }, [definedStrategies]);
+  React.useEffect(() => { selectedIntervalRef.current = selectedInterval; }, [selectedInterval]);
+  React.useEffect(() => { stopLossRef.current = stopLoss; }, [stopLoss]);
+  React.useEffect(() => { takeProfitRef.current = takeProfit; }, [takeProfit]);
+  React.useEffect(() => { buyStopOffsetPercentRef.current = buyStopOffsetPercent; }, [buyStopOffsetPercent]);
+  React.useEffect(() => { sellStopOffsetPercentRef.current = sellStopOffsetPercent; }, [sellStopOffsetPercent]);
+  React.useEffect(() => { apiKeysRef.current = apiKeys; }, [apiKeys]);
 
   // --- Effects ---
   React.useEffect(() => {
@@ -331,8 +360,7 @@ export default function Dashboard() {
       }
     };
     loadDefaultSettings();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [addLog]);
 
 
   React.useEffect(() => {
@@ -352,8 +380,7 @@ export default function Dashboard() {
         addLog('HATA', 'Kaydedilmiş risk ayarları yüklenirken bir sorun oluştu.');
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [addLog]);
 
 
   React.useEffect(() => {
@@ -362,8 +389,7 @@ export default function Dashboard() {
         setPortfolioError(null);
         addLog('BİLGİ', 'Binance\'ten mevcut işlem pariteleri çekiliyor...');
         try {
-            // Always fetch from SPOT for the most comprehensive list for backtesting.
-            const spotInfo = await getExchangeInfo(false, false); // isTestnet=false, isFutures=false for SPOT
+            const spotInfo = await getExchangeInfo(false, false); 
 
             allAvailablePairsStore = spotInfo.symbols
                 .filter(s => s.status === 'TRADING' && s.isSpotTradingAllowed)
@@ -371,7 +397,6 @@ export default function Dashboard() {
 
             setAllPairsForBacktest(allAvailablePairsStore);
 
-            // Filter the user-defined list against what's available and trading on SPOT
             const activeUserDefinedPairs = allAvailablePairsStore.filter(exchangePair =>
                 userDefinedPairSymbols.includes(exchangePair.symbol)
             );
@@ -390,7 +415,6 @@ export default function Dashboard() {
                     addLog('BİLGİ', `Spot'tan ilk uygun pariteye varsayılan olarak ayarlanıyor: ${allAvailablePairsStore[0].symbol}`);
                 }
             } else if (selectedPair && !activeUserDefinedPairs.find(p => p.symbol === selectedPair) && allAvailablePairsStore.length > 0) {
-                // If current selectedPair is not in the filtered user list, reset to default from user list or general list
                 const newDefault = activeUserDefinedPairs.find(p => p.symbol === 'BTCUSDT') || activeUserDefinedPairs[0] || allAvailablePairsStore[0];
                 if (newDefault) {
                   setSelectedPair(newDefault.symbol);
@@ -413,8 +437,7 @@ export default function Dashboard() {
         }
     };
     fetchPairs();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [addLog, selectedPair]);
 
 
   const activeEnvValidationStatus = React.useMemo(() => {
@@ -529,60 +552,134 @@ export default function Dashboard() {
         setPortfolioError(null);
         setLoadingPortfolio(false);
       }
-   // eslint-disable-next-line react-hooks/exhaustive-deps
-   }, [activeApiEnvironment, activeEnvValidationStatus]); // Removed apiKeys from here as it can cause loop with setApiKeys in default settings
+   }, [activeApiEnvironment, activeEnvValidationStatus, addLog, apiKeys, validationStatus]); 
 
+  // Cleanup interval on unmount
+  React.useEffect(() => {
+    return () => {
+      if (botIntervalRef.current) {
+        clearInterval(botIntervalRef.current);
+        botIntervalRef.current = null;
+      }
+    };
+  }, []);
+
+
+  // --- Periodic Strategy Check ---
+  const runPeriodicStrategyChecks = React.useCallback(async () => {
+    if (botStatusRef.current !== 'running' || !activeApiEnvironmentRef.current || validationStatusRef.current[activeApiEnvironmentRef.current!] !== 'valid') {
+        if (botIntervalRef.current) {
+            clearInterval(botIntervalRef.current);
+            botIntervalRef.current = null;
+            addLog('BİLGİ', 'Periyodik strateji kontrolü durduruldu (bot durdu veya API geçersiz/değişti).');
+        }
+        return;
+    }
+
+    const currentEnv = activeApiEnvironmentRef.current;
+    const envLabel = currentEnv.replace('_', ' ').toUpperCase();
+    addLog('STRATEJI_KONTROL_PERIYODIK', `Periyodik kontrol: Stratejiler ${envLabel} üzerinde çalıştırılıyor...`);
+
+    for (const pair of selectedPairsForBotRef.current) {
+        for (const strategyId of activeStrategiesRef.current) {
+            const strategy = definedStrategiesRef.current.find(s => s.id === strategyId);
+            if (strategy) {
+                try {
+                    addLog('STRATEJI_KONTROL_PERIYODIK', `'${strategy.name}' stratejisi ${pair} (${envLabel}) üzerinde periyodik olarak kontrol ediliyor...`);
+                    const runParams: RunParams = {
+                        strategy,
+                        pair,
+                        interval: selectedIntervalRef.current,
+                        stopLossPercent: stopLossRef.current ? parseFloat(stopLossRef.current) : undefined,
+                        takeProfitPercent: takeProfitRef.current ? parseFloat(takeProfitRef.current) : undefined,
+                        buyStopOffsetPercent: buyStopOffsetPercentRef.current ? parseFloat(buyStopOffsetPercentRef.current) : undefined,
+                        sellStopOffsetPercent: sellStopOffsetPercentRef.current ? parseFloat(sellStopOffsetPercentRef.current) : undefined,
+                        environment: currentEnv,
+                    };
+                    const result: RunResult = await runStrategy(runParams);
+                    
+                    addLog('STRATEJI_DURUM_PERIYODIK', `Strateji '${strategy.name}', ${pair} (${envLabel}) periyodik kontrol sonucu: ${result.status}. ${result.message || ''}`);
+                    if (result.order) {
+                        const newTrade: TradeHistoryItem = {
+                            id: result.order.orderId,
+                            time: result.order.transactTime || Date.now(),
+                            symbol: result.order.symbol,
+                            isBuyer: result.order.side === 'SELL',
+                            price: parseFloat(result.order.fills && result.order.fills.length > 0 ? result.order.fills[0].price : result.order.price),
+                            qty: parseFloat(result.order.executedQty),
+                            quoteQty: parseFloat(result.order.cummulativeQuoteQty),
+                            commissionAsset: result.order.fills && result.order.fills.length > 0 && result.order.fills[0].commissionAsset ? result.order.fills[0].commissionAsset : 'N/A',
+                        };
+                        setTradeHistoryData(prevTrades => [newTrade, ...prevTrades].slice(0, 50));
+                        addLog('TİCARET_GEÇMİŞİ_PERIYODIK', `Yeni periyodik işlem geçmişe eklendi: Emir ID ${newTrade.id} (${newTrade.symbol})`);
+                    }
+                } catch (error) {
+                    const message = error instanceof Error ? error.message : "Bilinmeyen hata";
+                    addLog('HATA_PERIYODIK', `'${strategy.name}' stratejisi ${pair} (${envLabel}) periyodik kontrol sırasında hata: ${message}`);
+                }
+            }
+        }
+    }
+  }, [addLog]); // addLog is memoized
 
   // --- Handlers ---
   const toggleBotStatus = async () => {
      const newStatus = botStatus === 'running' ? 'stopped' : 'running';
-     const envLabel = activeApiEnvironment ? activeApiEnvironment.replace('_', ' ').toUpperCase() : 'Bilinmeyen Ortam';
+     const currentActiveEnv = activeApiEnvironmentRef.current; // Use ref for current env
+     const envLabel = currentActiveEnv ? currentActiveEnv.replace('_', ' ').toUpperCase() : 'Bilinmeyen Ortam';
 
      if (newStatus === 'running') {
-         if (!activeApiEnvironment || validationStatus[activeApiEnvironment] !== 'valid') {
+         if (!currentActiveEnv || validationStatusRef.current[currentActiveEnv] !== 'valid') {
              toast({ title: "API Doğrulaması Gerekli", description: `Lütfen aktif ortam (${envLabel}) için API anahtarlarını doğrulayın.`, variant: "destructive" });
              addLog('UYARI', `Bot başlatma engellendi: Aktif API ortamı (${envLabel}) doğrulanmadı.`);
              return;
          }
-        if (selectedPairsForBot.length === 0) {
+        if (selectedPairsForBotRef.current.length === 0) {
             toast({ title: "Parite Seçilmedi", description: "Lütfen botun çalışacağı en az bir parite seçin.", variant: "destructive" });
             addLog('UYARI', 'Bot başlatma engellendi: Hiç parite seçilmedi.');
             return;
         }
-        if (activeStrategies.length === 0) {
+        if (activeStrategiesRef.current.length === 0) {
             toast({ title: "Strateji Seçilmedi", description: "Lütfen en az bir aktif strateji seçin.", variant: "destructive" });
             addLog('UYARI', 'Bot başlatma engellendi: Hiç strateji seçilmedi.');
             return;
         }
-        if (validationStatus.telegramToken !== 'valid' || validationStatus.telegramChatId !== 'valid') {
+        if (validationStatusRef.current.telegramToken !== 'valid' || validationStatusRef.current.telegramChatId !== 'valid') {
             toast({ title: "Telegram Doğrulaması Gerekli", description: "Lütfen geçerli Telegram bot token ve chat ID'sini doğrulayın.", variant: "destructive" });
             addLog('UYARI', 'Bot başlatma engellendi: Telegram doğrulanmadı.');
             return;
         }
 
-        setBotStatus('running');
-        const strategies = activeStrategies.map(id => definedStrategies.find(s=>s.id===id)?.name).filter(Boolean);
-        toast({ title: `Bot Başlatılıyor...`, description: `Ortam: ${envLabel}. Pariteler: ${selectedPairsForBot.join(', ')}. Stratejiler: ${strategies.join(', ')}.` });
-        addLog('BİLGİ', `Bot başlatılıyor... Ortam: ${envLabel}, Pariteler: ${selectedPairsForBot.join(', ') || 'Hiçbiri'}. Stratejiler: ${strategies.join(', ') || 'Hiçbiri'}.`);
+        // Clear any existing interval before starting a new one
+        if (botIntervalRef.current) {
+            clearInterval(botIntervalRef.current);
+            botIntervalRef.current = null;
+        }
+        
+        setBotStatus('running'); // This will trigger ref update
+        // Note: botStatusRef.current will be updated by its own useEffect
+
+        toast({ title: `Bot Başlatılıyor...`, description: `Ortam: ${envLabel}. Pariteler: ${selectedPairsForBotRef.current.join(', ')}. Stratejiler: ${activeStrategiesRef.current.map(id => definedStrategiesRef.current.find(s=>s.id===id)?.name).filter(Boolean).join(', ')}.` });
+        addLog('BİLGİ', `Bot başlatılıyor... Ortam: ${envLabel}, Pariteler: ${selectedPairsForBotRef.current.join(', ') || 'Hiçbiri'}. Stratejiler: ${activeStrategiesRef.current.map(id => definedStrategiesRef.current.find(s=>s.id===id)?.name).filter(Boolean).join(', ') || 'Hiçbiri'}.`);
 
         let strategyStartSuccessCount = 0;
         let strategyStartFailCount = 0;
 
-        for (const pair of selectedPairsForBot) {
-            for (const strategyId of activeStrategies) {
-                const strategy = definedStrategies.find(s => s.id === strategyId);
-                if (strategy) {
+        for (const pair of selectedPairsForBotRef.current) {
+            for (const strategyId of activeStrategiesRef.current) {
+                const strategy = definedStrategiesRef.current.find(s => s.id === strategyId);
+                if (strategy && currentActiveEnv) {
                     try {
-                        addLog('STRATEJI_BASLAT', `'${strategy.name}' stratejisi ${pair} (${envLabel}) üzerinde başlatılmaya çalışılıyor... Risk Ayarları: SL=${stopLoss}%, TP=${takeProfit}%, AlışStop=${buyStopOffsetPercent}%, SatışStop=${sellStopOffsetPercent}%`);
+                        addLog('STRATEJI_BASLAT', `'${strategy.name}' stratejisi ${pair} (${envLabel}) üzerinde başlatılmaya çalışılıyor... Risk Ayarları: SL=${stopLossRef.current}%, TP=${takeProfitRef.current}%, AlışStop=${buyStopOffsetPercentRef.current}%, SatışStop=${sellStopOffsetPercentRef.current}%`);
                         const runParams: RunParams = {
                             strategy,
                             pair,
-                            interval: selectedInterval,
-                            stopLossPercent: stopLoss ? parseFloat(stopLoss) : undefined,
-                            takeProfitPercent: takeProfit ? parseFloat(takeProfit) : undefined,
-                            buyStopOffsetPercent: buyStopOffsetPercent ? parseFloat(buyStopOffsetPercent) : undefined,
-                            sellStopOffsetPercent: sellStopOffsetPercent ? parseFloat(sellStopOffsetPercent) : undefined,
-                            environment: activeApiEnvironment!,
+                            interval: selectedIntervalRef.current,
+                            stopLossPercent: stopLossRef.current ? parseFloat(stopLossRef.current) : undefined,
+                            takeProfitPercent: takeProfitRef.current ? parseFloat(takeProfitRef.current) : undefined,
+                            buyStopOffsetPercent: buyStopOffsetPercentRef.current ? parseFloat(buyStopOffsetPercentRef.current) : undefined,
+                            sellStopOffsetPercent: sellStopOffsetPercentRef.current ? parseFloat(sellStopOffsetPercentRef.current) : undefined,
+                            environment: currentActiveEnv,
                         };
                         const result: RunResult = await runStrategy(runParams);
                         addLog('STRATEJI_DURUM', `Strateji '${strategy.name}', ${pair} (${envLabel}) durumu: ${result.status}. ${result.message || ''}`);
@@ -619,70 +716,65 @@ export default function Dashboard() {
                 }
             }
         }
-
         addLog('BİLGİ', `Strateji başlatma denemesi tamamlandı. Başarılı: ${strategyStartSuccessCount}, Başarısız: ${strategyStartFailCount}.`);
 
-        let finalBotStatus = 'running';
+        let finalBotStatusInternal = 'running'; // Shadowing botStatus state for local logic
         let telegramMessageText = '';
 
         if (strategyStartSuccessCount === 0 && strategyStartFailCount > 0) {
-            finalBotStatus = 'stopped';
-            setBotStatus('stopped');
-            toast({
-                title: "Bot Başlatılamadı",
-                description: `Tüm stratejiler başlatılırken hata oluştu (${strategyStartFailCount} hata). Lütfen logları kontrol edin.`,
-                variant: "destructive"
-            });
+            finalBotStatusInternal = 'stopped';
+            toast({ title: "Bot Başlatılamadı", description: `Tüm stratejiler başlatılırken hata oluştu (${strategyStartFailCount} hata). Lütfen logları kontrol edin.`, variant: "destructive"});
             addLog('HATA', `Bot tamamen başlatılamadı. Tüm ${strategyStartFailCount} strateji başlatma işlemi başarısız oldu.`);
         } else if (strategyStartFailCount > 0) {
-            toast({
-                title: "Kısmi Başlatma",
-                description: `${strategyStartSuccessCount} strateji başlatıldı, ${strategyStartFailCount} başlatılamadı. Detaylar için logları inceleyin.`,
-                variant: "default"
-            });
+            toast({ title: "Kısmi Başlatma", description: `${strategyStartSuccessCount} strateji başlatıldı, ${strategyStartFailCount} başlatılamadı. Detaylar için logları inceleyin.`, variant: "default"});
             addLog('UYARI', `Bot kısmi başarıyla başlatıldı. Başarılı: ${strategyStartSuccessCount}, Başarısız: ${strategyStartFailCount}.`);
-            telegramMessageText = `⚠️ KriptoPilot bot (${envLabel}) ${selectedPairsForBot.length} paritede kısmen aktif. Başarılı: ${strategyStartSuccessCount}, Başarısız: ${strategyStartFailCount} strateji.`;
+            telegramMessageText = `⚠️ KriptoPilot bot (${envLabel}) ${selectedPairsForBotRef.current.length} paritede kısmen aktif. Başarılı: ${strategyStartSuccessCount}, Başarısız: ${strategyStartFailCount} strateji.`;
         } else if (strategyStartSuccessCount > 0 && strategyStartFailCount === 0) {
              toast({ title: `Bot Başarıyla Başlatıldı`, description: `${strategyStartSuccessCount} strateji ${envLabel} ortamında aktif.`});
-             telegramMessageText = `✅ KriptoPilot bot (${envLabel}) ${selectedPairsForBot.length} paritede ${strategyStartSuccessCount} strateji ile tamamen aktif.`;
+             telegramMessageText = `✅ KriptoPilot bot (${envLabel}) ${selectedPairsForBotRef.current.length} paritede ${strategyStartSuccessCount} strateji ile tamamen aktif.`;
         }
+        
+        setBotStatus(finalBotStatusInternal as 'running' | 'stopped'); // Update actual botStatus state
 
-        setBotStatus(finalBotStatus);
-
-        if (finalBotStatus === 'running' && telegramMessageText) {
-            try {
-                const telegramResult = await sendTelegramMessageAction(apiKeys.telegram.token, apiKeys.telegram.chatId, telegramMessageText);
-                if (telegramResult.success) {
-                  addLog('TELEGRAM', 'Bot başlatma bildirimi gönderildi.');
-                } else {
-                  addLog('TELEGRAM_HATA', `Bot başlatma bildirimi gönderilemedi: ${telegramResult.message}`);
+        if (finalBotStatusInternal === 'running') {
+            if (telegramMessageText && apiKeysRef.current.telegram.token && apiKeysRef.current.telegram.chatId) {
+                try {
+                    const telegramResult = await sendTelegramMessageAction(apiKeysRef.current.telegram.token, apiKeysRef.current.telegram.chatId, telegramMessageText);
+                    if (telegramResult.success) addLog('TELEGRAM', 'Bot başlatma bildirimi gönderildi.');
+                    else addLog('TELEGRAM_HATA', `Bot başlatma bildirimi gönderilemedi: ${telegramResult.message}`);
+                } catch (error) {
+                    addLog('TELEGRAM_HATA', `Bot başlatma bildirimi gönderilemedi: ${error instanceof Error ? error.message : "Bilinmeyen hata"}`);
                 }
-            } catch (error) {
-                const errorMsg = error instanceof Error ? error.message : "Bilinmeyen hata";
-                console.error("Telegram başlatma mesajı gönderilirken hata:", error);
-                addLog('TELEGRAM_HATA', `Bot başlatma bildirimi gönderilemedi: ${errorMsg}`);
+            }
+            // Start periodic checks only if bot is successfully running after initial setup
+            addLog('BİLGİ', 'İlk strateji çalıştırmaları tamamlandı. Periyodik kontrol başlatılıyor (her dakika).');
+            if (botIntervalRef.current) clearInterval(botIntervalRef.current); // Clear just in case
+            botIntervalRef.current = setInterval(runPeriodicStrategyChecks, 60000); 
+        } else {
+            // If bot failed to start, ensure no interval is running
+            if (botIntervalRef.current) {
+                clearInterval(botIntervalRef.current);
+                botIntervalRef.current = null;
             }
         }
 
-
-    } else {
+    } else { // Stopping the bot
+        if (botIntervalRef.current) {
+            clearInterval(botIntervalRef.current);
+            botIntervalRef.current = null;
+            addLog('BİLGİ', 'Periyodik strateji kontrolü kullanıcı tarafından durduruldu.');
+        }
         setBotStatus('stopped');
         toast({ title: 'Bot Durduruldu.', description: `Aktif ortam: ${envLabel}` });
         addLog('BİLGİ', `Bot durdurma işlemi ${envLabel} ortamı için başlatıldı.`);
-        console.log(`Bot durduruluyor, ortam: ${envLabel}... (Placeholder: gerçek durdurma mantığı eklenecek)`);
-
-        if (validationStatus.telegramToken === 'valid' && validationStatus.telegramChatId === 'valid') {
+        
+        if (validationStatusRef.current.telegramToken === 'valid' && validationStatusRef.current.telegramChatId === 'valid' && apiKeysRef.current.telegram.token && apiKeysRef.current.telegram.chatId) {
             try {
-                const telegramResult = await sendTelegramMessageAction(apiKeys.telegram.token, apiKeys.telegram.chatId, `🛑 KriptoPilot bot (${envLabel}) durduruldu.`);
-                if (telegramResult.success) {
-                  addLog('TELEGRAM', 'Bot durdurma bildirimi gönderildi.');
-                } else {
-                  addLog('TELEGRAM_HATA', `Bot durdurma bildirimi gönderilemedi: ${telegramResult.message}`);
-                }
+                const telegramResult = await sendTelegramMessageAction(apiKeysRef.current.telegram.token, apiKeysRef.current.telegram.chatId, `🛑 KriptoPilot bot (${envLabel}) durduruldu.`);
+                if (telegramResult.success) addLog('TELEGRAM', 'Bot durdurma bildirimi gönderildi.');
+                else addLog('TELEGRAM_HATA', `Bot durdurma bildirimi gönderilemedi: ${telegramResult.message}`);
             } catch (error) {
-                const errorMsg = error instanceof Error ? error.message : "Bilinmeyen hata";
-                console.error("Telegram durdurma mesajı gönderilirken hata:", error);
-                addLog('TELEGRAM_HATA', `Bot durdurma bildirimi gönderilemedi: ${errorMsg}`);
+                addLog('TELEGRAM_HATA', `Bot durdurma bildirimi gönderilemedi: ${error instanceof Error ? error.message : "Bilinmeyen hata"}`);
             }
         }
     }
@@ -692,7 +784,7 @@ export default function Dashboard() {
     setActiveStrategies((prev) => {
       const isAdding = !prev.includes(strategyId);
        const newStrategies = isAdding ? [...prev, strategyId] : prev.filter((id) => id !== strategyId);
-      const strategyName = definedStrategies.find(s => s.id === strategyId)?.name || strategyId;
+      const strategyName = definedStrategiesRef.current.find(s => s.id === strategyId)?.name || strategyId;
       addLog('YAPILANDIRMA', `Strateji ${isAdding ? 'aktive edildi' : 'devre dışı bırakıldı'}: ${strategyName}`);
       return newStrategies;
     });
@@ -719,11 +811,17 @@ export default function Dashboard() {
     setValidationStatus(prev => ({ ...prev, [env]: 'not_checked' }));
     addLog('YAPILANDIRMA', `${env.replace('_',' ').toUpperCase()} API ${field === 'key' ? 'anahtarı' : 'gizli anahtarı'} değiştirildi, doğrulama durumu sıfırlandı.`);
     if (activeApiEnvironment === env) {
-        setActiveApiEnvironment(null);
+        setActiveApiEnvironment(null); // This will trigger ref update
         addLog('YAPILANDIRMA', `API ortamı ${env.replace('_',' ').toUpperCase()}, anahtar değişikliği nedeniyle devre dışı bırakıldı.`);
         setPortfolioData([]);
         setTotalPortfolioValueUsd(null);
         setPortfolioError(null);
+        if (botIntervalRef.current) { // Stop periodic checks if active env changes
+            clearInterval(botIntervalRef.current);
+            botIntervalRef.current = null;
+            addLog('BİLGİ', 'Aktif API ortamı değişti, periyodik strateji kontrolü durduruldu.');
+            setBotStatus('stopped'); // Also stop the bot
+        }
     }
   };
 
@@ -750,7 +848,7 @@ export default function Dashboard() {
     addLog('BİLGİ', `${envLabel} API anahtarları Sunucu Aksiyonu ile doğrulanıyor...`);
 
     try {
-      const result = await validateBinanceKeysAction(apiKeys[env].key, apiKeys[env].secret, env);
+      const result = await validateBinanceKeysAction(apiKeysRef.current[env].key, apiKeysRef.current[env].secret, env);
       const newStatus = result.isValid ? 'valid' : 'invalid';
       setValidationStatus(prev => ({ ...prev, [env]: newStatus }));
 
@@ -762,15 +860,21 @@ export default function Dashboard() {
       });
 
       if (result.isValid) {
-        setActiveApiEnvironment(env);
+        setActiveApiEnvironment(env); // This will trigger ref update
         addLog('YAPILANDIRMA', `Aktif API ortamı: ${envLabel}`);
         setPortfolioError(null);
-      } else if (activeApiEnvironment === env) {
-        setActiveApiEnvironment(null);
+      } else if (activeApiEnvironmentRef.current === env) {
+        setActiveApiEnvironment(null); // This will trigger ref update
         addLog('YAPILANDIRMA', `API ortamı ${envLabel}, başarısız doğrulama nedeniyle devre dışı bırakıldı.`);
         setPortfolioData([]);
         setTotalPortfolioValueUsd(null);
         setPortfolioError(null);
+        if (botIntervalRef.current) { // Stop periodic checks if active env becomes invalid
+            clearInterval(botIntervalRef.current);
+            botIntervalRef.current = null;
+            addLog('BİLGİ', 'Aktif API ortamı geçersiz oldu, periyodik strateji kontrolü durduruldu.');
+            setBotStatus('stopped'); // Also stop the bot
+        }
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Sunucu aksiyonu çağrılırken bilinmeyen bir hata oluştu.";
@@ -782,12 +886,18 @@ export default function Dashboard() {
         description: `${envLabel} API anahtarları doğrulanırken bir sunucu hatası oluştu: ${errorMsg}`,
         variant: "destructive",
       });
-      if (activeApiEnvironment === env) {
-        setActiveApiEnvironment(null);
+      if (activeApiEnvironmentRef.current === env) {
+        setActiveApiEnvironment(null); // This will trigger ref update
         addLog('YAPILANDIRMA', `API ortamı ${envLabel}, doğrulama aksiyonu hatası nedeniyle devre dışı bırakıldı.`);
         setPortfolioData([]);
         setTotalPortfolioValueUsd(null);
         setPortfolioError(null);
+        if (botIntervalRef.current) {
+            clearInterval(botIntervalRef.current);
+            botIntervalRef.current = null;
+            addLog('BİLGİ', 'Aktif API ortamı doğrulama hatası, periyodik strateji kontrolü durduruldu.');
+            setBotStatus('stopped');
+        }
       }
     }
   };
@@ -796,7 +906,7 @@ export default function Dashboard() {
     setValidationStatus(prev => ({ ...prev, telegramToken: 'pending', telegramChatId: 'not_checked' }));
     addLog('BİLGİ', 'Telegram bot token Sunucu Aksiyonu ile doğrulanıyor...');
     try {
-      const result = await validateTelegramTokenAction(apiKeys.telegram.token);
+      const result = await validateTelegramTokenAction(apiKeysRef.current.telegram.token);
       setValidationStatus(prev => ({ ...prev, telegramToken: result.isValid ? 'valid' : 'invalid' }));
 
       addLog(result.isValid ? 'BİLGİ' : 'HATA', `Telegram Token Doğrulaması: ${result.message}`);
@@ -819,27 +929,27 @@ export default function Dashboard() {
   };
 
   const handleValidateTelegramChatId = async () => {
-    if (validationStatus.telegramToken !== 'valid') {
+    if (validationStatusRef.current.telegramToken !== 'valid') {
       toast({ title: "Önce Token'ı Doğrulayın", description: "Chat ID'yi test etmek için önce geçerli bir bot token girip doğrulayın.", variant: "destructive" });
       addLog('UYARI', 'Telegram chat ID doğrulaması engellendi: Token geçerli değil.');
       return;
     }
     setValidationStatus(prev => ({ ...prev, telegramChatId: 'pending' }));
-    addLog('BİLGİ', `Telegram chat ID ${apiKeys.telegram.chatId} Sunucu Aksiyonu ile doğrulanıyor...`);
+    addLog('BİLGİ', `Telegram chat ID ${apiKeysRef.current.telegram.chatId} Sunucu Aksiyonu ile doğrulanıyor...`);
 
     try {
-      const validationResult = await validateTelegramChatIdAction(apiKeys.telegram.token, apiKeys.telegram.chatId);
+      const validationResult = await validateTelegramChatIdAction(apiKeysRef.current.telegram.token, apiKeysRef.current.telegram.chatId);
 
       if (validationResult.isValid) {
         setValidationStatus(prev => ({ ...prev, telegramChatId: 'valid' }));
-        addLog('BİLGİ', `Telegram Chat ID ${apiKeys.telegram.chatId} doğrulaması başarılı. Test mesajı gönderiliyor...`);
-        const messageResult = await sendTelegramMessageAction(apiKeys.telegram.token, apiKeys.telegram.chatId, "✅ KriptoPilot Telegram bağlantısı başarıyla doğrulandı!");
+        addLog('BİLGİ', `Telegram Chat ID ${apiKeysRef.current.telegram.chatId} doğrulaması başarılı. Test mesajı gönderiliyor...`);
+        const messageResult = await sendTelegramMessageAction(apiKeysRef.current.telegram.token, apiKeysRef.current.telegram.chatId, "✅ KriptoPilot Telegram bağlantısı başarıyla doğrulandı!");
 
         if (messageResult.success) {
-            addLog('TELEGRAM', `Test mesajı ${apiKeys.telegram.chatId} chat ID'sine gönderildi.`);
+            addLog('TELEGRAM', `Test mesajı ${apiKeysRef.current.telegram.chatId} chat ID'sine gönderildi.`);
             toast({
               title: "Telegram Chat ID Doğrulandı",
-              description: `Chat ID geçerli. Test mesajı gönderildi: ${apiKeys.telegram.chatId}`,
+              description: `Chat ID geçerli. Test mesajı gönderildi: ${apiKeysRef.current.telegram.chatId}`,
               variant: "default",
             });
         } else {
@@ -860,7 +970,7 @@ export default function Dashboard() {
       const errorMsg = error instanceof Error ? error.message : "Sunucu aksiyonu çağrılırken bilinmeyen bir hata oluştu.";
       console.error("Telegram Chat ID doğrulama/mesajlaşma aksiyonları çağrılırken hata:", error);
       setValidationStatus(prev => ({ ...prev, telegramChatId: 'invalid' }));
-      addLog('HATA', `Telegram Chat ID Doğrulama/Mesajlaşma Aksiyonu Hatası: ${errorMsg} (ID: ${apiKeys.telegram.chatId})`);
+      addLog('HATA', `Telegram Chat ID Doğrulama/Mesajlaşma Aksiyonu Hatası: ${errorMsg} (ID: ${apiKeysRef.current.telegram.chatId})`);
       toast({ title: "Doğrulama Hatası", description: `Telegram Chat ID işlemleri sırasında sunucu hatası: ${errorMsg}`, variant: "destructive" });
     }
   };
@@ -882,7 +992,7 @@ export default function Dashboard() {
       const result: DefineStrategyResult = await defineNewStrategy(defineStrategyParams);
 
       if (result.success && result.strategy) {
-        setDefinedStrategies(prev => [...prev, result.strategy!]);
+        setDefinedStrategies(prev => [...prev, result.strategy!]); // This will trigger ref update
         toast({ title: "Strateji Tanımlandı", description: result.message || `"${result.strategy.name}" başarıyla tanımlandı.` });
         addLog('AI_GÖREV', `AI, '${result.strategy.name}' stratejisini başarıyla tanımladı. ID: ${result.strategy.id}`);
         setIsDefineStrategyDialogOpen(false);
@@ -923,7 +1033,7 @@ export default function Dashboard() {
     setBacktestResult(null);
     addLog('GERİ_TEST', 'Geriye dönük test başlatıldı...');
 
-    const strategy = definedStrategies.find(s => s.id === selectedBacktestStrategyId);
+    const strategy = definedStrategiesRef.current.find(s => s.id === selectedBacktestStrategyId);
 
     if (!strategy) {
       toast({ title: "Geriye Dönük Test Hatası", description: "Geçerli bir strateji seçilmedi.", variant: "destructive" });
@@ -992,12 +1102,12 @@ export default function Dashboard() {
 
   const handleSaveRiskSettings = () => {
     const settingsToSave: RiskSettings = {
-      stopLoss,
-      takeProfit,
-      portfolioAllocationPercent,
-      maxOpenTrades,
-      buyStopOffsetPercent,
-      sellStopOffsetPercent,
+      stopLoss: stopLossRef.current, // Use refs for current values
+      takeProfit: takeProfitRef.current,
+      portfolioAllocationPercent: portfolioAllocationPercentRef.current,
+      maxOpenTrades: maxOpenTradesRef.current,
+      buyStopOffsetPercent: buyStopOffsetPercentRef.current,
+      sellStopOffsetPercent: sellStopOffsetPercentRef.current,
     };
     try {
       localStorage.setItem(RISK_SETTINGS_LOCALSTORAGE_KEY, JSON.stringify(settingsToSave));
@@ -1154,6 +1264,12 @@ export default function Dashboard() {
     );
   };
 
+  // Refs for portfolioAllocationPercent and maxOpenTrades for handleSaveRiskSettings
+  const portfolioAllocationPercentRef = React.useRef(portfolioAllocationPercent);
+  const maxOpenTradesRef = React.useRef(maxOpenTrades);
+  React.useEffect(() => { portfolioAllocationPercentRef.current = portfolioAllocationPercent; }, [portfolioAllocationPercent]);
+  React.useEffect(() => { maxOpenTradesRef.current = maxOpenTrades; }, [maxOpenTrades]);
+
   return (
     <SidebarProvider>
        <Sidebar side="left" collapsible="icon" variant="sidebar">
@@ -1271,7 +1387,7 @@ export default function Dashboard() {
                       disabled={
                         botStatus === 'stopped' && (
                           !activeApiEnvironment ||
-                          validationStatus[activeApiEnvironment] !== 'valid' ||
+                          validationStatus[activeApiEnvironment as ApiEnvironment] !== 'valid' ||
                           validationStatus.telegramToken !== 'valid' ||
                           validationStatus.telegramChatId !== 'valid' ||
                           activeStrategies.length === 0 ||
@@ -1285,7 +1401,7 @@ export default function Dashboard() {
                   </TooltipTrigger>
                   <TooltipContent>
                     {!activeApiEnvironment ? "Botu başlatmak için bir API ortamını doğrulayın." :
-                      validationStatus[activeApiEnvironment!] !== 'valid' ? `Botu başlatmak için ${activeApiEnvironment!.replace('_',' ').toUpperCase()} API anahtarlarını doğrulayın.` :
+                      validationStatus[activeApiEnvironment as ApiEnvironment] !== 'valid' ? `Botu başlatmak için ${activeApiEnvironment!.replace('_',' ').toUpperCase()} API anahtarlarını doğrulayın.` :
                         (validationStatus.telegramToken !== 'valid' || validationStatus.telegramChatId !== 'valid') ? "Botu başlatmak için Telegram ayarlarını doğrulayın." :
                           botStatus === 'stopped' && activeStrategies.length === 0 ? "Botu başlatmak için en az bir strateji seçin." :
                             botStatus === 'stopped' && selectedPairsForBot.length === 0 ? "Botu başlatmak için en az bir parite seçin." :
@@ -1373,7 +1489,7 @@ export default function Dashboard() {
                           <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
                             {portfolioError ? "Veri yüklenemedi." :
                               !activeApiEnvironment ? "Aktif API ortamı seçilmedi." :
-                                (activeApiEnvironment && validationStatus[activeApiEnvironment] !== 'valid' && !portfolioError) ? `${activeApiEnvironment.replace('_',' ').toUpperCase()} API anahtarları doğrulanmamış.` :
+                                (activeApiEnvironment && validationStatus[activeApiEnvironment as ApiEnvironment] !== 'valid' && !portfolioError) ? `${activeApiEnvironment.replace('_',' ').toUpperCase()} API anahtarları doğrulanmamış.` :
                                   portfolioData.length === 0 && !loadingPortfolio ? "Portföy boş." :
                                     "Portföy verisi bekleniyor..."}
                           </TableCell>
@@ -1419,7 +1535,7 @@ export default function Dashboard() {
                       <TableHeader>
                         <TableRow>
                           <TableHead className="w-[100px]">Zaman</TableHead>
-                          <TableHead className="w-[120px]">Tip</TableHead>
+                          <TableHead className="w-[180px]">Tip</TableHead>
                           <TableHead>Mesaj</TableHead>
                         </TableRow>
                       </TableHeader>
