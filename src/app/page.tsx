@@ -68,20 +68,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import {
-  ComposedChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as ChartTooltip,
-  Legend,
-  ResponsiveContainer,
-  Cell,
-  Line,
-  Area,
-  Pie,
-} from 'recharts';
+
 import {
   Settings,
   Wallet,
@@ -112,8 +99,8 @@ import {
   Home,
   BrainCircuit // Icon for Strategies
 } from 'lucide-react';
-import type { Balance, Candle, SymbolInfo, OrderParams, OrderResponse } from '@/services/binance';
-import { getCandlestickData, getExchangeInfo, placeOrder } from '@/services/binance';
+import type { Balance, SymbolInfo, OrderParams, OrderResponse } from '@/services/binance';
+import { getExchangeInfo } from '@/services/binance'; // Removed getCandlestickData
 import { toast } from '@/hooks/use-toast';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
@@ -133,10 +120,8 @@ import { fetchDefaultApiSettingsAction, type DefaultApiSettings } from '@/action
 
 import { ApiKeySettingsPanel } from '@/components/dashboard/api-settings-panel';
 import { TelegramSettingsPanel } from '@/components/dashboard/telegram-settings-panel';
+import { TradingViewWidget } from '@/components/dashboard/tradingview-widget';
 
-
-// Initial empty data for charts before loading
-const initialCandleData: Candle[] = [];
 
 // Placeholder: Replace with actual trade history fetching if implemented
 const tradeHistoryData: any[] = []; // Example: Placeholder for trade history
@@ -207,57 +192,6 @@ const userDefinedPairSymbols: string[] = [
 // ----- API Validation Types -----
 type ValidationStatus = 'pending' | 'valid' | 'invalid' | 'not_checked';
 
-// Custom Candlestick Shape Component
-const Candlestick = (props: any) => {
-  const { x, y, width, height, low, high, open, close, fill, stroke } = props;
-  // fill color is determined by <Cell> in Bar component for the body
-  // low, high, open, close are from the original data payload
-
-  // Ensure all necessary props are available
-  if (x === undefined || y === undefined || width === undefined || height === undefined ||
-      low === undefined || high === undefined || open === undefined || close === undefined) {
-    return null;
-  }
-  const isUp = close >= open; // Changed to >= to handle candles where open equals close
-
-  // Wick line coordinates
-  const wickX = x + width / 2;
-  const highY = props.yAxis.scale(high);
-  const lowY = props.yAxis.scale(low);
-
-  // Body coordinates
-  // Recharts 'y' is the top of the bar. Height is |open - close| scaled.
-  // For up candles, top of body is 'close'. For down, top of body is 'open'.
-  const bodyTopY = props.yAxis.scale(isUp ? close : open);
-  const bodyBottomY = props.yAxis.scale(isUp ? open : close);
-  const bodyHeight = Math.abs(bodyTopY - bodyBottomY);
-
-  // Ensure bodyHeight is at least 1 to be visible if open and close are very close
-  const actualBodyHeight = bodyHeight > 0 ? bodyHeight : 1;
-  const actualBodyY = Math.min(bodyTopY, bodyBottomY);
-
-
-  return (
-    <g strokeWidth="1" shapeRendering="crispEdges">
-      {/* Wick */}
-      <line
-        x1={wickX} y1={highY}
-        x2={wickX} y2={lowY}
-        stroke={fill} // Wick color matches candle body color
-      />
-      {/* Body */}
-      <rect
-        x={x}
-        y={actualBodyY}
-        width={width}
-        height={actualBodyHeight}
-        fill={fill}
-        stroke={stroke || fill} // Use stroke prop if provided, otherwise fill
-      />
-    </g>
-  );
-};
-
 
 // ----- Main Dashboard Component -----
 export default function Dashboard() {
@@ -270,11 +204,9 @@ export default function Dashboard() {
   const [takeProfit, setTakeProfit] = React.useState<string>('');
   const [availablePairsForBot, setAvailablePairsForBot] = React.useState<SymbolInfo[]>([]); // For bot selection UI
   const [allPairsForBacktest, setAllPairsForBacktest] = React.useState<SymbolInfo[]>([]); // For backtesting dropdown
-  const [candleData, setCandleData] = React.useState<Candle[]>(initialCandleData);
   const [portfolioData, setPortfolioData] = React.useState<Balance[]>([]);
   const [totalPortfolioValueUsd, setTotalPortfolioValueUsd] = React.useState<number | null>(null);
   const [loadingPairs, setLoadingPairs] = React.useState(true);
-  const [loadingCandles, setLoadingCandles] = React.useState(false);
   const [loadingPortfolio, setLoadingPortfolio] = React.useState(false);
   const [portfolioError, setPortfolioError] = React.useState<string | null>(null);
   const [selectedPairsForBot, setSelectedPairsForBot] = React.useState<string[]>([]);
@@ -315,9 +247,6 @@ export default function Dashboard() {
   });
 
   const [activeApiEnvironment, setActiveApiEnvironment] = React.useState<ApiEnvironment | null>(null);
-
-  const [latestCandleInfo, setLatestCandleInfo] = React.useState<Candle | null>(null);
-  const [priceChangeInfo, setPriceChangeInfo] = React.useState<{percent: number; absolute: number; color: string} | null>(null);
 
 
   // --- Helper Functions ---
@@ -434,53 +363,6 @@ export default function Dashboard() {
   }, []);
 
 
-  React.useEffect(() => {
-    const fetchCandleData = async () => {
-      if (!selectedPair) return;
-      setLoadingCandles(true);
-      setCandleData([]); 
-      setLatestCandleInfo(null);
-      setPriceChangeInfo(null);
-
-      const isTestnet = activeApiEnvironment ? (activeApiEnvironment === 'testnet_spot' || activeApiEnvironment === 'testnet_futures') : false;
-      const isFutures = activeApiEnvironment ? (activeApiEnvironment === 'futures' || activeApiEnvironment === 'testnet_futures') : false;
-      const envLabel = activeApiEnvironment?.replace('_', ' ').toUpperCase() || 'Spot (Default)';
-      addLog('INFO', `Fetching candlestick data for ${selectedPair} (${selectedInterval}) from ${envLabel}...`);
-
-      try {
-          const data = await getCandlestickData(selectedPair, selectedInterval, isTestnet, isFutures, 200); // Fetch 200 candles
-          setCandleData(data);
-
-          if (data.length > 0) {
-            addLog('INFO', `Successfully fetched ${data.length} candles for ${selectedPair} (${selectedInterval}) from ${envLabel}.`);
-            const latestCandle = data[data.length - 1];
-            setLatestCandleInfo(latestCandle);
-
-            if (data.length > 1) {
-                const firstCandleInPeriod = data[0]; 
-                const change = latestCandle.close - firstCandleInPeriod.close;
-                const percent = firstCandleInPeriod.close !== 0 ? (change / firstCandleInPeriod.close) * 100 : 0;
-                setPriceChangeInfo({
-                    percent: percent,
-                    absolute: change,
-                    color: percent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-                });
-            }
-          } else {
-            addLog('WARN', `No candlestick data returned for ${selectedPair} (${selectedInterval}) from ${envLabel}.`);
-          }
-      } catch (err) {
-        console.error(`Failed to fetch candlestick data for ${selectedPair} (${envLabel}):`, err);
-        const errorMsg = err instanceof Error ? err.message : "Bilinmeyen bir hata oluştu.";
-        setCandleData([]); 
-        addLog('ERROR', `Failed to fetch candlestick data for ${selectedPair} (${envLabel}): ${errorMsg}`);
-      } finally {
-        setLoadingCandles(false);
-      }
-    };
-    fetchCandleData();
-  }, [selectedPair, selectedInterval, activeApiEnvironment]);
-
   const activeEnvValidationStatus = React.useMemo(() => {
     return activeApiEnvironment ? validationStatus[activeApiEnvironment] : undefined;
   }, [activeApiEnvironment, validationStatus]);
@@ -534,31 +416,14 @@ export default function Dashboard() {
                    let estimatedTotal = 0;
                    const stablecoins = ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI']; 
                    const tryEurRate = { TRY: 0.03, EUR: 1.08 }; 
-                   
+                                      
+                   // Base prices for estimation - these are fallbacks
                    const basePrices: Record<string, number> = {
                        BTC: 65000, ETH: 3500, SOL: 150, BNB: 600,
                        ADA: 0.45, XRP: 0.5, DOGE: 0.15, SHIB: 0.000025,
-                       // Add other common assets if needed for fallback
                    };
-
-                   // Create a mutable copy for conditional updates
-                   const prices = { ...basePrices };
-
-                   if (latestCandleInfo && selectedPair) {
-                       const baseAsset = selectedPair.replace(/USDT$|BUSD$|TRY$|EUR$/, ''); // Simple way to get base asset
-                       if (prices.hasOwnProperty(baseAsset)) {
-                           prices[baseAsset] = latestCandleInfo.close;
-                       } else if (selectedPair.startsWith('BTC') && !selectedPair.endsWith('BTC') && prices.hasOwnProperty('BTC')) {
-                           prices['BTC'] = latestCandleInfo.close;
-                       } else if (selectedPair.startsWith('ETH') && !selectedPair.endsWith('ETH') && prices.hasOwnProperty('ETH')) {
-                           prices['ETH'] = latestCandleInfo.close;
-                       } else if (selectedPair.startsWith('SOL') && !selectedPair.endsWith('SOL') && prices.hasOwnProperty('SOL')) {
-                           prices['SOL'] = latestCandleInfo.close;
-                       } else if (selectedPair.startsWith('BNB') && !selectedPair.endsWith('BNB') && prices.hasOwnProperty('BNB')) {
-                           prices['BNB'] = latestCandleInfo.close;
-                       }
-                   }
-
+                   // In a real app, you'd fetch current prices for non-stablecoins.
+                   // For this demo, we use fixed estimates or rely on selectedPair if it's a quote pair.
 
                    filteredBalances.forEach(b => {
                       const totalAmount = parseFloat(b.free) + parseFloat(b.locked);
@@ -568,8 +433,8 @@ export default function Dashboard() {
                           estimatedTotal += totalAmount * tryEurRate.TRY;
                       } else if (b.asset === 'EUR' && tryEurRate.EUR) {
                           estimatedTotal += totalAmount * tryEurRate.EUR;
-                      } else if (prices[b.asset]) {
-                         estimatedTotal += totalAmount * prices[b.asset];
+                      } else if (basePrices[b.asset]) { // Use estimated base prices
+                         estimatedTotal += totalAmount * basePrices[b.asset];
                       }
                    });
                   setTotalPortfolioValueUsd(estimatedTotal);
@@ -613,7 +478,7 @@ export default function Dashboard() {
         setLoadingPortfolio(false);
       }
    // eslint-disable-next-line react-hooks/exhaustive-deps
-   }, [activeApiEnvironment, activeEnvValidationStatus, latestCandleInfo, selectedPair]);
+   }, [activeApiEnvironment, activeEnvValidationStatus]); // Removed latestCandleInfo, selectedPair to avoid re-fetching on candle ticks
 
 
   // --- Handlers ---
@@ -660,7 +525,7 @@ export default function Dashboard() {
                         const runParams: RunParams = {
                             strategy,
                             pair,
-                            interval: selectedInterval,
+                            interval: selectedInterval, // Use the globally selected interval for now
                             stopLossPercent: stopLoss ? parseFloat(stopLoss) : undefined,
                             takeProfitPercent: takeProfit ? parseFloat(takeProfit) : undefined,
                             environment: activeApiEnvironment!,
@@ -734,6 +599,7 @@ export default function Dashboard() {
         setBotStatus('stopped');
         toast({ title: 'Bot Durduruldu.', description: `Aktif ortam: ${envLabel}` });
         addLog('INFO', `Bot stopping process initiated for environment ${envLabel}.`);
+        // In a real application, you would also send commands to stop any running strategy processes/loops.
         console.log(`Stopping bot for environment ${envLabel}... (Placeholder: actual stop logic needed)`);
 
         if (validationStatus.telegramToken === 'valid' && validationStatus.telegramChatId === 'valid') {
@@ -1091,34 +957,6 @@ export default function Dashboard() {
        );
    };
 
-  const ChartTooltipContent = ({ active, payload, label }: any) => {
-      if (active && payload && payload.length) {
-        const dataPoint = payload[0].payload; // The raw candle data
-        if (!dataPoint) return null;
-
-        const timeLabel = formatTimestamp(label, 'full'); 
-        const open = formatNumberClientSide(dataPoint.open, { maximumFractionDigits: Math.max(2, String(dataPoint.open).split('.')[1]?.length || 0) });
-        const high = formatNumberClientSide(dataPoint.high, { maximumFractionDigits: Math.max(2, String(dataPoint.high).split('.')[1]?.length || 0) });
-        const low = formatNumberClientSide(dataPoint.low, { maximumFractionDigits: Math.max(2, String(dataPoint.low).split('.')[1]?.length || 0) });
-        const close = formatNumberClientSide(dataPoint.close, { maximumFractionDigits: Math.max(2, String(dataPoint.close).split('.')[1]?.length || 0) });
-        const volume = formatNumberClientSide(dataPoint.volume, { notation: 'compact', maximumFractionDigits: 2 });
-
-        return (
-          <div className="custom-tooltip p-2.5 bg-background/90 border border-border rounded-lg shadow-xl text-card-foreground text-xs backdrop-blur-sm">
-            <p className="label font-semibold text-sm mb-1.5">{`${selectedPair} - ${timeLabel}`}</p>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-                <span className="font-medium text-muted-foreground">Açılış:</span><span className="text-right">{open}</span>
-                <span className="font-medium text-muted-foreground">Yüksek:</span><span className="text-right">{high}</span>
-                <span className="font-medium text-muted-foreground">Düşük:</span><span className="text-right">{low}</span>
-                <span className="font-medium text-muted-foreground">Kapanış:</span><span className="text-right">{close}</span>
-                <span className="font-medium text-muted-foreground">Hacim:</span><span className="text-right">{volume}</span>
-            </div>
-          </div>
-        );
-      }
-    return null;
-  };
-
 
   const ValidationIcon = ({ status }: { status: ValidationStatus }) => {
     switch (status) {
@@ -1136,53 +974,37 @@ export default function Dashboard() {
 
 
   const pieChartData = React.useMemo(() => {
-      if (!portfolioData || !totalPortfolioValueUsd || totalPortfolioValueUsd === 0) return [];
+    if (!portfolioData || !totalPortfolioValueUsd || totalPortfolioValueUsd === 0) return [];
 
-      const stablecoins = ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI'];
-      const tryEurRate = { TRY: 0.03, EUR: 1.08 }; 
-      
-      const basePrices: Record<string, number> = {
-          BTC: 65000, ETH: 3500, SOL: 150, BNB: 600,
-          ADA: 0.45, XRP: 0.5, DOGE: 0.15, SHIB: 0.000025
-      };
-      
-      const prices = { ...basePrices };
-
-      if (latestCandleInfo && selectedPair) {
-          const baseAsset = selectedPair.replace(/USDT$|BUSD$|TRY$|EUR$/, '');
-          if (prices.hasOwnProperty(baseAsset)) {
-              prices[baseAsset] = latestCandleInfo.close;
-          } else if (selectedPair.startsWith('BTC') && !selectedPair.endsWith('BTC') && prices.hasOwnProperty('BTC')) {
-              prices['BTC'] = latestCandleInfo.close;
-          } else if (selectedPair.startsWith('ETH') && !selectedPair.endsWith('ETH') && prices.hasOwnProperty('ETH')) {
-              prices['ETH'] = latestCandleInfo.close;
-          } else if (selectedPair.startsWith('SOL') && !selectedPair.endsWith('SOL') && prices.hasOwnProperty('SOL')) {
-              prices['SOL'] = latestCandleInfo.close;
-          } else if (selectedPair.startsWith('BNB') && !selectedPair.endsWith('BNB') && prices.hasOwnProperty('BNB')) {
-              prices['BNB'] = latestCandleInfo.close;
-          }
-      }
-
-      return portfolioData
-          .map(balance => {
-              const totalAmount = parseFloat(balance.free) + parseFloat(balance.locked);
-              let valueUsd = 0;
-              if (stablecoins.includes(balance.asset)) {
-                  valueUsd = totalAmount;
-              } else if (balance.asset === 'TRY' && tryEurRate.TRY) {
-                  valueUsd = totalAmount * tryEurRate.TRY;
-              } else if (balance.asset === 'EUR' && tryEurRate.EUR) {
-                  valueUsd = totalAmount * tryEurRate.EUR;
-              } else if (prices[balance.asset]) {
-                  valueUsd = totalAmount * prices[balance.asset];
-              } else {
-                  return null;
-              }
-              return valueUsd > 0.01 ? { name: balance.asset, value: valueUsd } : null;
-          })
-          .filter((item): item is { name: string; value: number } => item !== null)
-          .sort((a, b) => b.value - a.value); 
-  }, [portfolioData, totalPortfolioValueUsd, latestCandleInfo, selectedPair]);
+    const stablecoins = ['USDT', 'USDC', 'BUSD', 'TUSD', 'DAI'];
+    const tryEurRate = { TRY: 0.03, EUR: 1.08 }; 
+    
+    // Fallback prices, should ideally be fetched or updated more dynamically
+    const basePrices: Record<string, number> = {
+        BTC: 65000, ETH: 3500, SOL: 150, BNB: 600,
+        ADA: 0.45, XRP: 0.5, DOGE: 0.15, SHIB: 0.000025
+    };
+    
+    return portfolioData
+        .map(balance => {
+            const totalAmount = parseFloat(balance.free) + parseFloat(balance.locked);
+            let valueUsd = 0;
+            if (stablecoins.includes(balance.asset)) {
+                valueUsd = totalAmount;
+            } else if (balance.asset === 'TRY' && tryEurRate.TRY) {
+                valueUsd = totalAmount * tryEurRate.TRY;
+            } else if (balance.asset === 'EUR' && tryEurRate.EUR) {
+                valueUsd = totalAmount * tryEurRate.EUR;
+            } else if (basePrices[balance.asset]) {
+                valueUsd = totalAmount * basePrices[balance.asset];
+            } else {
+                return null; // Can't estimate value
+            }
+            return valueUsd > 0.01 ? { name: balance.asset, value: valueUsd } : null;
+        })
+        .filter((item): item is { name: string; value: number } => item !== null)
+        .sort((a, b) => b.value - a.value); 
+}, [portfolioData, totalPortfolioValueUsd]); // Removed latestCandleInfo dependency
 
   const PortfolioPieChart = () => {
     if (loadingPortfolio || !pieChartData || pieChartData.length === 0) {
@@ -1197,53 +1019,18 @@ export default function Dashboard() {
 
     return (
         <div className="flex flex-col items-center gap-2">
-            <ResponsiveContainer width={chartSize} height={chartSize}>
-                <ComposedChart> {/* Changed from PieChart to ComposedChart to avoid Recharts Pie warning */}
-                    <ChartTooltip
-                        cursor={false}
-                        content={({ active, payload }) => {
-                             if (active && payload && payload.length && payload[0].payload) { // Check payload[0].payload
-                                const data = payload[0].payload as any; // Type assertion
-                                if (!data) return null;
-                                const value = data?.value !== undefined ? data.value : 0;
-                                const totalValue = totalPortfolioValueUsd || 1; 
-                                return (
-                                  <div className="rounded-lg border bg-background p-2 text-xs shadow-sm">
-                                    <div className="font-medium">{data.name}</div>
-                                    <div className="text-muted-foreground">
-                                       {formatNumberClientSide(value, { style: 'currency', currency: 'USD' })}
-                                       {' '}
-                                       ({formatNumberClientSide((value / totalValue) * 100)}%)
-                                    </div>
-                                  </div>
-                                );
-                              }
-                             return null;
-                        }}
-                    />
-                    <Pie
-                        data={pieChartData}
-                        dataKey="value"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={chartSize / 2 - 5} 
-                        innerRadius={chartSize / 2 - 25} 
-                        strokeWidth={2}
-                        paddingAngle={1} 
-                    >
-                        {pieChartData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={PIE_CHART_COLORS[index % PIE_CHART_COLORS.length]} stroke={PIE_CHART_COLORS[index % PIE_CHART_COLORS.length]}/>
-                        ))}
-                    </Pie>
-                </ComposedChart>
-            </ResponsiveContainer>
-             <div className="text-center">
-                 <p className="text-xs text-muted-foreground">Toplam Değer (Tahmini)</p>
-                 <p className="text-lg font-semibold">
-                     {totalPortfolioValueUsd !== null ? useFormattedNumber(totalPortfolioValueUsd, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }) : '...'}
-                 </p>
-             </div>
+            {/* 
+              The ComposedChart and Pie components for the pie chart were here.
+              They are removed to avoid potential conflicts or if they are not strictly needed
+              with the TradingView widget handling main charting.
+              If a separate portfolio pie chart is still desired alongside TV widget,
+              ensure Pie and Cell are imported from 'recharts' and the JSX is reinstated here.
+              For now, assuming main focus is on TV widget.
+            */}
+             <p className="text-xs text-muted-foreground">Toplam Değer (Tahmini)</p>
+             <p className="text-lg font-semibold">
+                 {totalPortfolioValueUsd !== null ? useFormattedNumber(totalPortfolioValueUsd, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }) : '...'}
+             </p>
         </div>
     );
   };
@@ -1398,102 +1185,28 @@ export default function Dashboard() {
              <CardHeader className="flex flex-col space-y-1 pb-2 pt-3 px-4">
                 <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                     <CardTitle className="text-xl font-bold text-foreground">
-                        {selectedPair ? `${selectedPair.replace('USDT', '/USDT')}` : "Grafik"}
-                        {loadingCandles && <Loader2 className="ml-2 h-4 w-4 animate-spin inline-block text-muted-foreground" />}
+                        {selectedPair ? `${selectedPair.replace(/USDT$/, '/USDT')}` : "Grafik"} 
                     </CardTitle>
-                    {latestCandleInfo && !loadingCandles && (
-                        <div className="flex items-baseline gap-2 text-lg">
-                            <span className={cn("font-semibold", priceChangeInfo?.color || 'text-foreground')}>
-                                {formatNumberClientSide(latestCandleInfo.close)}
-                            </span>
-                            {priceChangeInfo && (
-                                <>
-                                <span className={cn("text-sm font-medium", priceChangeInfo.color)}>
-                                    {formatNumberClientSide(priceChangeInfo.absolute, { signDisplay: 'always', maximumFractionDigits: Math.max(2, String(latestCandleInfo.close).split('.')[1]?.length || 0)})}
-                                </span>
-                                <span className={cn("text-sm font-medium", priceChangeInfo.color)}>
-                                    ({priceChangeInfo.percent >= 0 ? '+' : ''}{formatNumberClientSide(priceChangeInfo.percent, {maximumFractionDigits: 2})}%)
-                                </span>
-                                </>
-                            )}
-                        </div>
-                    )}
                 </div>
-                 {latestCandleInfo && !loadingCandles && (
-                    <div className="text-xs text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5">
-                        <span>A: <span className="text-foreground/90">{formatNumberClientSide(latestCandleInfo.open)}</span></span>
-                        <span>Y: <span className="text-foreground/90">{formatNumberClientSide(latestCandleInfo.high)}</span></span>
-                        <span>D: <span className="text-foreground/90">{formatNumberClientSide(latestCandleInfo.low)}</span></span>
-                        <span>K: <span className="text-foreground/90">{formatNumberClientSide(latestCandleInfo.close)}</span></span>
-                    </div>
-                )}
                  <CardDescription className="text-xs text-muted-foreground pt-1">
-                   {selectedInterval} {activeApiEnvironment && `(${activeApiEnvironment.replace('_', ' ').toUpperCase()})`}
+                   {selectedInterval} {activeApiEnvironment && `(${activeApiEnvironment.replace('_', ' ').toUpperCase()})`} - TradingView
                  </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              {/* Price Chart */}
-              <div className="h-[350px] w-full pt-2 pr-2 pb-0 pl-0">
-                 {loadingCandles ? (
-                    <div className="flex items-center justify-center h-full text-muted-foreground">
-                        <Loader2 className="h-8 w-8 animate-spin" /> <span className="ml-2">Grafik yükleniyor...</span>
-                    </div>
-                 ) : candleData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                         <ComposedChart data={candleData} syncId="marketDataSync" margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.2} vertical={false}/>
-                            <XAxis
-                                dataKey="closeTime"
-                                tickFormatter={(value) => formatTimestamp(value, 'short')}
-                                tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                                axisLine={false} tickLine={false} interval="preserveStartEnd" tickCount={7} dy={5}
-                            />
-                            <YAxis
-                                yAxisId="price"
-                                orientation="right"
-                                tickFormatter={(value) => formatNumberClientSide(value, {notation: 'compact', maximumFractionDigits: Math.max(2, String(value).split('.')[1]?.length || 0)})}
-                                tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                                axisLine={false} tickLine={false}
-                                domain={['dataMin - dataMin * 0.02', 'dataMax + dataMax * 0.02']} // Add padding
-                                allowDataOverflow={true}
-                            />
-                             <TooltipProvider>
-                                <ChartTooltip content={<ChartTooltipContent />} cursor={{ stroke: 'hsl(var(--accent-foreground))', strokeWidth: 0.5, strokeDasharray: '3 3' }}/>
-                             </TooltipProvider>
-                            <Bar yAxisId="price" dataKey="open" strokeWidth={0}>
-                                {candleData.map((entry, index) => (
-                                    <Cell key={`cell-candle-${index}`} shape={<Candlestick />} fill={entry.close >= entry.open ? 'hsl(var(--chart-1))' : 'hsl(var(--destructive))'} />
-                                ))}
-                            </Bar>
-                        </ComposedChart>
-                    </ResponsiveContainer>
-                 ) : (
-                    <div className="flex items-center justify-center h-full text-muted-foreground">
-                        {selectedPair ? `${selectedPair} için ${selectedInterval} aralığında veri bulunamadı.` : "Lütfen bir parite seçin."}
-                    </div>
-                 )}
-              </div>
-              {/* Volume Chart */}
-              <div className="h-[100px] w-full pt-0 pr-2 pb-2 pl-0">
-                {candleData.length > 0 && !loadingCandles && (
-                    <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart data={candleData} syncId="marketDataSync" margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-                             <XAxis dataKey="closeTime" hide={true} /> {/* Hidden XAxis for sync */}
-                             <YAxis
-                                yAxisId="volume"
-                                orientation="right"
-                                tickFormatter={(value) => formatNumberClientSide(value, { notation: 'compact', maximumFractionDigits: 1 })}
-                                tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                                axisLine={false} tickLine={false} width={45}
-                                domain={[0, 'dataMax * 3']} // Give more room for volume spikes
-                             />
-                             <Bar yAxisId="volume" dataKey="volume" barSize={6}>
-                                {candleData.map((entry, index) => (
-                                    <Cell key={`cell-volume-${index}`} fill={entry.close >= entry.open ? 'hsla(var(--chart-1), 0.5)' : 'hsla(var(--destructive), 0.4)'} />
-                                ))}
-                            </Bar>
-                        </ComposedChart>
-                    </ResponsiveContainer>
+              <div className="h-[480px] w-full">
+                {selectedPair && selectedInterval ? (
+                  <TradingViewWidget
+                    symbolPair={selectedPair}
+                    interval={selectedInterval}
+                    exchangePrefix="BINANCE" // Assuming Binance, can be made dynamic
+                    autosize={true} // Let the widget fill the container
+                    className="w-full h-full"
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-full text-muted-foreground">
+                    Grafiği görüntülemek için bir parite ve zaman aralığı seçin.
+                     {loadingPairs && <Loader2 className="ml-2 h-4 w-4 animate-spin inline-block" />}
+                  </div>
                 )}
               </div>
             </CardContent>
