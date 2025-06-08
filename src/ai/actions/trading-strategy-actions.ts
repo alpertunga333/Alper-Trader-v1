@@ -129,15 +129,37 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
         }
         console.log(`Server Action (runStrategy): API keys retrieved for ${envLabel}. Attempting test order...`);
 
-        // Define test order parameters (MARKET BUY for ~11 USDT)
+        // Define test order parameters (MARKET BUY)
         const orderParams: OrderParams = {
             symbol: pair,
             side: 'BUY',
             type: 'MARKET',
-            quoteOrderQty: 11, // Target ~11 USDT value. Binance will calculate base quantity.
         };
+
+        if (isFutures) {
+            // For Futures MARKET orders, especially on Testnet, 'quantity' might be strictly required.
+            // This logic attempts to use 'quantity' for specific pairs known to cause issues with 'quoteOrderQty',
+            // or where a fixed quantity is safer to estimate.
+            if (pair === 'LTCUSDT') {
+                // Specific handling for LTCUSDT on Futures Testnet due to observed -1102 error.
+                // 0.15 LTC is approx $12 if LTC is $80. Common stepSize 0.001, minQty 0.001.
+                orderParams.quantity = 0.15;
+            } else if (pair === 'BTCUSDT') {
+                // For BTCUSDT futures, a small quantity in BTC.
+                // 0.0002 BTC is approx $13 if BTC is $65k. Common stepSize 0.00001, minQty 0.00001.
+                orderParams.quantity = 0.0002;
+            } else {
+                // For other futures pairs, default to trying quoteOrderQty.
+                // This might still fail if they exhibit the same behavior as LTCUSDT Testnet.
+                // A truly robust general solution would involve fetching price and calculating quantity.
+                orderParams.quoteOrderQty = 11; // Target ~11 USDT.
+            }
+        } else {
+            // For Spot MARKET orders, quoteOrderQty is generally well-supported.
+            orderParams.quoteOrderQty = 11; // Target ~11 USDT value.
+        }
         
-        console.log(`Server Action (runStrategy): Placing test order:`, orderParams);
+        console.log(`Server Action (runStrategy): Placing test order with params:`, orderParams);
         orderResponse = await placeOrder(orderParams, apiKey, secretKey, isTestnet, isFutures);
         console.log(`Server Action (runStrategy): Test order placed successfully for ${pair} (${envLabel}):`, orderResponse);
         
@@ -150,9 +172,9 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
                               `Side: ${orderResponse.side}\n` +
                               `Type: ${orderResponse.type}\n` +
                               `Status: ${orderResponse.status}\n` +
-                              `Executed Qty: ${executedQty.toFixed(8)} ${strategy.name.includes('BTC') ? 'BTC' : orderResponse.symbol.replace(/USDT|BUSD|TRY|EUR$/, '')}\n` + // Basic asset guess
-                              `Avg. Fill Price: ${filledPrice.toFixed(4)} ${pair.endsWith('USDT') ? 'USDT' : orderResponse.symbol.substring(orderResponse.symbol.length - 4)}\n` + // Basic quote guess
-                              `Total Value: ${parseFloat(orderResponse.cummulativeQuoteQty).toFixed(2)} ${pair.endsWith('USDT') ? 'USDT' : orderResponse.symbol.substring(orderResponse.symbol.length - 4)}\n` +
+                              `Executed Qty: ${executedQty.toFixed(8)} ${orderResponse.symbol.replace(/USDT|BUSD|TRY|EUR|FDUSD$/, '')}\n` + 
+                              `Avg. Fill Price: ${filledPrice.toFixed(4)} ${pair.match(/USDT|BUSD|TRY|EUR|FDUSD$/)?.[0] || ''}\n` +
+                              `Total Value: ${parseFloat(orderResponse.cummulativeQuoteQty).toFixed(2)} ${pair.match(/USDT|BUSD|TRY|EUR|FDUSD$/)?.[0] || ''}\n` +
                               `Order ID: ${orderResponse.orderId}`;
 
     } catch (error) {
@@ -177,7 +199,14 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
     // Send Telegram notification for success
     if (orderResponse && telegramBotToken && telegramChatId) {
         try {
-            await sendTelegramMessageAction(telegramBotToken, telegramChatId, tradeAttemptMessage, 'MarkdownV2'); // Using Markdown for better formatting potential
+            // Using MarkdownV2 requires escaping special characters.
+            // For simplicity, we'll send as plain text, or you can implement escaping.
+            // Example of simple Markdown-like characters to escape for MarkdownV2: '.', '!', '-', '(', ')', '[', ']', '{', '}', '_', '*', '`', '#', '+', '=', '|'
+            // A proper MarkdownV2 escaper function would be more robust.
+            const escapeMarkdownV2 = (text: string) => text.replace(/[_*[\]()~`>#+\-=|{}.!]/g, '\\$&');
+            
+            // We will send as plain text to avoid complex escaping for now
+            await sendTelegramMessageAction(telegramBotToken, telegramChatId, tradeAttemptMessage /*, 'MarkdownV2'*/);
             console.log(`Telegram notification sent for successful test order on ${pair}.`);
         } catch (tgError) {
             console.error(`Failed to send Telegram notification for successful test order on ${pair}:`, tgError);
@@ -248,6 +277,5 @@ export async function defineNewStrategy(params: DefineStrategyParams): Promise<D
         };
     }
 }
-
 
     
