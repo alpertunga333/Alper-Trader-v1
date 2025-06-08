@@ -88,8 +88,10 @@ export const RunParamsSchema = z.object({
     strategy: StrategySchema.describe('The strategy object to run.'),
     pair: z.string().min(3, "Trading pair symbol is required.").describe('The trading pair symbol (e.g., BTCUSDT).'),
     interval: z.string().min(1, "Candlestick interval is required.").describe('The candlestick interval to monitor (e.g., 1h, 1d).'),
-    stopLossPercent: z.number().positive("Stop loss must be positive.").optional().describe('Optional stop loss percentage.'),
-    takeProfitPercent: z.number().positive("Take profit must be positive.").optional().describe('Optional take profit percentage.'),
+    stopLossPercent: z.number().positive("Stop loss must be positive.").optional().describe('Optional stop loss percentage for after position is opened.'),
+    takeProfitPercent: z.number().positive("Take profit must be positive.").optional().describe('Optional take profit percentage for after position is opened.'),
+    buyStopOffsetPercent: z.number().positive("Buy stop offset must be positive.").optional().describe('Optional buy stop offset percentage for entry orders.'),
+    sellStopOffsetPercent: z.number().positive("Sell stop offset must be positive.").optional().describe('Optional sell stop offset percentage for entry orders.'),
     environment: ApiEnvironmentSchema.describe('The target API environment (spot, futures, testnet_spot, testnet_futures).'),
 });
 

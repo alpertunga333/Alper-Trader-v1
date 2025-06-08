@@ -131,34 +131,25 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
         }
         console.log(`Server Action (runStrategy): API keys retrieved for ${envLabel}. Attempting test order...`);
 
-        const orderParams: OrderParams = {
+        const orderParamsApi: OrderParams = {
             symbol: pair,
-            side: 'BUY',
+            side: 'BUY', // Default to BUY for test, actual strategy would determine this
             type: 'MARKET',
         };
 
-        // Futures: Always use quantity. Spot: Use quoteOrderQty.
         if (isFutures) {
-            if (pair === 'BTCUSDT') {
-                orderParams.quantity = 0.0002; // Approx 12-13 USD
-            } else if (pair === 'ETHUSDT') {
-                orderParams.quantity = 0.0035; // Approx 12-13 USD
-            } else if (pair === 'LTCUSDT') {
-                orderParams.quantity = 0.15; // Approx 12-13 USD
-            } else if (pair === 'SOLUSDT') {
-                orderParams.quantity = 0.08; // Approx 12-13 USD
-            } else {
-                // Generic small quantity for other futures pairs
-                // This might hit MIN_NOTIONAL or LOT_SIZE issues depending on the pair & price.
-                orderParams.quantity = 0.01;
-            }
+            if (pair === 'BTCUSDT') orderParamsApi.quantity = 0.0002;
+            else if (pair === 'ETHUSDT') orderParamsApi.quantity = 0.0035;
+            else if (pair === 'LTCUSDT') orderParamsApi.quantity = 0.15;
+            else if (pair === 'SOLUSDT') orderParamsApi.quantity = 0.08;
+            else orderParamsApi.quantity = 0.01; // Generic small quantity for other futures pairs
         } else { // Spot
-            orderParams.quoteOrderQty = 11; // Approx 11 USDT
+            orderParamsApi.quoteOrderQty = 11; // Approx 11 USDT
         }
 
 
-        console.log(`Server Action (runStrategy): Placing test order with params:`, orderParams);
-        orderResponseFromApi = await placeOrder(orderParams, apiKey, secretKey, isTestnet, isFutures);
+        console.log(`Server Action (runStrategy): Placing test order with params:`, orderParamsApi);
+        orderResponseFromApi = await placeOrder(orderParamsApi, apiKey, secretKey, isTestnet, isFutures);
         console.log(`Server Action (runStrategy): Test order placed successfully for ${pair} (${envLabel}):`, orderResponseFromApi);
 
         const filledPrice = orderResponseFromApi.fills && orderResponseFromApi.fills.length > 0 ? parseFloat(orderResponseFromApi.fills[0].price) : parseFloat(orderResponseFromApi.price);
@@ -180,21 +171,27 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
                               `Emir ID: ${orderResponseFromApi.orderId}\n`;
 
         let riskManagementInfo = '';
-        if (params.stopLossPercent || params.takeProfitPercent) {
+        if (params.stopLossPercent || params.takeProfitPercent || params.buyStopOffsetPercent || params.sellStopOffsetPercent) {
             riskManagementInfo += `\n--- Risk Ayarları (Parametreler) ---\n`;
             if (params.stopLossPercent) {
-                const potentialSlPrice = params.side === 'BUY'
+                const potentialSlPrice = orderResponseFromApi.side === 'BUY'
                     ? filledPrice * (1 - params.stopLossPercent / 100)
                     : filledPrice * (1 + params.stopLossPercent / 100);
-                riskManagementInfo += `Stop-Loss Yüzdesi: ${params.stopLossPercent}%\n`;
+                riskManagementInfo += `Stop-Loss Yüzdesi (Parametre): ${params.stopLossPercent}%\n`;
                 riskManagementInfo += `Tahmini Stop-Loss Fiyatı: ${potentialSlPrice.toFixed(quoteAsset === 'TRY' ? 2 : 4)} ${quoteAsset}\n`;
             }
             if (params.takeProfitPercent) {
-                const potentialTpPrice = params.side === 'BUY'
+                const potentialTpPrice = orderResponseFromApi.side === 'BUY'
                     ? filledPrice * (1 + params.takeProfitPercent / 100)
                     : filledPrice * (1 - params.takeProfitPercent / 100);
-                riskManagementInfo += `Kâr-Al Yüzdesi: ${params.takeProfitPercent}%\n`;
+                riskManagementInfo += `Kâr-Al Yüzdesi (Parametre): ${params.takeProfitPercent}%\n`;
                 riskManagementInfo += `Tahmini Kâr-Al Fiyatı: ${potentialTpPrice.toFixed(quoteAsset === 'TRY' ? 2 : 4)} ${quoteAsset}\n`;
+            }
+            if (params.buyStopOffsetPercent) {
+                 riskManagementInfo += `Alış Stop Yüzdesi (Parametre): ${params.buyStopOffsetPercent}%\n`;
+            }
+            if (params.sellStopOffsetPercent) {
+                 riskManagementInfo += `Satış Stop Yüzdesi (Parametre): ${params.sellStopOffsetPercent}%\n`;
             }
         }
         if (riskManagementInfo) {
@@ -253,7 +250,7 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
 
     return {
         status: 'Aktif',
-        message: `Strateji ${strategy.name} (${envLabel} üzerinde ${pair} için test emri verildi). Detaylar:\n${tradeAttemptMessage}`,
+        message: `Strateji ${strategy.name} (${envLabel} üzerinde ${pair} için test emri verildi).\n${tradeAttemptMessage}`,
         order: resultOrder,
     };
 }
