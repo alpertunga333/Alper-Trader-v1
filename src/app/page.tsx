@@ -97,7 +97,8 @@ import {
   CheckCircle2,
   TrendingUp,
   Home,
-  BrainCircuit // Icon for Strategies
+  BrainCircuit, // Icon for Strategies
+  Save // Icon for Save button
 } from 'lucide-react';
 import type { Balance, SymbolInfo } from '@/services/binance'; // Removed OrderParams, OrderResponse as they are handled in actions/types
 import { getExchangeInfo } from '@/services/binance';
@@ -203,6 +204,17 @@ const userDefinedPairSymbols: string[] = [
 // ----- API Validation Types -----
 type ValidationStatus = 'pending' | 'valid' | 'invalid' | 'not_checked';
 
+// ----- Risk Settings Type and Key -----
+interface RiskSettings {
+  stopLoss: string;
+  takeProfit: string;
+  portfolioAllocationPercent: string;
+  maxOpenTrades: string;
+  buyStopOffsetPercent: string;
+  sellStopOffsetPercent: string;
+}
+const RISK_SETTINGS_LOCALSTORAGE_KEY = 'kriptopilot_risk_settings';
+
 
 // ----- Main Dashboard Component -----
 export default function Dashboard() {
@@ -213,16 +225,16 @@ export default function Dashboard() {
   const [activeStrategies, setActiveStrategies] = React.useState<string[]>([]);
 
   // Risk Management States
-  const [stopLoss, setStopLoss] = React.useState<string>(''); // For Take Profit / Stop Loss after position open
-  const [takeProfit, setTakeProfit] = React.useState<string>(''); // For Take Profit / Stop Loss after position open
-  const [portfolioAllocationPercent, setPortfolioAllocationPercent] = React.useState<string>('10'); // Default 10%
-  const [maxOpenTrades, setMaxOpenTrades] = React.useState<string>('5'); // Default 5 trades
-  const [buyStopOffsetPercent, setBuyStopOffsetPercent] = React.useState<string>('1'); // Default 1% offset for Buy Stop orders
-  const [sellStopOffsetPercent, setSellStopOffsetPercent] = React.useState<string>('1'); // Default 1% offset for Sell Stop orders
+  const [stopLoss, setStopLoss] = React.useState<string>('');
+  const [takeProfit, setTakeProfit] = React.useState<string>('');
+  const [portfolioAllocationPercent, setPortfolioAllocationPercent] = React.useState<string>('10');
+  const [maxOpenTrades, setMaxOpenTrades] = React.useState<string>('5');
+  const [buyStopOffsetPercent, setBuyStopOffsetPercent] = React.useState<string>('1');
+  const [sellStopOffsetPercent, setSellStopOffsetPercent] = React.useState<string>('1');
 
 
-  const [availablePairsForBot, setAvailablePairsForBot] = React.useState<SymbolInfo[]>([]); // For bot selection UI
-  const [allPairsForBacktest, setAllPairsForBacktest] = React.useState<SymbolInfo[]>([]); // For backtesting dropdown
+  const [availablePairsForBot, setAvailablePairsForBot] = React.useState<SymbolInfo[]>([]);
+  const [allPairsForBacktest, setAllPairsForBacktest] = React.useState<SymbolInfo[]>([]);
   const [portfolioData, setPortfolioData] = React.useState<Balance[]>([]);
   const [totalPortfolioValueUsd, setTotalPortfolioValueUsd] = React.useState<number | null>(null);
   const [loadingPairs, setLoadingPairs] = React.useState(true);
@@ -279,7 +291,7 @@ export default function Dashboard() {
   // --- Effects ---
   React.useEffect(() => {
     const loadDefaultSettings = async () => {
-      addLog('INFO', 'Varsayılan API ayarları sunucu ortamından yükleniyor...');
+      addLog('BİLGİ', 'Varsayılan API ayarları sunucu ortamından yükleniyor...');
       try {
         const defaultSettings = await fetchDefaultApiSettingsAction();
         setApiKeys(currentSettings => ({
@@ -307,10 +319,10 @@ export default function Dashboard() {
 
         const anyKeyLoaded = Object.values(defaultSettings).some(env => (env as any).key || (env as any).secret || (env as any).token);
         if (anyKeyLoaded) {
-            addLog('INFO', 'Varsayılan API ayarları ortam değişkenlerinden yüklendi ve önceden dolduruldu.');
+            addLog('BİLGİ', 'Varsayılan API ayarları ortam değişkenlerinden yüklendi ve önceden dolduruldu.');
             toast({ title: "Ayarlar Yüklendi", description: "Ortam değişkenlerinden varsayılan API ayarları yüklendi." });
         } else {
-            addLog('INFO', 'Sunucu ortam değişkenlerinde varsayılan API ayarı bulunamadı.');
+            addLog('BİLGİ', 'Sunucu ortam değişkenlerinde varsayılan API ayarı bulunamadı.');
         }
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : "Bilinmeyen bir hata oluştu.";
@@ -321,6 +333,28 @@ export default function Dashboard() {
     loadDefaultSettings();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+
+  React.useEffect(() => {
+    const savedSettings = localStorage.getItem(RISK_SETTINGS_LOCALSTORAGE_KEY);
+    if (savedSettings) {
+      try {
+        const parsedSettings: RiskSettings = JSON.parse(savedSettings);
+        setStopLoss(parsedSettings.stopLoss || '');
+        setTakeProfit(parsedSettings.takeProfit || '');
+        setPortfolioAllocationPercent(parsedSettings.portfolioAllocationPercent || '10');
+        setMaxOpenTrades(parsedSettings.maxOpenTrades || '5');
+        setBuyStopOffsetPercent(parsedSettings.buyStopOffsetPercent || '1');
+        setSellStopOffsetPercent(parsedSettings.sellStopOffsetPercent || '1');
+        addLog('YAPILANDIRMA', 'Kaydedilmiş risk ayarları localStorage\'dan yüklendi.');
+      } catch (e) {
+        console.error("Risk ayarları localStorage'dan yüklenirken hata:", e);
+        addLog('HATA', 'Kaydedilmiş risk ayarları yüklenirken bir sorun oluştu.');
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
 
   React.useEffect(() => {
     const fetchPairs = async () => {
@@ -496,7 +530,7 @@ export default function Dashboard() {
         setLoadingPortfolio(false);
       }
    // eslint-disable-next-line react-hooks/exhaustive-deps
-   }, [activeApiEnvironment, activeEnvValidationStatus]);
+   }, [activeApiEnvironment, activeEnvValidationStatus]); // Removed apiKeys from here as it can cause loop with setApiKeys in default settings
 
 
   // --- Handlers ---
@@ -539,7 +573,7 @@ export default function Dashboard() {
                 const strategy = definedStrategies.find(s => s.id === strategyId);
                 if (strategy) {
                     try {
-                        addLog('STRATEJI_BASLAT', `'${strategy.name}' stratejisi ${pair} (${envLabel}) üzerinde başlatılmaya çalışılıyor...`);
+                        addLog('STRATEJI_BASLAT', `'${strategy.name}' stratejisi ${pair} (${envLabel}) üzerinde başlatılmaya çalışılıyor... Risk Ayarları: SL=${stopLoss}%, TP=${takeProfit}%, AlışStop=${buyStopOffsetPercent}%, SatışStop=${sellStopOffsetPercent}%`);
                         const runParams: RunParams = {
                             strategy,
                             pair,
@@ -558,13 +592,13 @@ export default function Dashboard() {
                                 id: result.order.orderId,
                                 time: result.order.transactTime || Date.now(),
                                 symbol: result.order.symbol,
-                                isBuyer: result.order.side === 'SELL', // SELL ise isBuyer true
+                                isBuyer: result.order.side === 'SELL',
                                 price: parseFloat(result.order.fills && result.order.fills.length > 0 ? result.order.fills[0].price : result.order.price),
                                 qty: parseFloat(result.order.executedQty),
                                 quoteQty: parseFloat(result.order.cummulativeQuoteQty),
                                 commissionAsset: result.order.fills && result.order.fills.length > 0 && result.order.fills[0].commissionAsset ? result.order.fills[0].commissionAsset : 'N/A',
                             };
-                            setTradeHistoryData(prevTrades => [newTrade, ...prevTrades].slice(0, 50)); // Başa ekle, 50 ile sınırla
+                            setTradeHistoryData(prevTrades => [newTrade, ...prevTrades].slice(0, 50));
                             addLog('TİCARET_GEÇMİŞİ', `Yeni işlem geçmişe eklendi: Emir ID ${newTrade.id} (${newTrade.symbol})`);
                         }
 
@@ -953,6 +987,26 @@ export default function Dashboard() {
       toast({ title: "Geriye Dönük Test Başarısız", description: errorMessage, variant: "destructive" });
     } finally {
       setIsBacktesting(false);
+    }
+  };
+
+  const handleSaveRiskSettings = () => {
+    const settingsToSave: RiskSettings = {
+      stopLoss,
+      takeProfit,
+      portfolioAllocationPercent,
+      maxOpenTrades,
+      buyStopOffsetPercent,
+      sellStopOffsetPercent,
+    };
+    try {
+      localStorage.setItem(RISK_SETTINGS_LOCALSTORAGE_KEY, JSON.stringify(settingsToSave));
+      toast({ title: "Risk Ayarları Kaydedildi", description: "Risk yönetimi ayarlarınız tarayıcıda saklandı." });
+      addLog('YAPILANDIRMA', 'Risk yönetimi ayarları başarıyla kaydedildi.');
+    } catch (e) {
+      console.error("Risk ayarları localStorage'a kaydedilirken hata:", e);
+      toast({ title: "Kayıt Hatası", description: "Risk ayarları kaydedilemedi. Tarayıcınızda localStorage etkin mi?", variant: "destructive" });
+      addLog('HATA', 'Risk yönetimi ayarları kaydedilemedi.');
     }
   };
 
@@ -1725,8 +1779,9 @@ export default function Dashboard() {
                   </div>
 
                   <div className="sm:col-span-2 pt-2">
-                    <Button disabled>
-                      Risk Ayarlarını Kaydet (Yakında)
+                    <Button onClick={handleSaveRiskSettings}>
+                      <Save className="mr-2 h-4 w-4" />
+                      Risk Ayarlarını Kaydet
                     </Button>
                   </div>
                 </TabsContent>
@@ -1829,3 +1884,4 @@ export default function Dashboard() {
     </SidebarProvider>
   );
 }
+

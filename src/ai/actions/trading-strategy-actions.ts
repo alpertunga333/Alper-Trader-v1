@@ -11,7 +11,7 @@ import { z } from 'zod';
 import { ai } from '@/ai/ai-instance';
 import { getCandlestickData, placeOrder, type Candle, type OrderParams, type OrderResponse as BinanceOrderResponse } from '@/services/binance';
 import type { BacktestParams, BacktestResult, RunParams, RunResult, DefineStrategyParams, DefineStrategyResult, Strategy, ApiEnvironment, OrderResponse } from '@/ai/types/strategy-types';
-import { BacktestParamsSchema, BacktestResultSchema, RunParamsSchema, RunResultSchema, DefineStrategyParamsSchema, DefineStrategyResultSchema, StrategySchema, OrderResponseSchema } from '@/ai/schemas/strategy-schemas';
+import { BacktestParamsSchema, BacktestResultSchema, RunParamsSchema, RunResultSchema, DefineStrategyParamsSchema, DefineStrategyResultSchema, StrategySchema } from '@/ai/schemas/strategy-schemas';
 import { fetchSecureApiKey, fetchSecureSecretKey } from '@/lib/secure-api';
 import { sendTelegramMessageAction } from '@/actions/telegramActions'; // Import Telegram action
 
@@ -97,17 +97,18 @@ export async function backtestStrategy(params: BacktestParams): Promise<Backtest
 
 /**
  * Server Action to initiate live trading for a strategy on the specified market environment.
- * For demonstration, this will attempt to place a small MARKET BUY order.
+ * Places a MARKET BUY/SELL order, and if SL/TP percentages are provided, attempts to place
+ * corresponding STOP_MARKET/TAKE_PROFIT_MARKET (Futures) or STOP_LOSS/TAKE_PROFIT (Spot) orders.
  * @param params Parameters including the strategy, pair, interval, risk management, and environment.
  * @returns Promise resolving to RunResult indicating initial status and trade attempt outcome.
  */
 export async function runStrategy(params: RunParams): Promise<RunResult> {
-    const { environment, strategy, pair, interval } = params; // Destructure relevant params
+    const { environment, strategy, pair, interval } = params;
     const isTestnet = environment.includes('testnet');
     const isFutures = environment.includes('futures');
     const envLabel = environment.replace('_', ' ').toUpperCase();
 
-    console.log(`Server Action: Initiating live strategy run (TEST ORDER) for ${strategy.name} on ${pair} (${envLabel})`);
+    console.log(`Server Action: Initiating live strategy run for ${strategy.name} on ${pair} (${envLabel})`);
 
     const validation = RunParamsSchema.safeParse(params);
     if (!validation.success) {
@@ -129,37 +130,35 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
         if (!apiKey || !secretKey) {
              throw new Error(`${envLabel} ortamı için API anahtarları bulunamadı veya güvenli bir şekilde yapılandırılmadı.`);
         }
-        console.log(`Server Action (runStrategy): API keys retrieved for ${envLabel}. Attempting test order...`);
+        console.log(`Server Action (runStrategy): API keys retrieved for ${envLabel}. Attempting market order...`);
 
-        const orderParamsApi: OrderParams = {
+        const marketOrderParams: OrderParams = {
             symbol: pair,
-            side: 'BUY', // Default to BUY for test, actual strategy would determine this
+            side: 'BUY', // Default to BUY for initial test, actual strategy would determine this
             type: 'MARKET',
         };
 
         if (isFutures) {
-            if (pair === 'BTCUSDT') orderParamsApi.quantity = 0.0002;
-            else if (pair === 'ETHUSDT') orderParamsApi.quantity = 0.0035;
-            else if (pair === 'LTCUSDT') orderParamsApi.quantity = 0.15;
-            else if (pair === 'SOLUSDT') orderParamsApi.quantity = 0.08;
-            else orderParamsApi.quantity = 0.01; // Generic small quantity for other futures pairs
+            if (pair === 'BTCUSDT') marketOrderParams.quantity = 0.0002;
+            else if (pair === 'ETHUSDT') marketOrderParams.quantity = 0.0035;
+            else if (pair === 'LTCUSDT') marketOrderParams.quantity = 0.15;
+            else if (pair === 'SOLUSDT') marketOrderParams.quantity = 0.08;
+            else marketOrderParams.quantity = 0.01; // Generic small quantity for other futures pairs
         } else { // Spot
-            orderParamsApi.quoteOrderQty = 11; // Approx 11 USDT
+            marketOrderParams.quoteOrderQty = 11; // Approx 11 USDT
         }
 
+        console.log(`Server Action (runStrategy): Placing market order with params:`, marketOrderParams);
+        orderResponseFromApi = await placeOrder(marketOrderParams, apiKey, secretKey, isTestnet, isFutures);
+        console.log(`Server Action (runStrategy): Market order placed successfully for ${pair} (${envLabel}):`, orderResponseFromApi);
 
-        console.log(`Server Action (runStrategy): Placing test order with params:`, orderParamsApi);
-        orderResponseFromApi = await placeOrder(orderParamsApi, apiKey, secretKey, isTestnet, isFutures);
-        console.log(`Server Action (runStrategy): Test order placed successfully for ${pair} (${envLabel}):`, orderResponseFromApi);
-
-        const filledPrice = orderResponseFromApi.fills && orderResponseFromApi.fills.length > 0 ? parseFloat(orderResponseFromApi.fills[0].price) : parseFloat(orderResponseFromApi.price);
+        const filledPrice = parseFloat(orderResponseFromApi.fills && orderResponseFromApi.fills.length > 0 ? orderResponseFromApi.fills[0].price : orderResponseFromApi.price);
         const executedQty = parseFloat(orderResponseFromApi.executedQty);
         const baseAsset = orderResponseFromApi.symbol.replace(/USDT|BUSD|TRY|EUR|FDUSD$/, '');
         const quoteAssetMatch = pair.match(/USDT|BUSD|TRY|EUR|FDUSD$/);
         const quoteAsset = quoteAssetMatch ? quoteAssetMatch[0] : '';
 
-
-        tradeAttemptMessage = `✅ TEST EMRİ VERİLDİ (${envLabel}):\n` +
+        tradeAttemptMessage = `✅ PİYASA EMRİ VERİLDİ (${envLabel}):\n` +
                               `Strateji: ${strategy.name}\n` +
                               `Parite: ${orderResponseFromApi.symbol}\n` +
                               `Yön: ${orderResponseFromApi.side}\n` +
@@ -169,68 +168,93 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
                               `İşlem Miktarı: ${executedQty.toFixed(8)} ${baseAsset}\n` +
                               `Toplam Değer: ${parseFloat(orderResponseFromApi.cummulativeQuoteQty).toFixed(2)} ${quoteAsset}\n` +
                               `Emir ID: ${orderResponseFromApi.orderId}\n`;
-
+        
         let riskManagementInfo = '';
         if (params.stopLossPercent || params.takeProfitPercent || params.buyStopOffsetPercent || params.sellStopOffsetPercent) {
             riskManagementInfo += `\n--- Risk Ayarları (Parametreler) ---\n`;
+            if (params.stopLossPercent) riskManagementInfo += `Stop-Loss Yüzdesi (Parametre): ${params.stopLossPercent}%\n`;
+            if (params.takeProfitPercent) riskManagementInfo += `Kâr-Al Yüzdesi (Parametre): ${params.takeProfitPercent}%\n`;
+            if (params.buyStopOffsetPercent) riskManagementInfo += `Alış Stop Yüzdesi (Parametre): ${params.buyStopOffsetPercent}%\n`;
+            if (params.sellStopOffsetPercent) riskManagementInfo += `Satış Stop Yüzdesi (Parametre): ${params.sellStopOffsetPercent}%\n`;
+        }
+        if(riskManagementInfo) tradeAttemptMessage += riskManagementInfo;
+
+        // --- Attempt to place SL/TP orders ---
+        let slTpMessages: string[] = [];
+        if (executedQty > 0 && (params.stopLossPercent || params.takeProfitPercent)) {
             if (params.stopLossPercent) {
-                const potentialSlPrice = orderResponseFromApi.side === 'BUY'
+                const stopLossPrice = orderResponseFromApi.side === 'BUY'
                     ? filledPrice * (1 - params.stopLossPercent / 100)
                     : filledPrice * (1 + params.stopLossPercent / 100);
-                riskManagementInfo += `Stop-Loss Yüzdesi (Parametre): ${params.stopLossPercent}%\n`;
-                riskManagementInfo += `Tahmini Stop-Loss Fiyatı: ${potentialSlPrice.toFixed(quoteAsset === 'TRY' ? 2 : 4)} ${quoteAsset}\n`;
+                // Note: Precision for stopPrice should ideally be based on pair's tickSize. Using toFixed(8) as a placeholder.
+                const slOrderParams: OrderParams = {
+                    symbol: orderResponseFromApi.symbol,
+                    side: orderResponseFromApi.side === 'BUY' ? 'SELL' : 'BUY',
+                    type: isFutures ? 'STOP_MARKET' : 'STOP_LOSS',
+                    quantity: executedQty,
+                    stopPrice: parseFloat(stopLossPrice.toFixed(8)),
+                };
+                try {
+                    console.log(`Server Action (runStrategy): Placing SL order for ${pair} (${envLabel}):`, slOrderParams);
+                    const slOrderResponse = await placeOrder(slOrderParams, apiKey, secretKey, isTestnet, isFutures);
+                    slTpMessages.push(`✅ SL Emri (${slOrderParams.type}) Verildi: Hedef Fiyat ~${slOrderParams.stopPrice?.toFixed(quoteAsset === 'TRY' ? 2 : 4)} ${quoteAsset}, Miktar: ${slOrderParams.quantity} ${baseAsset} (ID: ${slOrderResponse.orderId})`);
+                } catch (slError) {
+                    slTpMessages.push(`❌ SL Emri (${slOrderParams.type}) Başarısız: ${slError instanceof Error ? slError.message : String(slError)}`);
+                }
             }
+
             if (params.takeProfitPercent) {
-                const potentialTpPrice = orderResponseFromApi.side === 'BUY'
+                const takeProfitPrice = orderResponseFromApi.side === 'BUY'
                     ? filledPrice * (1 + params.takeProfitPercent / 100)
                     : filledPrice * (1 - params.takeProfitPercent / 100);
-                riskManagementInfo += `Kâr-Al Yüzdesi (Parametre): ${params.takeProfitPercent}%\n`;
-                riskManagementInfo += `Tahmini Kâr-Al Fiyatı: ${potentialTpPrice.toFixed(quoteAsset === 'TRY' ? 2 : 4)} ${quoteAsset}\n`;
-            }
-            if (params.buyStopOffsetPercent) {
-                 riskManagementInfo += `Alış Stop Yüzdesi (Parametre): ${params.buyStopOffsetPercent}%\n`;
-            }
-            if (params.sellStopOffsetPercent) {
-                 riskManagementInfo += `Satış Stop Yüzdesi (Parametre): ${params.sellStopOffsetPercent}%\n`;
+                const tpOrderParams: OrderParams = {
+                    symbol: orderResponseFromApi.symbol,
+                    side: orderResponseFromApi.side === 'BUY' ? 'SELL' : 'BUY',
+                    type: isFutures ? 'TAKE_PROFIT_MARKET' : 'TAKE_PROFIT',
+                    quantity: executedQty,
+                    stopPrice: parseFloat(takeProfitPrice.toFixed(8)),
+                };
+                try {
+                    console.log(`Server Action (runStrategy): Placing TP order for ${pair} (${envLabel}):`, tpOrderParams);
+                    const tpOrderResponse = await placeOrder(tpOrderParams, apiKey, secretKey, isTestnet, isFutures);
+                    slTpMessages.push(`✅ TP Emri (${tpOrderParams.type}) Verildi: Hedef Fiyat ~${tpOrderParams.stopPrice?.toFixed(quoteAsset === 'TRY' ? 2 : 4)} ${quoteAsset}, Miktar: ${tpOrderParams.quantity} ${baseAsset} (ID: ${tpOrderResponse.orderId})`);
+                } catch (tpError) {
+                    slTpMessages.push(`❌ TP Emri (${tpOrderParams.type}) Başarısız: ${tpError instanceof Error ? tpError.message : String(tpError)}`);
+                }
             }
         }
-        if (riskManagementInfo) {
-            tradeAttemptMessage += riskManagementInfo;
+        if (slTpMessages.length > 0) {
+            tradeAttemptMessage += "\n--- Otomatik SL/TP Emirleri ---\n" + slTpMessages.join("\n");
         }
 
 
     } catch (error) {
          const message = error instanceof Error ? error.message : String(error);
-         console.error(`Server Action (runStrategy) Error during test order for ${pair} (${envLabel}): ${message}`);
-         tradeAttemptMessage = `❌ TEST EMRİ BAŞARISIZ (${envLabel}) - Strateji: ${strategy.name}, Parite: ${pair}:\nHata: ${message}`;
+         console.error(`Server Action (runStrategy) Error during market order for ${pair} (${envLabel}): ${message}`);
+         tradeAttemptMessage = `❌ PİYASA EMRİ BAŞARISIZ (${envLabel}) - Strateji: ${strategy.name}, Parite: ${pair}:\nHata: ${message}`;
 
          if (telegramBotToken && telegramChatId) {
             try {
                 await sendTelegramMessageAction(telegramBotToken, telegramChatId, tradeAttemptMessage);
-                console.log(`Telegram bildirimi gönderildi (başarısız emir): ${pair}.`);
             } catch (tgError) {
-                console.error(`Telegram hata bildirimi gönderilemedi (başarısız emir): ${pair}:`, tgError);
+                console.error(`Telegram hata bildirimi gönderilemedi (başarısız piyasa emri): ${pair}:`, tgError);
             }
-        } else {
-            console.warn(`Telegram token/chat ID ayarlanmamış. Hata bildirimi atlanıyor: ${pair}.`);
         }
-         return { status: 'Hata', message: `Test emri başarısız oldu: ${message}. Lütfen API anahtarlarınızı, parite limitlerini ve ağ bağlantınızı kontrol edin.`, order: undefined };
+         return { status: 'Hata', message: `Piyasa emri başarısız oldu: ${message}. Lütfen API anahtarlarınızı, parite limitlerini ve ağ bağlantınızı kontrol edin.`, order: undefined };
     }
 
     if (orderResponseFromApi && telegramBotToken && telegramChatId) {
         try {
             await sendTelegramMessageAction(telegramBotToken, telegramChatId, tradeAttemptMessage);
-            console.log(`Telegram bildirimi gönderildi (başarılı test emri): ${pair}.`);
+            console.log(`Telegram bildirimi gönderildi (piyasa emri ve SL/TP denemesi): ${pair}.`);
         } catch (tgError) {
-            console.error(`Telegram başarı bildirimi gönderilemedi (başarılı test emri): ${pair}:`, tgError);
+            console.error(`Telegram başarı bildirimi gönderilemedi (piyasa emri ve SL/TP denemesi): ${pair}:`, tgError);
             tradeAttemptMessage += "\n(Telegram bildirimi gönderilemedi)";
         }
     } else if (orderResponseFromApi) {
-        console.warn(`Telegram token/chat ID ayarlanmamış. Başarı bildirimi atlanıyor: ${pair}.`);
-        tradeAttemptMessage += "\n(Telegram bildirimi atlandı: token/chat ID eksik)";
+        tradeAttemptMessage += "\n(Telegram bildirimi atlandı: token/chat ID eksik veya ayarlanmamış)";
     }
 
-    // Ensure the returned order object matches the OrderResponse schema/type if successful
     const resultOrder: OrderResponse | undefined = orderResponseFromApi ? {
         orderId: orderResponseFromApi.orderId,
         status: orderResponseFromApi.status,
@@ -247,10 +271,9 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
         fills: orderResponseFromApi.fills,
     } : undefined;
 
-
     return {
-        status: 'Aktif',
-        message: `Strateji ${strategy.name} (${envLabel} üzerinde ${pair} için test emri verildi).\n${tradeAttemptMessage}`,
+        status: 'Aktif', // Initial market order placed, SL/TP attempted.
+        message: `Strateji ${strategy.name} (${envLabel} üzerinde ${pair} için piyasa emri verildi. SL/TP denemeleri yapıldı.\n${tradeAttemptMessage}`,
         order: resultOrder,
     };
 }

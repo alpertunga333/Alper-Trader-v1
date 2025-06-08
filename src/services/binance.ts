@@ -14,9 +14,9 @@ export interface OrderParams {
    */
   side: 'BUY' | 'SELL';
   /**
-   * The type of the order (e.g., MARKET, LIMIT).
+   * The type of the order (e.g., MARKET, LIMIT, STOP_MARKET, TAKE_PROFIT_MARKET, STOP_LOSS, TAKE_PROFIT).
    */
-  type: 'MARKET' | 'LIMIT';
+  type: 'MARKET' | 'LIMIT' | 'STOP_MARKET' | 'TAKE_PROFIT_MARKET' | 'STOP_LOSS' | 'TAKE_PROFIT' | 'STOP_LOSS_LIMIT' | 'TAKE_PROFIT_LIMIT';
   /**
    * The quantity in base asset (e.g., BTC for BTCUSDT).
    * Required for LIMIT orders. Optional for MARKET orders if quoteOrderQty is provided.
@@ -28,17 +28,15 @@ export interface OrderParams {
    */
   quoteOrderQty?: number;
   /**
-   * The price at which to buy or sell (required for LIMIT orders).
+   * The price at which to buy or sell (required for LIMIT orders, and for _LIMIT variants of SL/TP).
    */
   price?: number;
   /**
-   * Optional Stop Loss price.
+   * Trigger price for STOP_MARKET, TAKE_PROFIT_MARKET, STOP_LOSS, TAKE_PROFIT, STOP_LOSS_LIMIT, TAKE_PROFIT_LIMIT orders.
    */
-  stopLoss?: number;
-   /**
-   * Optional Take Profit price.
-   */
-  takeProfit?: number;
+  stopPrice?: number;
+  timeInForce?: 'GTC' | 'IOC' | 'FOK'; // Relevant for LIMIT type orders
+  // Other potential params like newOrderRespType, recvWindow are handled internally or have defaults.
 }
 
 /**
@@ -64,7 +62,7 @@ export interface OrderResponse {
   /**
    * The price of the order. For MARKET orders, this is the average filled price.
    */
-  price: string;
+  price: string; // For MARKET orders, this might be 0 if not filled yet or if newOrderRespType is ACK. For FULL, it's avg filled.
    /**
    * The original quantity of the order (in base asset).
    */
@@ -97,6 +95,11 @@ export interface OrderResponse {
     commissionAsset: string;
     tradeId: number;
   }>;
+  // Fields for STOP_LOSS, TAKE_PROFIT, etc. if different in response
+  stopPrice?: string; // Binance response might include the stopPrice for SL/TP orders
+  workingType?: string; // For futures SL/TP orders
+  origType?: string; // Original order type if it was modified
+  positionSide?: string; // For futures
 }
 
 
@@ -292,42 +295,63 @@ export async function placeOrder(
   isFutures: boolean = false
 ): Promise<OrderResponse> {
   const envLabel = `${isTestnet ? 'Testnet ' : ''}${isFutures ? 'Futures' : 'Spot'}`;
-  console.log(`Placing Order on ${envLabel}:`, orderParams);
+  console.log(`Placing Order on ${envLabel}:`, JSON.stringify(orderParams));
 
   const endpoint = isFutures ? '/fapi/v1/order' : '/api/v3/order';
   
-  // Validate order parameters
-  if (orderParams.type === 'MARKET' && orderParams.quantity === undefined && orderParams.quoteOrderQty === undefined) {
-    throw new Error('For MARKET orders, either quantity (base asset) or quoteOrderQty (quote asset) must be provided.');
-  }
-  if (orderParams.type === 'LIMIT') {
+  // Validate order parameters based on type
+  if (orderParams.type === 'MARKET') {
+      if (orderParams.quantity === undefined && orderParams.quoteOrderQty === undefined) {
+        throw new Error('For MARKET orders, either quantity (base asset) or quoteOrderQty (quote asset) must be provided.');
+      }
+  } else if (orderParams.type === 'LIMIT') {
     if (orderParams.quantity === undefined) {
         throw new Error('For LIMIT orders, quantity (base asset) must be provided.');
     }
     if (orderParams.price === undefined) {
         throw new Error('For LIMIT orders, price must be provided.');
     }
+  } else if (['STOP_MARKET', 'TAKE_PROFIT_MARKET', 'STOP_LOSS', 'TAKE_PROFIT'].includes(orderParams.type)) {
+    if (orderParams.quantity === undefined) {
+        throw new Error(`For ${orderParams.type} orders, quantity must be provided.`);
+    }
+    if (orderParams.stopPrice === undefined) {
+        throw new Error(`For ${orderParams.type} orders, stopPrice must be provided.`);
+    }
+  } else if (['STOP_LOSS_LIMIT', 'TAKE_PROFIT_LIMIT'].includes(orderParams.type)) {
+      if (orderParams.quantity === undefined) throw new Error(`For ${orderParams.type} orders, quantity must be provided.`);
+      if (orderParams.price === undefined) throw new Error(`For ${orderParams.type} orders, price (limit price) must be provided.`);
+      if (orderParams.stopPrice === undefined) throw new Error(`For ${orderParams.type} orders, stopPrice must be provided.`);
   }
 
-  const apiParams: Record<string, string | number | undefined> = {
+
+  const apiParams: Record<string, string | number | undefined | boolean> = {
     symbol: orderParams.symbol,
     side: orderParams.side,
     type: orderParams.type,
     newOrderRespType: 'FULL', // To get detailed response including fills
     ...(orderParams.quantity !== undefined && { quantity: orderParams.quantity }),
     ...(orderParams.quoteOrderQty !== undefined && { quoteOrderQty: orderParams.quoteOrderQty }),
-    ...(orderParams.type === 'LIMIT' && orderParams.price !== undefined && { price: orderParams.price, timeInForce: 'GTC' }),
+    ...(orderParams.price !== undefined && { price: orderParams.price }),
+    ...(orderParams.stopPrice !== undefined && { stopPrice: orderParams.stopPrice }),
     recvWindow: 5000,
   };
 
+  if (['LIMIT', 'STOP_LOSS_LIMIT', 'TAKE_PROFIT_LIMIT'].includes(orderParams.type)) {
+    apiParams.timeInForce = orderParams.timeInForce || 'GTC';
+  }
+  // For futures, if type is STOP_MARKET or TAKE_PROFIT_MARKET and it's a closing order, one might add `reduceOnly: true`
+  // For simplicity, not adding reduceOnly for now, assuming these SL/TP orders are meant to close the specific quantity traded.
+
   try {
      const response = await makeAuthenticatedRequest(endpoint, apiParams, apiKey, secretKey, 'POST', isTestnet, isFutures);
+     // Map response to OrderResponse interface, including potential SL/TP specific fields
      return {
          orderId: response.orderId,
          status: response.status,
          symbol: response.symbol,
          clientOrderId: response.clientOrderId,
-         price: response.price, // For MARKET order, this is avg fill price if newOrderRespType=FULL or RESULT
+         price: response.price,
          origQty: response.origQty,
          executedQty: response.executedQty,
          cummulativeQuoteQty: response.cummulativeQuoteQty,
@@ -335,10 +359,14 @@ export async function placeOrder(
          type: response.type,
          side: response.side,
          transactTime: response.transactTime,
-         fills: response.fills, // Included due to newOrderRespType: 'FULL'
+         fills: response.fills,
+         stopPrice: response.stopPrice, // Pass through if API returns it
+         workingType: response.workingType, // Pass through for futures
+         origType: response.origType,
+         positionSide: response.positionSide,
      };
   } catch (error) {
-      console.error(`Error placing order on ${envLabel}:`, error);
+      console.error(`Error placing order on ${envLabel} with params ${JSON.stringify(apiParams)}:`, error);
       throw error; 
   }
 }
@@ -536,6 +564,3 @@ export async function getExchangeInfo(isTestnet: boolean, isFutures: boolean = f
     throw new Error(`Failed to get exchange info from ${envLabel}: ${error instanceof Error ? error.message : error}`);
   }
 }
-
-
-    
