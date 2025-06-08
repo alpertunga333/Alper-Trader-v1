@@ -137,23 +137,27 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
         };
 
         if (isFutures) {
-            // For Futures MARKET orders, especially on Testnet, 'quantity' might be strictly required.
-            // This logic attempts to use 'quantity' for specific pairs known to cause issues with 'quoteOrderQty',
-            // or where a fixed quantity is safer to estimate.
-            if (pair === 'LTCUSDT') {
-                // Specific handling for LTCUSDT on Futures Testnet due to observed -1102 error.
-                // 0.15 LTC is approx $12 if LTC is $80. Common stepSize 0.001, minQty 0.001.
-                orderParams.quantity = 0.15;
-            } else if (pair === 'BTCUSDT') {
-                // For BTCUSDT futures, a small quantity in BTC.
-                // 0.0002 BTC is approx $13 if BTC is $65k. Common stepSize 0.00001, minQty 0.00001.
-                orderParams.quantity = 0.0002;
+            // For ALL Futures MARKET orders (especially on Testnet), 'quantity' is strictly required by Binance.
+            // We'll use specific small quantities for common pairs and a generic small quantity for others.
+            // This is a simplified approach for a "test order" and does not involve live price fetching
+            // or dynamic calculation based on specific pair minimums/step sizes.
+            if (pair === 'BTCUSDT') {
+                orderParams.quantity = 0.0002; // Approx $13 at $65k BTC
+            } else if (pair === 'ETHUSDT') {
+                orderParams.quantity = 0.0035; // Approx $12.25 at $3500 ETH
+            } else if (pair === 'LTCUSDT') {
+                orderParams.quantity = 0.15;  // Approx $12 at $80 LTC
+            } else if (pair === 'SOLUSDT') {
+                orderParams.quantity = 0.08; // Approx $12 at $150 SOL
             } else {
-                // For other futures pairs, default to trying quoteOrderQty.
-                // This might still fail if they exhibit the same behavior as LTCUSDT Testnet.
-                // A truly robust general solution would involve fetching price and calculating quantity.
-                orderParams.quoteOrderQty = 11; // Target ~11 USDT.
+                // For other futures pairs, provide a generic small 'quantity'.
+                // This directly addresses the "-1102 quantity mandatory" error.
+                // However, this fixed value might be too small (below minQty/minNotional) or
+                // too large for some pairs, potentially leading to other API errors.
+                // A robust solution would involve fetching exchange info for limits and current price.
+                orderParams.quantity = 0.01;
             }
+            // Ensure quoteOrderQty is NOT sent for futures if quantity is being sent for MARKET orders.
         } else {
             // For Spot MARKET orders, quoteOrderQty is generally well-supported.
             orderParams.quoteOrderQty = 11; // Target ~11 USDT value.
@@ -165,6 +169,9 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
         
         const filledPrice = orderResponse.fills && orderResponse.fills.length > 0 ? parseFloat(orderResponse.fills[0].price) : parseFloat(orderResponse.price);
         const executedQty = parseFloat(orderResponse.executedQty);
+        const baseAsset = orderResponse.symbol.replace(/USDT|BUSD|TRY|EUR|FDUSD$/, '');
+        const quoteAsset = pair.match(/USDT|BUSD|TRY|EUR|FDUSD$/)?.[0] || '';
+
 
         tradeAttemptMessage = `✅ TEST ORDER PLACED (${envLabel}):\n` +
                               `Strategy: ${strategy.name}\n` +
@@ -172,9 +179,9 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
                               `Side: ${orderResponse.side}\n` +
                               `Type: ${orderResponse.type}\n` +
                               `Status: ${orderResponse.status}\n` +
-                              `Executed Qty: ${executedQty.toFixed(8)} ${orderResponse.symbol.replace(/USDT|BUSD|TRY|EUR|FDUSD$/, '')}\n` + 
-                              `Avg. Fill Price: ${filledPrice.toFixed(4)} ${pair.match(/USDT|BUSD|TRY|EUR|FDUSD$/)?.[0] || ''}\n` +
-                              `Total Value: ${parseFloat(orderResponse.cummulativeQuoteQty).toFixed(2)} ${pair.match(/USDT|BUSD|TRY|EUR|FDUSD$/)?.[0] || ''}\n` +
+                              `Executed Qty: ${executedQty.toFixed(8)} ${baseAsset}\n` + 
+                              `Avg. Fill Price: ${filledPrice.toFixed(4)} ${quoteAsset}\n` +
+                              `Total Value: ${parseFloat(orderResponse.cummulativeQuoteQty).toFixed(2)} ${quoteAsset}\n` +
                               `Order ID: ${orderResponse.orderId}`;
 
     } catch (error) {
@@ -199,14 +206,7 @@ export async function runStrategy(params: RunParams): Promise<RunResult> {
     // Send Telegram notification for success
     if (orderResponse && telegramBotToken && telegramChatId) {
         try {
-            // Using MarkdownV2 requires escaping special characters.
-            // For simplicity, we'll send as plain text, or you can implement escaping.
-            // Example of simple Markdown-like characters to escape for MarkdownV2: '.', '!', '-', '(', ')', '[', ']', '{', '}', '_', '*', '`', '#', '+', '=', '|'
-            // A proper MarkdownV2 escaper function would be more robust.
-            const escapeMarkdownV2 = (text: string) => text.replace(/[_*[\]()~`>#+\-=|{}.!]/g, '\\$&');
-            
-            // We will send as plain text to avoid complex escaping for now
-            await sendTelegramMessageAction(telegramBotToken, telegramChatId, tradeAttemptMessage /*, 'MarkdownV2'*/);
+            await sendTelegramMessageAction(telegramBotToken, telegramChatId, tradeAttemptMessage);
             console.log(`Telegram notification sent for successful test order on ${pair}.`);
         } catch (tgError) {
             console.error(`Failed to send Telegram notification for successful test order on ${pair}:`, tgError);
@@ -277,5 +277,7 @@ export async function defineNewStrategy(params: DefineStrategyParams): Promise<D
         };
     }
 }
+
+    
 
     
