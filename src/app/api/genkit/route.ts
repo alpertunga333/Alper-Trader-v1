@@ -1,4 +1,4 @@
-import {nextHandler} from '@genkit-ai/next';
+import nextHandler from '@genkit-ai/next';
 import {ai} from '@/ai/ai-instance';
 
 import '@/ai/dev'; // Import flows to register them
