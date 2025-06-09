@@ -6,6 +6,7 @@
  * which might be necessary for the '@genkit-ai/next' nextHandler to correctly process it
  * and avoid type errors during the build process.
  *
+ * - placeholderGenkitFlow - The Genkit flow object.
  * - runPlaceholderFlow - A function that handles the placeholder flow execution.
  * - PlaceholderInputSchema - The input type for the placeholder flow.
  * - PlaceholderOutputSchema - The return type for the placeholder flow.
@@ -24,7 +25,8 @@ export const PlaceholderOutputSchema = z.object({
 export type PlaceholderOutput = z.infer<typeof PlaceholderOutputSchema>;
 
 // This is the actual flow definition registered with Genkit
-const placeholderGenkitFlow = ai.defineFlow(
+// Exporting the flow object itself for use with nextHandler
+export const placeholderGenkitFlow = ai.defineFlow(
   {
     name: 'placeholderFlow',
     inputSchema: PlaceholderInputSchema,

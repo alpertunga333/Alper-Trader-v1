@@ -1,6 +1,10 @@
 import nextHandler from '@genkit-ai/next';
-import {ai} from '@/ai/ai-instance';
+import { placeholderGenkitFlow } from '@/ai/flows/placeholder-flow';
 
-import '@/ai/dev'; // Import flows to register them
+// This import ensures that placeholderGenkitFlow (and any other flows in dev.ts)
+// are registered on the global `ai` instance, which might be important for
+// Genkit's internal mechanisms or the development UI.
+import '@/ai/dev';
 
-export const POST = nextHandler(ai);
+// Pass the specific flow (Action) to nextHandler
+export const POST = nextHandler(placeholderGenkitFlow);
